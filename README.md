@@ -5,7 +5,7 @@
 **A high-performance, Rust-native, distributed audio engine designed for
 every application ecosystem.**
 
-![NEXORA](https://placehold.co/1200x360/101810/D4E8B0?text=NEXORA+-+UNIVERSAL+AUDIO+INFRASTRUCTURE)
+![NEXORA](assets/NEXORA-Universal-Audio-Infrastructure-Infographic.png)
 
 ![Rust](https://img.shields.io/badge/Rust-first-orange?logo=rust)
 ![Architecture](https://img.shields.io/badge/Architecture-Microservices-2F855A)
