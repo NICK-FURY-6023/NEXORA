@@ -1,4 +1,17 @@
 # NEXORA --- Master AI Engineering Instructions
+```md
+Read the complete NEXORA README.md and follow the Master Engineering Instruction.
+
+Start with repository analysis only.
+
+Do not modify or create project files yet.
+
+Inspect the existing repository, identify architectural requirements, evaluate Rust dependencies, and prepare the complete Phase 1 implementation plan.
+
+Explain how you will build the audio core, source adapter framework, and service architecture.
+
+Wait for my approval before implementing Phase 1.
+```
 
 > **Purpose:** This document defines how an AI coding agent should
 > analyze, plan, implement, test, and document NEXORA.
