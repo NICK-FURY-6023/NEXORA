@@ -2,537 +2,500 @@
 
 ## Universal Audio Infrastructure
 
-**A high-performance, Rust-native, distributed audio engine designed for
-every application ecosystem.**
+**A Rust-first, modular audio engine and service platform for applications across programming-language ecosystems.**
 
-![NEXORA](assets/NEXORA-Universal-Audio-Infrastructure-Infographic.png)
+<p align="center">
+  <img src="assets/NEXORA-Universal-Audio-Infrastructure-Infographic.png" alt="NEXORA Universal Audio Infrastructure architecture" width="100%">
+</p>
 
-![Rust](https://img.shields.io/badge/Rust-first-orange?logo=rust)
-![Architecture](https://img.shields.io/badge/Architecture-Microservices-2F855A)
-![Priority](https://img.shields.io/badge/Priority-Performance-276749)
-![API](https://img.shields.io/badge/API-Language_Agnostic-276749)
-![Status](https://img.shields.io/badge/Status-Architecture%20%2F%20Planning-yellow)
+<p align="center">
+  <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
+  <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
+  <img src="https://img.shields.io/badge/Status-Architecture%20%2F%20Planning-yellow" alt="Project status">
+</p>
 
-> **One infrastructure, multiple services, unlimited application
-> integrations.**
+> **One audio foundation. Multiple services. Any application ecosystem.**
 
-NEXORA is an independent, distributed audio infrastructure built
-primarily in Rust. It is designed to provide audio ingestion, decoding,
-processing, transcoding, playback orchestration, and audio delivery
-through standardized APIs that can be consumed by applications written
-in any programming language.
+NEXORA is a proposed, independent audio infrastructure written primarily in Rust. It aims to provide media ingestion, decoding, audio processing, transcoding, session orchestration, and audio delivery through documented interfaces that applications can consume from different programming languages.
 
-It is not intended to be another Lavalink implementation. Its goal is to
-provide a modular audio foundation for Discord bots, Telegram bots,
-websites, desktop applications, mobile applications, and custom
-software.
+NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-------------------------------------------------------------------------
+**Project status:** This repository currently describes the target architecture and engineering plan. A feature, SDK, service, codec, integration, or performance target must not be considered implemented until its code, tests, and documentation demonstrate that it works.
+
+---
 
 ## Table of Contents
 
--   [1. Executive Summary](#1-executive-summary)
--   [2. Product Vision and Objectives](#2-product-vision-and-objectives)
--   [3. System Architecture](#3-system-architecture)
--   [4. Rust Technology Stack](#4-rust-technology-stack)
--   [5. Audio Processing Pipeline](#5-audio-processing-pipeline)
--   [6. Universal Source Framework](#6-universal-source-framework)
--   [7. Universal API Specification](#7-universal-api-specification)
--   [8. SDK and Language
-    Compatibility](#8-sdk-and-language-compatibility)
--   [9. Database and Storage
-    Architecture](#9-database-and-storage-architecture)
--   [10. Distributed Cluster
-    Architecture](#10-distributed-cluster-architecture)
--   [11. Performance Engineering](#11-performance-engineering)
--   [12. Security Architecture](#12-security-architecture)
--   [13. Deployment Architecture](#13-deployment-architecture)
--   [14. Monitoring and Observability](#14-monitoring-and-observability)
--   [15. Testing and Quality
-    Assurance](#15-testing-and-quality-assurance)
--   [16. Development Roadmap](#16-development-roadmap)
--   [17. Repository Structure](#17-repository-structure)
--   [18. Definition of Done](#18-definition-of-done)
--   [19. Major Engineering Risks](#19-major-engineering-risks)
--   [20. Initial Release Strategy](#20-initial-release-strategy)
--   [21. Architecture Decision
-    Records](#21-architecture-decision-records)
--   [22. First Engineering Milestone](#22-first-engineering-milestone)
--   [23. Engineering References](#23-engineering-references)
--   [24. Project Philosophy](#24-project-philosophy)
--   [AI Agent Engineering Guide](#ai-agent-engineering-guide)
-------------------------------------------------------------------------
+- [1. Overview](#1-overview)
+- [2. Vision and Scope](#2-vision-and-scope)
+- [3. Architecture Principles](#3-architecture-principles)
+- [4. System Architecture](#4-system-architecture)
+- [5. Technology Stack](#5-technology-stack)
+- [6. Audio Processing Design](#6-audio-processing-design)
+- [7. Source Adapter Framework](#7-source-adapter-framework)
+- [8. API Design](#8-api-design)
+- [9. SDK Strategy](#9-sdk-strategy)
+- [10. Storage and State Management](#10-storage-and-state-management)
+- [11. Distributed Execution](#11-distributed-execution)
+- [12. Performance Engineering](#12-performance-engineering)
+- [13. Security and Provider Compliance](#13-security-and-provider-compliance)
+- [14. Deployment Model](#14-deployment-model)
+- [15. Observability](#15-observability)
+- [16. Testing and Quality](#16-testing-and-quality)
+- [17. Development Roadmap](#17-development-roadmap)
+- [18. Proposed Repository Structure](#18-proposed-repository-structure)
+- [19. Definition of Done](#19-definition-of-done)
+- [20. Engineering Risks](#20-engineering-risks)
+- [21. Initial Release Scope](#21-initial-release-scope)
+- [22. Architecture Decision Records](#22-architecture-decision-records)
+- [23. First Engineering Milestone](#23-first-engineering-milestone)
+- [24. AI Agent Engineering Guide](#24-ai-agent-engineering-guide)
+- [25. References](#25-references)
+- [26. Project Philosophy](#26-project-philosophy)
 
-## 1. Executive Summary
+---
 
-NEXORA is a distributed audio infrastructure consisting of independent
-services responsible for:
+## 1. Overview
 
--   Audio ingestion and decoding.
--   Source discovery and track resolution.
--   Audio processing and transcoding.
--   Playback orchestration.
--   Session and queue management.
--   Network audio delivery.
--   Caching and resource optimization.
--   Distributed workload management.
--   Third-party source and processing plugins.
--   Monitoring, metrics, and observability.
+NEXORA is intended to provide reusable audio infrastructure for applications that need to:
 
-### Architecture Decisions
+- Ingest supported local media and authorized network streams.
+- Inspect media and identify available formats and codecs.
+- Demultiplex and decode supported audio formats.
+- Process PCM audio through a controlled pipeline.
+- Resample and encode audio when required.
+- Manage playback sessions and queues.
+- Deliver audio through supported streaming transports.
+- Register and manage source adapters.
+- Run on one machine and evolve toward multi-node deployments.
+- Expose stable APIs and language-specific client libraries.
 
-  Decision               Selected approach
-  ---------------------- ------------------------------------
-  Product scope          Universal audio infrastructure
-  Architecture           Distributed microservices
-  Core language          Rust
-  Performance priority   CPU, RAM, and latency optimization
-  Communication          gRPC, HTTP, WebSocket
-  Service discovery      Registry-based
-  Audio processing       Native Rust pipeline
-  Extension system       Sandboxed plugins
-  Deployment             Standalone, Docker, Kubernetes
-  SDK strategy           Language-independent APIs
+### Initial architecture decisions
 
-### Core Principles
+| Area | Direction |
+|---|---|
+| Product scope | Universal audio infrastructure |
+| Primary implementation language | Rust |
+| Initial execution model | Modular Rust workspace / single-node engine |
+| Long-term deployment | Optional distributed services |
+| Runtime | Tokio for asynchronous I/O and coordination |
+| Public interfaces | REST and WebSocket; gRPC where appropriate |
+| Internal service RPC | gRPC |
+| Event distribution | NATS when distributed eventing is needed |
+| Audio processing | Native Rust pipeline |
+| Plugin direction | Versioned interfaces with sandboxed execution |
+| Persistent metadata | PostgreSQL for server deployments |
+| Lightweight mode | SQLite where appropriate |
+| Performance approach | Measurement-driven CPU, memory, and latency optimization |
 
-1.  Independent audio processing infrastructure.
-2.  Minimal overhead per active session.
-3.  High-throughput concurrent audio workloads.
-4.  Extensible and replaceable source adapters.
-5.  Consistent APIs across programming languages.
-6.  Distributed horizontal scaling.
-7.  Reliable playback lifecycle management.
-8.  High-quality audio processing.
-9.  Fault isolation between microservices.
-10. No mandatory dependency on a particular music provider.
+### Non-goals and compliance boundaries
 
-### Non-goals and Compliance Boundaries
+NEXORA will not be designed to:
 
-NEXORA will not:
+- Circumvent DRM or provider authentication.
+- Extract protected media without authorization.
+- Bypass provider rate limits, access controls, or usage restrictions.
+- Promise access to every commercial music catalogue.
+- Claim lossless output when the source is lossy.
+- Operate as an unrestricted public media proxy.
+- Depend on Discord-specific infrastructure as a core requirement.
 
--   Circumvent DRM or provider authentication.
--   Extract protected streams without authorization.
--   Bypass platform rate limits or access restrictions.
--   Guarantee access to every commercial music catalogue.
--   Claim lossless output when the original source is lossy.
--   Require every application to use Discord-specific infrastructure.
+Provider integrations must follow the provider's authorization, licensing, contractual, and technical requirements. Local media, open formats, and authorized streams are first-class use cases.
 
-Provider-specific integrations must follow relevant authorization,
-licensing, and technical requirements. Open protocols, local media, and
-authorized streams will remain first-class sources.
+---
 
-------------------------------------------------------------------------
+## 2. Vision and Scope
 
-## 2. Product Vision and Objectives
+### Product vision
 
-### Primary Goals
+Build a reusable audio foundation that application developers can integrate without adopting a particular application framework or programming language.
 
--   Independent audio processing infrastructure.
--   Minimal resource overhead per session.
--   High-throughput concurrent audio workloads.
--   Extensible source adapters.
--   Consistent APIs across programming languages.
--   Distributed horizontal scaling.
--   Reliable playback lifecycle management.
--   High-quality audio processing.
--   Fault isolation between microservices.
--   No mandatory dependency on a particular music provider.
+### Target application ecosystems
 
-### Supported Application Ecosystem
+- Discord bots and community applications.
+- Telegram bots.
+- Web applications and browser-based players.
+- Desktop applications.
+- Mobile applications.
+- Games and interactive software.
+- Custom backend services.
+- Other clients that can use documented network protocols.
 
-NEXORA is designed to integrate with:
+### Functional domains
 
--   Discord bots.
--   Telegram bots.
--   Web applications.
--   Desktop applications.
--   Mobile applications.
--   Game and community applications.
--   Custom backend services.
--   Other software that can communicate through HTTP, WebSocket, or
-    gRPC.
+1. **Media input:** local files, user-owned media, and authorized streams.
+2. **Media handling:** probing, demultiplexing, decoding, and format negotiation.
+3. **Audio processing:** PCM conversion, resampling, mixing, and optional DSP.
+4. **Encoding:** output encoding when required by the destination.
+5. **Playback control:** sessions, queues, state transitions, and events.
+6. **Delivery:** streaming audio to authorized clients.
+7. **Extensibility:** source adapters and processing extensions.
+8. **Operations:** configuration, monitoring, deployment, and recovery.
 
-------------------------------------------------------------------------
+---
 
-## 3. System Architecture
+## 3. Architecture Principles
 
-NEXORA uses a **microservices architecture with a separated control
-plane and data plane**.
+NEXORA should follow these principles:
 
-This separation is important. Microservices provide independent
-deployment and fault isolation, but sending every audio packet through
-multiple network services can increase latency and resource consumption.
+1. **Start simple, scale deliberately.** Build a working modular core before splitting components into independently deployed services.
+2. **Keep the audio path efficient.** Avoid unnecessary network hops and data copies.
+3. **Separate control from media data.** Session commands and metadata should not share the same processing path as high-volume audio frames.
+4. **Bound resource usage.** Queues, buffers, sessions, and worker pools need explicit limits.
+5. **Use stable contracts.** Public APIs and internal protocols must be versioned.
+6. **Treat providers as adapters.** Provider-specific behavior must not leak into the core audio engine.
+7. **Make failures explicit.** Use typed errors, timeouts, cancellation, and observable state transitions.
+8. **Optimize from evidence.** Every performance claim must be supported by reproducible benchmarks.
+9. **Use safe Rust by default.** Unsafe code requires a documented reason, a narrow boundary, and tests.
+10. **Make compliance enforceable.** Authorization and provider restrictions are architectural requirements, not optional documentation.
 
-### Control Plane
+---
 
-Responsible for:
+## 4. System Architecture
 
--   API access.
--   Authentication and authorization.
--   Configuration.
--   Session orchestration.
--   Service discovery.
--   Workload scheduling.
--   Application management.
+### 4.1 Evolutionary architecture
 
-### Data Plane
+The target is a distributed system, but the first implementation should not create a network boundary for every module.
+
+**Stage 1 — Modular core:** One deployable Rust application with well-separated crates and bounded internal interfaces.
+
+**Stage 2 — Service extraction:** Extract components only when independent scaling, fault isolation, deployment, or ownership provides a measurable benefit.
+
+**Stage 3 — Distributed deployment:** Add worker registration, scheduling, event distribution, and multi-node operations.
+
+This avoids paying microservice networking and operational costs before the workload requires them.
+
+### 4.2 Control plane and data plane
+
+The logical separation remains important even when both planes initially run in one process.
+
+#### Control plane
 
 Responsible for:
 
--   Source ingestion.
--   Decoding.
--   DSP and audio processing.
--   Transcoding.
--   Buffering.
--   Audio delivery.
+- API authentication and authorization.
+- Application configuration.
+- Session creation and lifecycle commands.
+- Source selection and resolution requests.
+- Worker discovery and scheduling in distributed mode.
+- Quotas, policies, and administrative operations.
 
-### High-Level Architecture
+#### Data plane
 
-``` mermaid
+Responsible for:
+
+- Source ingestion.
+- Demultiplexing and decoding.
+- PCM frame processing.
+- DSP and resampling.
+- Encoding and packetization.
+- Buffering and audio delivery.
+
+**Performance rule:** Audio frames should not be routed through the public API gateway or serialized as ordinary JSON messages. Keep the media path close to the processing and delivery workers.
+
+### 4.3 High-level logical architecture
+
+```mermaid
 flowchart TB
-    A["APPLICATION ECOSYSTEM<br/>Discord · Telegram · Web · Desktop · Mobile · Custom Apps"]
-    B["API GATEWAY<br/>REST · gRPC · WebSocket · Rate Limiting"]
+    APP["Applications<br/>Discord · Telegram · Web · Desktop · Mobile · Custom"]
+    API["API Layer<br/>REST · WebSocket · gRPC"]
 
-    subgraph CP["CONTROL PLANE"]
-      C1["Auth Service"]
-      C2["Session Service"]
-      C3["Resolver Service"]
-      C4["Service Registry"]
-      C5["Configuration Service"]
-      C6["Cluster Manager"]
+    subgraph CONTROL["CONTROL PLANE"]
+      AUTH["Authentication / Authorization"]
+      SESSION["Session and Queue Management"]
+      RESOLVE["Source Resolver"]
+      CONFIG["Configuration and Policy"]
+      REGISTRY["Worker Registry / Scheduler"]
     end
 
-    subgraph DP["DATA PLANE"]
-      D1["Source Workers"]
-      D2["Decoder Workers"]
-      D3["DSP Workers"]
-      D4["Transcoder Workers"]
-      D5["Buffer Manager"]
-      D6["Audio Delivery"]
+    subgraph DATA["DATA PLANE"]
+      SOURCE["Source Adapters"]
+      DEMUX["Demultiplexer"]
+      DECODE["Decoder"]
+      DSP["PCM / DSP Pipeline"]
+      ENCODE["Encoder / Packetizer"]
+      DELIVERY["Audio Delivery"]
     end
 
-    E["UNIVERSAL AUDIO OUTPUT<br/>PCM · Opus · FLAC · AAC · MP3"]
-    F["Supporting Infrastructure<br/>Database · Cache · Event Bus · Observability · Plugin Runtime"]
+    INFRA["Supporting Infrastructure<br/>Database · Cache · Event Bus · Telemetry"]
+    OUT["Authorized Audio Output"]
 
-    A --> B
-    B --> CP
-    CP <--> DP
-    DP --> E
-    F -.-> CP
-    F -.-> DP
+    APP --> API
+    API --> AUTH
+    API --> SESSION
+    SESSION --> RESOLVE
+    RESOLVE --> SOURCE
+    SOURCE --> DEMUX --> DECODE --> DSP --> ENCODE --> DELIVERY --> OUT
+    REGISTRY -. scheduling .-> SOURCE
+    REGISTRY -. scheduling .-> DELIVERY
+    INFRA -.-> CONTROL
+    INFRA -.-> DATA
 ```
 
-**Performance rule:** Audio frames should not pass through the
-control-plane gateway. Audio data should remain close to the processing
-and delivery workers.
+### 4.4 Potential service boundaries
 
-### Microservice Specifications
+These are logical components, not a requirement to create all of them as separate services in the first release.
 
-  Service                  Responsibility                           Priority
-  ------------------------ ---------------------------------------- ----------
-  `nexora-gateway`         External API access                      P0
-  `nexora-auth`            Application identity and authorization   P0
-  `nexora-registry`        Worker discovery and health              P0
-  `nexora-resolver`        Track and source resolution              P0
-  `nexora-source-worker`   Source ingestion                         P0
-  `nexora-decoder`         Media decoding                           P0
-  `nexora-audio-engine`    Audio processing                         P0
-  `nexora-session`         Playback lifecycle                       P0
-  `nexora-delivery`        Audio transport                          P0
-  `nexora-cache`           Metadata and media caching               P1
-  `nexora-cluster`         Workload distribution                    P1
-  `nexora-plugin-host`     Plugin execution                         P1
-  `nexora-observability`   Logs, metrics, and traces                P1
-  `nexora-admin`           Management interface                     P2
+| Component | Responsibility | Initial priority |
+|---|---|---|
+| `nexora-api` | Public API and request validation | P0 |
+| `nexora-auth` | Application identity and permissions | P0 |
+| `nexora-session` | Playback lifecycle and queues | P0 |
+| `nexora-resolver` | Source discovery and resolution | P0 |
+| `nexora-source` | Source adapter execution | P0 |
+| `nexora-audio` | Decode, PCM processing, and encode orchestration | P0 |
+| `nexora-delivery` | Audio output transport | P0 |
+| `nexora-registry` | Worker discovery in distributed mode | P1 |
+| `nexora-cluster` | Scheduling and cluster coordination | P1 |
+| `nexora-plugin-host` | Sandboxed extension execution | P1 |
+| `nexora-observability` | Metrics, logs, and traces | P1 |
+| `nexora-admin` | Administrative interface | P2 |
 
-P0 services are necessary for the first usable engine. P1 and P2
-services can be introduced as the system matures.
+P0 means required for the first useful implementation. P1 and P2 are later capabilities, not commitments that they already exist.
 
-### Communication Architecture
+### 4.5 Communication choices
 
-  Communication            Protocol                          Usage
-  ------------------------ --------------------------------- -----------------------
-  Application to gateway   HTTPS                             Public API
-  Application events       WebSocket                         Playback updates
-  Internal RPC             gRPC                              Service communication
-  Service events           NATS                              Asynchronous events
-  Audio transport          HTTP streaming / gRPC streaming   Audio delivery
-  Health monitoring        HTTP                              Health and readiness
-  Metrics                  Prometheus exposition / OTLP      Monitoring
+| Communication | Intended use |
+|---|---|
+| HTTPS | Public REST API |
+| WebSocket | Session and playback events |
+| gRPC | Typed internal RPC and selected streaming interfaces |
+| NATS | Asynchronous service events in distributed deployments |
+| HTTP health endpoints | Liveness and readiness |
+| Prometheus / OTLP | Metrics and telemetry |
 
-Audio payloads must use bounded queues and streaming transports. Entire
-audio tracks must not be serialized into JSON or stored as database
-records.
+Choose a transport based on measured requirements. Do not add NATS or gRPC between modules that can communicate efficiently through in-process interfaces.
 
-------------------------------------------------------------------------
+---
 
-## 4. Rust Technology Stack
+## 5. Technology Stack
 
-The following is the proposed implementation stack. Exact crate versions
-must be pinned after compatibility testing.
+The following is a proposed stack. Crate versions and feature flags must be selected and tested together when implementation begins.
 
-  Layer            Technology                Purpose
-  ---------------- ------------------------- ----------------------------
-  Language         Rust                      Main implementation
-  Async runtime    Tokio                     Concurrent networking
-  HTTP framework   Axum                      Gateway and service APIs
-  RPC              Tonic                     Internal gRPC
-  Serialization    Serde                     JSON and configuration
-  Audio decoding   Symphonia                 Native media decoding
-  Resampling       Rubato                    Sample-rate conversion
-  DSP              Custom Rust DSP modules   Filters and effects
-  HTTP client      Reqwest                   Source connections
-  Cache            Moka                      In-memory cache
-  Database         PostgreSQL                Persistent metadata
-  Local database   SQLite                    Single-node deployments
-  Event bus        NATS                      Service events
-  Plugin runtime   Wasmtime / WASI           Sandboxed extensions
-  Logging          tracing                   Structured logging
-  Telemetry        OpenTelemetry             Distributed observability
-  Configuration    Figment / Serde           Runtime configuration
-  Testing          cargo test / Criterion    Correctness and benchmarks
+| Layer | Candidate technology | Intended use |
+|---|---|---|
+| Language | Rust | Core implementation |
+| Async runtime | Tokio | Network I/O, timers, coordination |
+| HTTP framework | Axum | REST API and service endpoints |
+| RPC | Tonic | gRPC contracts and clients |
+| Serialization | Serde | Configuration and structured payloads |
+| Media framework | Symphonia | Supported demuxing and decoding |
+| Resampling | Rubato | Sample-rate conversion |
+| HTTP client | Reqwest | Authorized source connections |
+| Cache | Moka | In-process cache |
+| Database | PostgreSQL | Persistent server metadata |
+| Local database | SQLite | Lightweight single-node deployments |
+| Event bus | NATS | Distributed event delivery |
+| Plugin runtime | Wasmtime / WASI | Potential sandboxed plugin execution |
+| Logging | `tracing` | Structured diagnostics |
+| Telemetry | OpenTelemetry | Distributed traces and metrics |
+| Benchmarking | Criterion | Repeatable microbenchmarks |
 
-### Core Runtime Strategy
+### Runtime strategy
 
--   Tokio: network I/O, service coordination, and timers.
--   Dedicated worker pools: decoding and transcoding.
--   Bounded channels: passing audio frames between processing stages.
--   Fixed-size frame buffers: reduce allocation pressure.
--   Optional SIMD: architecture-specific optimizations.
--   Backpressure: prevent overloaded workers from consuming unlimited
-    memory.
+- Use Tokio for asynchronous I/O, timers, and service coordination.
+- Run CPU-heavy decoding, encoding, and DSP on dedicated bounded worker pools.
+- Use bounded channels between pipeline stages.
+- Reuse frame buffers where practical.
+- Apply backpressure instead of allowing unlimited queue growth.
+- Use SIMD only when supported by the target and proven beneficial by benchmarks.
+- Keep blocking file and CPU operations off asynchronous executor threads.
 
-CPU-intensive decoding and DSP must not run indiscriminately on Tokio's
-asynchronous executor.
+Codec support depends on selected library features, build configuration, platform, and licensing considerations. The project must publish a tested format/codec compatibility matrix rather than assuming every format is supported.
 
-------------------------------------------------------------------------
+---
 
-## 5. Audio Processing Pipeline
+## 6. Audio Processing Design
 
-NEXORA should use a defined internal audio frame representation.
+### 6.1 Processing pipeline
 
-### Conceptual Rust Types
+```mermaid
+flowchart LR
+    A["Authorized Input"] --> B["Probe / Demux"]
+    B --> C["Decode"]
+    C --> D["PCM Frame Format"]
+    D --> E["DSP / Mixing"]
+    E --> F["Resample if required"]
+    F --> G["Encode if required"]
+    G --> H["Packetize / Deliver"]
+```
 
-``` rust
-pub struct AudioFrame {
-    pub sequence: u64,
-    pub timestamp: u64,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub samples: Vec<f32>,
-}
+### 6.2 Internal audio representation
 
+The internal representation should define, at minimum:
+
+- Sample format and numeric representation.
+- Sample rate.
+- Channel count and channel layout.
+- Frame sequence or presentation timestamp.
+- Number of valid samples.
+- Buffer ownership and lifetime.
+- Discontinuity and end-of-stream semantics.
+
+A conceptual interface could look like:
+
+```rust
 pub struct AudioFormat {
     pub sample_rate: u32,
     pub channels: u16,
-    pub codec: AudioCodec,
+    pub sample_format: SampleFormat,
+    pub channel_layout: ChannelLayout,
 }
 
-pub enum AudioCodec {
-    Pcm,
-    Opus,
-    Flac,
-    Aac,
-    Mp3,
-    Vorbis,
+pub struct AudioFrame {
+    pub sequence: u64,
+    pub timestamp_samples: u64,
+    pub format: AudioFormat,
+    pub samples: AudioBuffer,
+}
+
+pub enum SampleFormat {
+    F32,
+    I16,
+}
+
+pub enum AudioBuffer {
+    InterleavedF32(Vec<f32>),
+    InterleavedI16(Vec<i16>),
 }
 ```
 
-This is a conceptual interface. Production implementation should use
-reusable buffers and ownership-aware frame pools instead of allocating a
-new vector for every frame.
+This is an illustrative design, not a finalized public API. A production implementation should consider reusable pooled buffers, planar versus interleaved layouts, channel mapping, alignment, and ownership without forcing a heap allocation for every frame.
 
-### Processing Pipeline
+### 6.3 Processing stages
 
-``` mermaid
+1. **Input validation:** Validate source configuration and authorization.
+2. **Probing:** Determine container, stream metadata, codec, and parameters.
+3. **Demultiplexing:** Extract the relevant audio packets.
+4. **Decoding:** Convert encoded packets to the internal PCM representation.
+5. **DSP:** Apply only requested and supported processing.
+6. **Resampling:** Convert sample rate when the output requires it.
+7. **Encoding:** Encode only when passthrough is not compatible.
+8. **Delivery:** Send output through the selected transport with bounded buffering.
+
+### 6.4 Passthrough and transcoding
+
+**Passthrough** may be used when the source codec, packetization, and destination requirements are compatible and no processing step requires PCM.
+
+**Transcoding** is required when the output format differs, processing is requested, or the destination cannot consume the source representation.
+
+Avoid unnecessary transcoding. It consumes CPU and may reduce audio quality. The engine must clearly report the actual output format and must not describe lossy-source output as lossless.
+
+---
+
+## 7. Source Adapter Framework
+
+The source framework must be independent of the core audio pipeline.
+
+### 7.1 Source categories
+
+| Category | Examples | Requirements |
+|---|---|---|
+| Local media | User-provided WAV, FLAC, MP3, or other supported files | File access permission |
+| Public radio | Publicly available radio stream | Follow stream terms and access rules |
+| Direct HTTP audio | Authorized audio URL | URL validation and endpoint authorization |
+| User-owned media | Uploaded or application-owned assets | Application authorization |
+| Provider integration | Commercial media platform | Provider-approved access and licensing |
+| Custom adapter | Organization-specific source | Explicit capability and permission model |
+
+### 7.2 Adapter responsibilities
+
+A source adapter may provide:
+
+- Source identity and version.
+- Supported capabilities.
+- Search, where permitted.
+- Metadata lookup.
+- Authorized stream resolution.
+- Health status.
+- Cancellation and cleanup.
+- Typed error mapping.
+
+The production contract must include timeout handling, cancellation, authorization context, stream lifetime, resource limits, and explicit capability negotiation.
+
+### 7.3 Resolver flow
+
+```mermaid
 flowchart TD
-    A["01. Source Input<br/>Authorized stream or local media"]
-    B["02. Demultiplexing<br/>Separate audio packets from containers"]
-    C["03. Decoding<br/>Convert encoded audio to PCM"]
-    D["04. DSP Pipeline<br/>Filters, mixing, normalization"]
-    E["05. Resampling<br/>Convert sample rates when required"]
-    F["06. Encoding<br/>Encode requested output codec"]
-    G["07. Delivery<br/>Stream frames to connected client"]
-
-    A --> B --> C --> D --> E --> F --> G
+    A["Track / Media Request"] --> B["Search Eligible Sources"]
+    B --> C["Normalize Metadata"]
+    C --> D["Rank Candidates"]
+    D --> E["Check Authorization and Policy"]
+    E --> F["Resolve Authorized Source"]
+    F --> G["Validate Stream"]
+    G --> H["Audio Pipeline"]
 ```
 
-### Passthrough and Transcoding
+Candidate ranking may consider title similarity, artist match, duration, metadata quality, source availability, user preferences, and output compatibility. Ranking must never override authorization or provider restrictions.
 
-**Passthrough:** Preserve an already compatible encoded stream where the
-client and transport permit it.
+### 7.4 Plugin direction
 
-**Transcoding:** Decode, process, and encode when format conversion or
-DSP is necessary.
+Third-party adapters may eventually run in a sandboxed runtime.
 
-Avoid unnecessary transcoding. It wastes CPU and can reduce audio
-quality.
+Expected safeguards:
 
-------------------------------------------------------------------------
+- Versioned plugin interface.
+- Manifest and capability declarations.
+- Explicit network and filesystem permissions.
+- Resource and execution-time limits.
+- Secrets provided only through scoped interfaces.
+- Compatibility validation.
+- Publisher trust or signature verification where applicable.
+- Revocation and auditability.
 
-## 6. Universal Source Framework
+WASM/Wasmtime is a candidate, not a completed feature. A sandbox does not automatically make untrusted code safe; host capabilities must be deliberately restricted.
 
-The source system must be independent of the audio engine.
+---
 
-### Source Categories
+## 8. API Design
 
-  -----------------------------------------------------------------------
-  Category                Example                 Credential requirement
-  ----------------------- ----------------------- -----------------------
-  Local media             MP3, WAV, FLAC          No provider credentials
+The API is the primary integration contract. SDKs should wrap the same contract rather than reimplementing playback behavior independently.
 
-  Public radio            Public radio streams    Depends on stream
+### 8.1 Versioning convention
 
-  HTTP audio              Authorized direct audio Depends on endpoint
-                          URLs                    
+Use one consistent base path:
 
-  User-owned media        Uploaded files          Application
-                                                  authorization
+`/api/v1`
 
-  Platform integration    Commercial streaming    As required by provider
-                          providers               
+All REST endpoints below use this prefix.
 
-  Custom plugins          Community adapters      Depends on integration
-  -----------------------------------------------------------------------
+### 8.2 Initial endpoint proposal
 
-### Source Adapter Interface
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/v1/health` | GET | Health status |
+| `/api/v1/info` | GET | Engine and API information |
+| `/api/v1/sources` | GET | Available source capabilities |
+| `/api/v1/search` | POST | Search eligible sources |
+| `/api/v1/resolve` | POST | Resolve an authorized media reference |
+| `/api/v1/sessions` | POST | Create a session |
+| `/api/v1/sessions/{session_id}` | GET | Read session state |
+| `/api/v1/sessions/{session_id}/play` | POST | Start or change playback |
+| `/api/v1/sessions/{session_id}/pause` | POST | Pause |
+| `/api/v1/sessions/{session_id}/resume` | POST | Resume |
+| `/api/v1/sessions/{session_id}/stop` | POST | Stop |
+| `/api/v1/sessions/{session_id}/seek` | POST | Seek, when supported |
+| `/api/v1/sessions/{session_id}/volume` | PUT | Set output volume |
+| `/api/v1/sessions/{session_id}/filters` | PUT | Configure supported filters |
+| `/api/v1/sessions/{session_id}/queue` | GET | Read queue |
+| `/api/v1/sessions/{session_id}/stream` | GET | Access authorized audio output |
+| `/api/v1/metrics` | GET | Metrics endpoint, if enabled and protected appropriately |
 
-Every source should implement a common contract.
+These endpoints are a design proposal. Request schemas, response schemas, error codes, authentication scopes, and compatibility rules must be specified in OpenAPI before the API is considered stable.
 
-``` rust
-#[async_trait::async_trait]
-pub trait AudioSource: Send + Sync {
-    fn source_id(&self) -> &'static str;
+### 8.3 Example: create a session
 
-    async fn search(
-        &self,
-        query: &str,
-    ) -> Result<Vec<TrackMetadata>, SourceError>;
-
-    async fn resolve(
-        &self,
-        track: &TrackReference,
-    ) -> Result<ResolvedSource, SourceError>;
-
-    async fn health(
-        &self,
-    ) -> Result<SourceHealth, SourceError>;
-}
-```
-
-The production interface should additionally define cancellation,
-timeout, authorization context, stream lifetime, and resource cleanup.
-
-### Source Manager Responsibilities
-
--   Source registration.
--   Source discovery.
--   Source capability detection.
--   Resolver selection.
--   Health tracking.
--   Request cancellation.
--   Timeout handling.
--   Error normalization.
--   Provider-specific authorization boundaries.
--   Fallback selection between eligible sources.
-
-### Universal Track Resolver
-
-``` mermaid
-flowchart TD
-    A["Track Request"] --> B["Metadata Search"]
-    B --> C["Candidate Ranking"]
-    C --> D["Source Eligibility Check"]
-    D --> E["Authorized Resolution"]
-    E --> F["Playback Source"]
-    F --> G["Audio Engine"]
-```
-
-Candidate ranking can consider:
-
-1.  Track title similarity.
-2.  Artist match.
-3.  Duration difference.
-4.  Album metadata.
-5.  Source availability.
-6.  User-selected source preferences.
-7.  Playback compatibility.
-
-Fallback should only use a source that the application is authorized to
-access and that is suitable for the requested content.
-
-### Source Plugin SDK
-
-Third-party developers should be able to create adapters without
-modifying the NEXORA core.
-
-Plugin requirements:
-
--   Manifest-based registration.
--   Versioned interfaces.
--   Capability declarations.
--   Sandboxed execution.
--   Resource quotas.
--   Timeout limits.
--   Explicit network permissions.
--   Structured errors.
--   Compatibility checks.
-
-WASM is a candidate for portable, sandboxed execution. Plugin access to
-network, filesystem, and secrets must be explicitly granted rather than
-implicitly available.
-
-------------------------------------------------------------------------
-
-## 7. Universal API Specification
-
-The API is the primary integration contract. SDKs should be thin
-wrappers over this API rather than separate implementations of playback
-logic.
-
-### API Versioning
-
-Base path:
-
-``` text
-/api/v1/
-```
-
-### Endpoint Groups
-
-  Endpoint                      Method   Function
-  ----------------------------- -------- ---------------------
-  `/health`                     GET      Health status
-  `/v1/info`                    GET      Engine information
-  `/v1/sources`                 GET      Available sources
-  `/v1/search`                  POST     Search media
-  `/v1/resolve`                 POST     Resolve track
-  `/v1/sessions`                POST     Create session
-  `/v1/sessions/{id}`           GET      Session state
-  `/v1/sessions/{id}/play`      POST     Start playback
-  `/v1/sessions/{id}/pause`     POST     Pause playback
-  `/v1/sessions/{id}/resume`    POST     Resume playback
-  `/v1/sessions/{id}/stop`      POST     Stop playback
-  `/v1/sessions/{id}/seek`      POST     Change position
-  `/v1/sessions/{id}/volume`    PUT      Set volume
-  `/v1/sessions/{id}/filters`   PUT      Configure filters
-  `/v1/sessions/{id}/queue`     GET      Read queue
-  `/v1/sessions/{id}/stream`    GET      Access audio output
-  `/v1/metrics`                 GET      Service metrics
-
-### Create Session
-
-``` http
+```http
 POST /api/v1/sessions
 Content-Type: application/json
 Authorization: Bearer <application-token>
 ```
 
-``` json
+```json
 {
   "client": {
-    "application": "my-discord-bot",
+    "application": "example-client",
     "version": "1.0.0"
   },
   "output": {
@@ -543,234 +506,157 @@ Authorization: Bearer <application-token>
 }
 ```
 
-Response:
+Illustrative response:
 
-``` json
+```json
 {
-  "session_id": "nx_session_123",
+  "session_id": "nx_session_example",
   "status": "created",
   "engine": "nexora",
   "api_version": "v1"
 }
 ```
 
-### Search
+### 8.4 Example: search
 
-``` http
+```http
 POST /api/v1/search
+Content-Type: application/json
+Authorization: Bearer <application-token>
 ```
 
-``` json
+```json
 {
-  "query": "example song",
+  "query": "example audio",
   "sources": ["local", "radio"],
   "limit": 10
 }
 ```
 
-Response:
+The server must only search sources enabled for the application and permitted by the relevant source policy.
 
-``` json
+### 8.5 WebSocket events
+
+Proposed endpoint:
+
+`/ws/v1/sessions/{session_id}`
+
+Potential event names:
+
+- `session.created`
+- `session.ready`
+- `track.started`
+- `track.ended`
+- `track.failed`
+- `playback.paused`
+- `playback.resumed`
+- `playback.stopped`
+- `queue.updated`
+- `source.unavailable`
+- `engine.warning`
+
+Each event should include an event ID, schema version, timestamp, session ID, event type, payload, and correlation ID.
+
+Clients must be able to reconnect and retrieve current session state. They should not depend exclusively on transient WebSocket events.
+
+---
+
+## 9. SDK Strategy
+
+Official SDKs should be thin, typed clients over the same documented API.
+
+| Language | Proposed package identifier |
+|---|---|
+| Python | `nexora` (proposed) |
+| Node.js / TypeScript | `@nexora/sdk` (proposed) |
+| Java | `dev.nexora:sdk` (proposed) |
+| Go | `github.com/nexora/sdk-go` (proposed) |
+| C# | `Nexora.SDK` (proposed) |
+| PHP | `nexora/sdk` (proposed) |
+| Rust | `nexora-client` (proposed) |
+
+These are naming proposals only. They are not claims that packages have been published or registered.
+
+### SDK capabilities
+
+- Authentication and token configuration.
+- Session creation and lifecycle commands.
+- Search and source resolution.
+- Queue management.
+- Event subscriptions.
+- Reconnection and state recovery.
+- Typed request and response models.
+- Consistent error handling.
+- Supported audio output access.
+
+Publish OpenAPI and protobuf contracts so developers can generate clients for languages that do not yet have an official SDK.
+
+---
+
+## 10. Storage and State Management
+
+Storage responsibilities must remain distinct. Audio packets should not be stored as ordinary database rows.
+
+| Technology | Intended responsibility | Status |
+|---|---|---|
+| PostgreSQL | Persistent application and session metadata | Proposed server database |
+| SQLite | Lightweight single-node metadata storage | Optional deployment mode |
+| Moka | In-process cache | Optional |
+| Redis | Shared ephemeral state when required | Optional |
+| NATS JetStream | Durable event delivery when required | Optional distributed component |
+| S3-compatible storage | User-owned media and optional assets | Optional |
+
+Redis, NATS, and object storage are not required dependencies for the first standalone engine.
+
+### Data model candidates
+
+- `applications`
+- `api_credentials`
+- `users` (only if user accounts are part of the chosen product scope)
+- `sessions`
+- `session_tracks`
+- `queues`
+- `track_metadata`
+- `source_registry`
+- `source_health`
+- `plugin_registry`
+- `plugin_versions`
+- `worker_registry`
+- `cluster_nodes`
+- `audit_events`
+
+### State ownership
+
+- Persistent metadata belongs in the configured database.
+- Active playback state should be held in memory by the session owner.
+- State may be checkpointed when recovery requirements justify it.
+- Audio frames belong in bounded in-memory pipeline buffers, not database tables.
+- Cache keys must include source identity, authorization scope, and relevant format parameters.
+- Private or restricted media cache entries must not be shared across unrelated applications.
+
+---
+
+## 11. Distributed Execution
+
+Distributed execution is a later stage, not a prerequisite for the first usable release.
+
+### 11.1 Components
+
+- **Coordinator:** assigns work.
+- **Registry:** tracks worker identity, version, health, and capabilities.
+- **Scheduler:** chooses an eligible worker.
+- **Audio worker:** performs supported processing.
+- **Delivery worker:** manages output transport.
+- **Health monitor:** detects unavailable workers.
+- **Event transport:** distributes lifecycle events.
+
+### 11.2 Worker capability model
+
+A worker registration should describe its identity, version, capabilities, and measured capacity. Example values must be treated as illustrative:
+
+```json
 {
-  "results": [
-    {
-      "track_id": "track_001",
-      "title": "Example Song",
-      "artist": "Example Artist",
-      "duration_ms": 210000,
-      "source": "local",
-      "available": true
-    }
-  ]
-}
-```
-
-### Play
-
-``` http
-POST /api/v1/sessions/nx_session_123/play
-```
-
-``` json
-{
-  "track_id": "track_001",
-  "start_position_ms": 0
-}
-```
-
-### Event API
-
-WebSocket endpoint:
-
-``` text
-/ws/v1/sessions/{session_id}
-```
-
-Events:
-
-``` text
-session.created
-session.ready
-track.started
-track.ended
-track.failed
-track.position
-playback.paused
-playback.resumed
-playback.stopped
-queue.updated
-source.unavailable
-engine.warning
-```
-
-Every event should include:
-
--   Event ID.
--   Event version.
--   Timestamp.
--   Session ID.
--   Event type.
--   Payload.
--   Correlation ID.
-
-Clients should reconnect and recover their latest session state rather
-than relying exclusively on transient WebSocket events.
-
-------------------------------------------------------------------------
-
-## 8. SDK and Language Compatibility
-
-NEXORA's SDKs are wrappers around the same API contract.
-
-  SDK       Proposed package name
-  --------- ----------------------------
-  Python    `nexora.py`
-  Node.js   `@nexora/sdk`
-  Java      `dev.nexora:sdk`
-  Go        `github.com/nexora/sdk-go`
-  C#        `Nexora.SDK`
-  PHP       `nexora/sdk`
-  Rust      `nexora-client`
-
-These are proposed package names, not existing published packages.
-
-### SDK Requirements
-
--   Authentication.
--   Session creation.
--   Search and resolution.
--   Playback controls.
--   Queue management.
--   Event subscriptions.
--   Reconnection.
--   Error handling.
--   Typed responses.
--   Streaming output.
-
-For additional language support, publish the API's OpenAPI specification
-and protobuf definitions. Developers can then generate clients instead
-of waiting for an official SDK.
-
-------------------------------------------------------------------------
-
-## 9. Database and Storage Architecture
-
-Use separate storage responsibilities rather than putting everything in
-one database.
-
-### Storage Selection
-
-  Storage                 Responsibility
-  ----------------------- --------------------------------------
-  PostgreSQL              Persistent application metadata
-  SQLite                  Lightweight single-node mode
-  Moka                    In-process cache
-  Redis                   Optional shared ephemeral state
-  NATS JetStream          Durable service events
-  S3-compatible storage   User-owned media and optional assets
-
-Redis and object storage should not be mandatory for the minimum viable
-deployment.
-
-### Database Entities
-
-``` text
-applications
-api_credentials
-users
-sessions
-session_tracks
-queues
-track_metadata
-source_registry
-source_health
-plugin_registry
-plugin_versions
-worker_registry
-cluster_nodes
-audit_events
-```
-
-### Session Model
-
-``` sql
-CREATE TABLE sessions (
-    id UUID PRIMARY KEY,
-    application_id UUID NOT NULL,
-    status VARCHAR(32) NOT NULL,
-    current_track_id UUID,
-    position_ms BIGINT DEFAULT 0,
-    volume INTEGER DEFAULT 100,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
-);
-```
-
-The database is the persistent metadata layer, not the real-time audio
-packet store.
-
-Playback state that changes frequently should be maintained in memory
-and checkpointed where necessary.
-
-### Caching Strategy
-
-  Data                   Cache policy
-  ---------------------- ------------------------------------
-  Source capabilities    Long-lived
-  Track metadata         Configurable TTL
-  Source health          Short TTL
-  Resolver results       Short TTL
-  Active session state   In-memory
-  Audio segments         Only when permitted and configured
-
-Cache keys must include source identity, authorization scope, and
-relevant format parameters.
-
-Never share private or restricted media cache entries across unrelated
-users or applications.
-
-------------------------------------------------------------------------
-
-## 10. Distributed Cluster Architecture
-
-NEXORA must run on a single machine initially and multiple machines
-later.
-
-### Cluster Components
-
--   Coordinator: assigns workloads.
--   Registry: tracks available workers.
--   Scheduler: selects suitable workers.
--   Audio worker: processes audio.
--   Delivery worker: streams output.
--   Health monitor: detects unavailable services.
--   Event bus: distributes lifecycle events.
-
-### Worker Registration
-
-``` json
-{
-  "worker_id": "worker-001",
+  "worker_id": "worker-example",
   "service": "audio-worker",
   "version": "0.1.0",
   "capabilities": [
@@ -779,208 +665,181 @@ later.
     "opus_encode"
   ],
   "resources": {
-    "cpu_capacity": 100,
+    "cpu_capacity_units": 100,
     "active_jobs": 0
   }
 }
 ```
 
-The resource values are illustrative. Production capacity must be
-measured rather than inferred from CPU percentage alone.
+Capacity units must be calibrated through workload benchmarks. They must not be inferred from a single CPU percentage.
 
-### Scheduling Strategy
+### 11.3 Scheduling signals
 
-Use a weighted scheduler based on:
+A scheduler may consider:
 
--   Available CPU capacity.
--   Memory headroom.
--   Active workload.
--   Supported codecs.
--   Network proximity.
--   Worker health.
--   Session affinity.
+- Available CPU and memory headroom.
+- Active workload and queue depth.
+- Supported codecs and processing capabilities.
+- Network proximity.
+- Worker health.
+- Session affinity.
+- Resource quotas and tenant policy.
 
-Avoid migrating an active audio stream between workers unless state
-transfer is explicitly supported.
+Avoid moving an active stream between workers unless state transfer and continuity are explicitly implemented and tested.
 
-### Fault Tolerance
+### 11.4 Reliability mechanisms
 
--   Heartbeats.
--   Worker health checks.
--   Graceful shutdown.
--   Session recovery.
--   Bounded retry policies.
--   Circuit breakers.
--   Duplicate event protection.
--   Idempotent commands.
--   Dead-letter handling for failed asynchronous tasks.
+- Heartbeats and health checks.
+- Graceful shutdown and task cancellation.
+- Bounded retries with backoff.
+- Circuit breakers where appropriate.
+- Idempotent control commands.
+- Duplicate-event protection.
+- Session recovery strategy.
+- Dead-letter handling for durable asynchronous jobs.
 
-------------------------------------------------------------------------
+---
 
-## 11. Performance Engineering
+## 12. Performance Engineering
 
-NEXORA should optimize for actual workload efficiency, not marketing
-claims.
+NEXORA should optimize for measured workload efficiency rather than marketing claims.
 
-### Initial Performance Targets
+### 12.1 Initial engineering objectives
 
-These are engineering targets, not verified benchmarks or guaranteed
-production results.
+These are proposed targets for investigation, not verified benchmarks, service-level agreements, or guarantees.
 
-  Metric                                        Initial target
-  ------------------------- ----------------------------------
-  API command latency                          p95 below 50 ms
-  Internal RPC latency                         p95 below 10 ms
-  Session creation                            p95 below 100 ms
-  Audio pipeline overhead     Under 10 ms per processing batch
-  Service availability                            99.9% target
-  Unbounded queue growth                                  Zero
-  Memory leaks                                            Zero
-  Idle service footprint                      Benchmark-driven
+| Metric | Initial objective |
+|---|---|
+| API command latency | Investigate p95 below 50 ms under a defined local test workload |
+| Internal RPC latency | Investigate p95 below 10 ms under a defined local test workload |
+| Session creation | Investigate p95 below 100 ms under a defined test workload |
+| Queue growth | No unbounded queue growth |
+| Memory use | Bounded and measured per active session |
+| Availability | Define an SLO only after deployment and operational data exist |
+| Audio processing overhead | Measure per codec, frame size, and processing configuration |
 
-Network latency and source response times must be measured separately
-from NEXORA's own processing latency.
+Network latency, provider response time, and NEXORA processing time must be measured separately.
 
-### Memory Optimization
+### 12.2 Memory practices
 
-1.  Reusable frame buffers.
-2.  Bounded channel capacity.
-3.  Avoid unnecessary allocations.
-4.  Avoid copying PCM data between services.
-5.  Stream media instead of downloading entire tracks.
-6.  Release decoder resources promptly.
-7.  Apply per-session memory budgets.
-8.  Implement cache eviction.
-9.  Prevent uncontrolled task creation.
-10. Support graceful resource degradation.
+1. Reuse buffers where safe.
+2. Bound channel capacities.
+3. Avoid unnecessary PCM copies.
+4. Stream media instead of downloading complete tracks when appropriate.
+5. Release decoder and source resources promptly.
+6. Apply per-session and per-worker memory budgets.
+7. Evict cache entries according to explicit policies.
+8. Prevent uncontrolled task creation.
+9. Handle slow consumers with backpressure.
+10. Degrade gracefully when resource limits are reached.
 
-### CPU Optimization
+### 12.3 CPU practices
 
--   Release-mode compilation.
--   Profile-guided optimization where useful.
--   SIMD where supported.
--   Dedicated processing pools.
--   Efficient sample formats.
--   Codec passthrough where possible.
--   Workload-aware scheduling.
--   Benchmark-guided optimizations.
+- Use release builds for performance testing.
+- Profile before optimizing.
+- Use dedicated processing pools for CPU-heavy work.
+- Prefer codec passthrough when compatible.
+- Evaluate SIMD only with reproducible comparisons.
+- Measure CPU cost per active stream and per codec.
+- Avoid unsafe Rust unless a benchmark and safety review justify it.
 
-Do not use unsafe Rust or architecture-specific assembly simply for the
-appearance of performance. Every optimization should demonstrate
-measurable improvement.
+### 12.4 Benchmark suite
 
-### Benchmarking Suite
+Benchmark at least:
 
-Benchmark:
+- WAV and other supported local format decoding.
+- FLAC and MP3 decoding where enabled.
+- Opus encoding where enabled.
+- PCM resampling.
+- DSP operations.
+- Concurrent sessions.
+- Memory per session.
+- Startup and shutdown time.
+- Cache hit ratio.
+- Network throughput.
+- CPU consumption per active stream.
+- Backpressure and slow-client behavior.
 
--   WAV decoding.
--   FLAC decoding.
--   MP3 decoding.
--   Opus encoding.
--   PCM resampling.
--   Equalizer processing.
--   Concurrent sessions.
--   Memory per session.
--   Startup time.
--   Cache hit ratio.
--   Network throughput.
--   CPU consumption per active stream.
+Comparisons must use identical inputs, codec settings, hardware, build profiles, and workload definitions.
 
-Compare against established implementations using identical source
-files, codec settings, hardware, and workloads.
+---
 
-------------------------------------------------------------------------
+## 13. Security and Provider Compliance
 
-## 12. Security Architecture
+Security is part of the architecture.
 
-Security must be part of the architecture rather than an optional
-feature.
+### 13.1 Authentication and authorization
 
-### Authentication
+- Application-scoped credentials.
+- Least-privilege permissions.
+- Credential rotation and revocation.
+- Token expiration.
+- Secure secret storage.
+- Per-application quotas.
+- Audit events for sensitive operations.
 
--   Application API credentials.
--   Scoped permissions.
--   Credential rotation.
--   Token expiration.
--   Secure secret storage.
--   Per-application quotas.
+### 13.2 Network security
 
-### Network Security
+- TLS for external connections.
+- mTLS for internal links where the threat model requires it.
+- Request validation and body-size limits.
+- Rate limiting and abuse controls.
+- SSRF protection for user-supplied URLs.
+- Redirect validation.
+- Private-network and metadata-address blocking.
+- Egress policies.
+- No unrestricted open-proxy behavior.
 
--   TLS for external connections.
--   mTLS for sensitive internal service communication.
--   Network isolation.
--   Request validation.
--   Rate limiting.
--   SSRF protection.
--   Egress policies.
--   Private service discovery.
+### 13.3 Plugin security
 
-### Plugin Security
+- Sandboxed execution.
+- Explicit filesystem and network capabilities.
+- CPU, memory, and execution-time limits.
+- Versioned host interfaces.
+- Secrets available only through scoped host APIs.
+- Plugin revocation and auditability.
 
--   WASM sandboxing.
--   Explicit filesystem capabilities.
--   Explicit network permissions.
--   Execution time limits.
--   Memory limits.
--   CPU quotas.
--   Plugin signatures or trusted publisher verification.
--   Plugin revocation.
+### 13.4 Media and provider compliance
 
-### Source Security
+- Support locally owned media and authorized streams.
+- Use documented provider interfaces where applicable.
+- Respect provider licensing, authentication, rate limits, and usage restrictions.
+- Do not implement DRM circumvention or unauthorized extraction.
+- Keep provider credentials isolated from the core engine.
+- Do not promise universal access to commercial catalogues.
 
-Source adapters must validate remote URLs, prevent access to internal
-network addresses, and restrict redirects to permitted destinations.
-They must not act as unrestricted open proxies.
+---
 
-### Media and Provider Compliance
+## 14. Deployment Model
 
--   Support locally owned media.
--   Support authorized streams.
--   Use documented provider integrations where applicable.
--   Respect provider licensing and usage restrictions.
--   Do not implement DRM circumvention.
--   Keep provider credentials isolated from the core engine.
+NEXORA should evolve through deployment profiles.
 
-------------------------------------------------------------------------
+### Profile A — Local development
 
-## 13. Deployment Architecture
+One process with local configuration and test media. Intended for development and automated tests.
 
-NEXORA should support four deployment profiles.
+### Profile B — Single-node self-hosting
 
-### Profile A --- Single-Node Development
+A standalone application with optional database support. Docker packaging may be added when the runtime is stable.
 
-One machine running the necessary services locally.
+### Profile C — Multi-process / multi-node
 
-Suitable for development, testing, and small deployments.
+Independent workers and services with explicit service discovery, scheduling, and operational monitoring.
 
-### Profile B --- Docker Compose
+### Profile D — Kubernetes
 
-Independent service containers with a shared private network.
+Consider Kubernetes only when deployment scale and operational requirements justify its complexity.
 
-Suitable for self-hosted installations.
+### Example configuration
 
-### Profile C --- Distributed Deployment
+The following is illustrative. It must not be treated as a finalized configuration schema until validated by the implementation.
 
-Multiple workers across multiple machines.
-
-Suitable for larger workloads and horizontal scaling.
-
-### Profile D --- Kubernetes
-
-Service discovery, health checks, autoscaling, and rolling deployment.
-
-Suitable for large-scale production infrastructure.
-
-### Example Configuration
-
-``` toml
+```toml
 [server]
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 8080
 
 [engine]
-worker_threads = 4
 max_sessions = 100
 buffer_duration_ms = 2000
 
@@ -995,272 +854,236 @@ max_memory_mb = 128
 
 [cluster]
 enabled = false
-role = "standalone"
 
 [plugins]
-enabled = true
-sandbox = true
+enabled = false
 ```
 
-All values are illustrative defaults. Production configuration must use
-environment-specific secrets, validated resource limits, and hardware
-measurements.
+Production deployments should use environment-specific configuration, validated limits, and a secret manager or equivalent secure secret injection. Do not commit real credentials to the repository.
 
-------------------------------------------------------------------------
+---
 
-## 14. Monitoring and Observability
+## 15. Observability
 
-NEXORA needs first-class monitoring.
+The system should expose enough telemetry to diagnose audio quality, resource pressure, and service failures.
 
-### Required Metrics
+### Proposed metrics
 
-  Metric                            Description
-  --------------------------------- ------------------------
-  `nexora_active_sessions`          Current sessions
-  `nexora_audio_frames_total`       Processed audio frames
-  `nexora_decode_errors_total`      Decoder errors
-  `nexora_source_errors_total`      Source errors
-  `nexora_worker_cpu_usage`         Worker CPU
-  `nexora_worker_memory_bytes`      Worker memory
-  `nexora_buffer_underruns_total`   Buffer underruns
-  `nexora_api_latency_seconds`      API latency
-  `nexora_stream_bytes_total`       Output traffic
-  `nexora_cache_hits_total`         Cache hits
+| Metric | Meaning |
+|---|---|
+| `nexora_active_sessions` | Current active sessions |
+| `nexora_audio_frames_total` | Frames processed |
+| `nexora_decode_errors_total` | Decoder failures |
+| `nexora_source_errors_total` | Source adapter failures |
+| `nexora_worker_cpu_usage` | Worker CPU utilization |
+| `nexora_worker_memory_bytes` | Worker memory usage |
+| `nexora_buffer_underruns_total` | Buffer underruns |
+| `nexora_api_latency_seconds` | API request latency |
+| `nexora_stream_bytes_total` | Delivered bytes |
+| `nexora_cache_hits_total` | Cache hits |
 
-Use Prometheus-compatible metrics and OpenTelemetry instrumentation.
+Metric names and labels must be reviewed to avoid high-cardinality dimensions such as raw URLs, tokens, or arbitrary user input.
 
-### Administrative Dashboard
+### Logs and traces
 
-The future dashboard should show:
+- Use structured logs with correlation IDs.
+- Never log credentials, authorization headers, or private media URLs containing secrets.
+- Trace session commands across service boundaries.
+- Record source and codec errors with safe diagnostic context.
+- Define retention and access policies for operational data.
 
--   Service health.
--   Active sessions.
--   Worker availability.
--   CPU and memory.
--   Audio processing latency.
--   Source health.
--   Network bandwidth.
--   Cache statistics.
--   Error rates.
--   Cluster status.
+### Future administrative dashboard
 
-------------------------------------------------------------------------
+Potential views include service health, active sessions, worker availability, CPU and memory, audio processing latency, source health, bandwidth, cache statistics, and error rates.
 
-## 15. Testing and Quality Assurance
+---
 
-Testing must be performed at multiple levels.
+## 16. Testing and Quality
 
-  Test category           Required validation
-  ----------------------- ---------------------------------------
-  Unit testing            Individual modules and functions
-  Integration testing     Communication between services
-  Audio testing           Decoder and encoder correctness
-  Compatibility testing   Supported input/output formats
-  Load testing            Concurrent sessions
-  Stress testing          Resource exhaustion behavior
-  Failure testing         Worker disconnection and recovery
-  Security testing        API, plugin, and source isolation
-  Regression testing      Previous functionality remains intact
+Testing must cover correctness, compatibility, performance, security, and recovery.
 
-### Audio Correctness
+| Test category | Required validation |
+|---|---|
+| Unit | Individual modules and data transformations |
+| Integration | API, storage, and service boundaries |
+| Audio correctness | Decode, resample, encode, and output behavior |
+| Compatibility | Supported container and codec matrix |
+| Load | Concurrent sessions and throughput |
+| Stress | Resource exhaustion and recovery |
+| Failure | Source and worker disconnection |
+| Security | API authorization, SSRF, and plugin isolation |
+| Regression | Existing supported behavior remains intact |
 
-The test suite must include:
+### Audio correctness checks
 
--   Sample-rate correctness.
--   Channel-layout correctness.
--   Audio clipping detection.
--   Gapless playback verification where supported.
--   Audio synchronization.
--   Resampling quality.
--   Codec compatibility.
--   Packet-loss behavior.
--   Buffer underrun detection.
+- Sample-rate correctness.
+- Channel-layout correctness.
+- Clipping and overflow behavior.
+- Timestamp continuity.
+- Gapless playback where supported.
+- Resampling quality.
+- Codec compatibility.
+- Buffer underrun behavior.
+- Cancellation and end-of-stream handling.
 
-### CI/CD Requirements
+### Continuous integration
 
-Every pull request should run:
+Once the Rust workspace and relevant tools exist, CI should run applicable checks such as:
 
-``` bash
+```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets
-cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 cargo audit
 cargo deny check
 ```
 
-Also include:
+`cargo audit` and `cargo deny` require the corresponding tools and configuration. The CI pipeline should install or provision them explicitly. Do not add `--all-features` blindly if mutually exclusive features exist; define the supported feature matrix.
 
--   Dependency license checks.
--   Fuzz testing of parsers and decoders.
--   API contract validation.
--   Docker image builds.
--   Cross-platform compilation.
--   Performance regression tests.
+Additional checks may include:
 
-------------------------------------------------------------------------
+- Dependency license policy.
+- Parser and decoder fuzzing.
+- API contract validation.
+- Container build tests.
+- Cross-platform compilation.
+- Performance regression tests.
+- Documentation build and link checks.
 
-## 16. Development Roadmap
+---
 
-Development should be staged rather than attempting to implement every
-microservice simultaneously.
+## 17. Development Roadmap
 
-### Phase 1 --- Foundation
+Build and validate each stage before expanding scope.
 
-**Priority: P0**
+### Phase 1 — Workspace foundation
 
--   Rust workspace.
--   Shared types.
--   Configuration.
--   Error handling.
--   Logging.
--   Service communication.
+- Rust workspace and crate boundaries.
+- Shared types and error model.
+- Configuration validation.
+- Structured logging.
+- Basic CI.
+- Minimal runnable binary.
 
-**Deliverable:** Compilable NEXORA foundation.
+**Exit condition:** Workspace builds, tests, and runs reproducibly.
 
-### Phase 2 --- Audio Engine
+### Phase 2 — Standalone audio core
 
--   Source input.
--   Decoding.
--   PCM pipeline.
--   Buffering.
--   Resampling.
--   Encoding.
+- Audio format and frame abstractions.
+- Local media input.
+- Demultiplexing and decoding.
+- PCM processing.
+- Buffering and backpressure.
+- Resampling.
+- Output encoding.
 
-**Deliverable:** Functional standalone audio engine.
+**Exit condition:** Supported input can be processed into a verified output with benchmark results.
 
-### Phase 3 --- Source Framework
+### Phase 3 — Source framework
 
--   Source registry.
--   Adapter interface.
--   Local media.
--   Public radio.
--   Authorized HTTP streams.
+- Source adapter contract.
+- Local media adapter.
+- Authorized HTTP stream adapter.
+- Public radio adapter where permitted.
+- Source capability and health reporting.
 
-**Deliverable:** Extensible source management.
+**Exit condition:** Adapters can be registered and used without changing the core pipeline.
 
-### Phase 4 --- API Infrastructure
+### Phase 4 — Session and API layer
 
--   REST.
--   WebSocket.
--   gRPC.
--   Session lifecycle.
+- Session lifecycle.
+- Queue model.
+- REST API.
+- WebSocket events.
+- Authentication and authorization.
 
-**Deliverable:** First universal client integration.
+**Exit condition:** A client can create a session, control playback, and recover state.
 
-### Phase 5 --- SDK Development
+### Phase 5 — First SDKs
 
--   Python SDK.
--   Node.js SDK.
--   Java SDK.
--   Go SDK.
--   C# SDK.
--   PHP SDK.
+- Python client.
+- Node.js / TypeScript client.
+- OpenAPI and protobuf contracts.
+- Runnable examples.
 
-**Deliverable:** Language-independent integration.
+**Exit condition:** Both clients pass integration tests against the same server contract.
 
-### Phase 6 --- Distributed Infrastructure
+### Phase 6 — Operational maturity
 
--   NATS.
--   Worker registry.
--   Scheduling.
--   Health monitoring.
--   Distributed sessions.
+- Docker packaging.
+- Metrics and traces.
+- Configuration and deployment documentation.
+- Security review.
+- Load and failure testing.
 
-**Deliverable:** Multi-node NEXORA deployment.
+**Exit condition:** Reproducible single-node deployment with documented operational behavior.
 
-### Phase 7 --- Plugin Ecosystem
+### Phase 7 — Distributed execution
 
--   Sandboxed plugin runtime.
--   Manifests.
--   Plugin SDK.
--   Developer documentation.
+- Worker registry.
+- Scheduling.
+- Event bus.
+- Multi-node sessions.
+- Recovery and fault isolation.
 
-**Deliverable:** Third-party extension framework.
+**Exit condition:** Multi-node behavior is tested under worker failure and load.
 
-### Phase 8 --- Production Hardening
+### Phase 8 — Plugin ecosystem and additional SDKs
 
--   Benchmarking.
--   Security audits.
--   Fault testing.
--   Documentation.
--   Deployment tooling.
+- Sandboxed plugin host.
+- Plugin manifest and SDK.
+- Java, Go, C#, PHP, and Rust clients as demand warrants.
+- Compatibility and security review.
 
-**Deliverable:** Production-ready release candidate.
+**Exit condition:** Third-party extensions run through a documented, constrained interface.
 
-------------------------------------------------------------------------
+---
 
-## 17. Repository Structure
+## 18. Proposed Repository Structure
 
-``` text
+This is a target structure. Create directories when the corresponding implementation phase begins; do not add empty placeholder services just to match the diagram.
+
+```text
 NEXORA/
-│
-├── services/
-│   ├── gateway/
-│   ├── auth/
-│   ├── registry/
-│   ├── resolver/
-│   ├── source-worker/
-│   ├── decoder/
-│   ├── audio-engine/
-│   ├── session/
-│   ├── delivery/
-│   ├── cache/
-│   ├── cluster/
-│   ├── plugin-host/
-│   └── observability/
-│
 ├── crates/
 │   ├── nexora-core/
 │   ├── nexora-common/
-│   ├── nexora-protocol/
 │   ├── nexora-audio-types/
 │   ├── nexora-audio-buffer/
 │   ├── nexora-audio-codec/
 │   ├── nexora-dsp/
-│   ├── nexora-resolver-api/
 │   ├── nexora-source-api/
-│   ├── nexora-plugin-api/
+│   ├── nexora-resolver/
+│   ├── nexora-session/
+│   ├── nexora-protocol/
 │   ├── nexora-storage/
 │   └── nexora-telemetry/
-│
+├── apps/
+│   ├── nexora-server/
+│   └── nexora-worker/          # Add when distributed workers exist
 ├── sdks/
 │   ├── python/
-│   ├── nodejs/
-│   ├── java/
-│   ├── go/
-│   ├── csharp/
-│   ├── php/
-│   └── rust/
-│
+│   └── nodejs/
 ├── plugins/
 │   ├── local-media/
-│   ├── public-radio/
-│   └── community/
-│
+│   └── public-radio/
 ├── protocols/
-│   ├── protobuf/
 │   ├── openapi/
+│   ├── protobuf/
 │   └── events/
-│
 ├── infrastructure/
 │   ├── docker/
 │   ├── compose/
-│   ├── kubernetes/
 │   └── monitoring/
-│
 ├── examples/
 │   ├── python-client/
 │   ├── nodejs-client/
-│   ├── java-client/
-│   ├── discord-integration/
-│   ├── telegram-integration/
-│   └── web-player/
-│
+│   └── web-client/
 ├── benchmarks/
 ├── fuzz/
 ├── tests/
 ├── docs/
-│
+│   └── MASTER_AI_INSTRUCTIONS.md
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
@@ -1269,232 +1092,227 @@ NEXORA/
 └── README.md
 ```
 
-### Repository Rules
+### Repository rules
 
--   Every microservice must be independently buildable and deployable.
--   Shared Rust crates must not create circular dependencies.
--   Protocol definitions must be versioned independently from
-    implementation details.
--   Service contracts must be documented.
--   All public APIs must have compatibility tests.
--   Changes to shared interfaces must include migration notes.
+- Shared crates must not create circular dependencies.
+- Public contracts must be versioned.
+- Each independently deployed application must have its own build and deployment instructions.
+- Avoid creating a microservice until there is a concrete operational reason.
+- Changes to shared interfaces must include migration notes and tests.
+- Keep generated files and build artifacts out of source control unless intentionally required.
 
-------------------------------------------------------------------------
+---
 
-## 18. Definition of Done
+## 19. Definition of Done
 
-NEXORA should not be called production-ready merely because the server
-starts and plays a song.
+A feature is complete only when its implementation, tests, documentation, and operational behavior agree.
 
-  Requirement          Acceptance criteria
-  -------------------- -----------------------------------------
-  Audio engine         Successfully processes supported media
-  Source system        Third-party adapters can be registered
-  API                  Documented and versioned
-  SDK                  Python and Node.js functional
-  Session management   Correct playback lifecycle
-  Audio output         Stable streaming under tested workloads
-  Memory management    Bounded resource consumption
-  Microservices        Independent deployment
-  Cluster              Worker discovery and scheduling
-  Recovery             Graceful handling of worker failures
-  Security             Authentication and authorization
-  Plugins              Sandboxed execution
-  Monitoring           Metrics, logs, and traces
-  Documentation        Developer and operator guides
-  Testing              Automated integration and load tests
+| Area | Acceptance criteria |
+|---|---|
+| Audio engine | Processes documented formats correctly |
+| Source system | Adapters register through a stable contract |
+| API | Versioned, authenticated, and documented |
+| SDKs | Pass integration tests against the API |
+| Sessions | Lifecycle and recovery behavior are tested |
+| Audio output | Stable under documented test workloads |
+| Resource control | Queues and buffers are bounded |
+| Distributed mode | Worker discovery and scheduling are tested, if implemented |
+| Security | Authorization and network restrictions are tested |
+| Plugins | Sandboxing and permissions are validated, if implemented |
+| Monitoring | Metrics, logs, and traces are available |
+| Documentation | Setup, API, architecture, and operations are current |
+| CI | Required checks run automatically |
 
-------------------------------------------------------------------------
+Do not describe NEXORA as production-ready solely because a server starts or a sample file plays.
 
-## 19. Major Engineering Risks
+---
 
-  -----------------------------------------------------------------------
-  Risk                                Mitigation
-  ----------------------------------- -----------------------------------
-  Microservice network overhead       Keep audio data plane local to
-                                      workers
+## 20. Engineering Risks
 
-  High memory consumption             Bounded buffers and resource quotas
+| Risk | Mitigation |
+|---|---|
+| Premature microservices | Start with modular core; extract services based on evidence |
+| Network overhead in audio path | Keep media processing local to workers |
+| Unbounded memory use | Bounded queues, buffer pools, and quotas |
+| Codec incompatibility | Publish and test a compatibility matrix |
+| Source instability | Adapter isolation, timeouts, health checks |
+| Cluster complexity | Defer distributed execution until needed |
+| Plugin vulnerabilities | Sandboxing and least-privilege capabilities |
+| API incompatibility | Versioned schemas and contract tests |
+| Audio quality degradation | Objective signal and playback tests |
+| Provider restrictions | Authorized integrations and compliance review |
+| Dependency vulnerabilities | Auditing, updates, and dependency policy |
+| Observability overhead | Measure telemetry cost and control cardinality |
 
-  Decoder incompatibility             Capability-based codec negotiation
+---
 
-  Source instability                  Adapter isolation and health checks
+## 21. Initial Release Scope
 
-  Cluster complexity                  Start with standalone deployment
+### NEXORA 0.1.0 — Standalone Audio Foundation
 
-  Plugin vulnerabilities              Sandboxed execution
+The first release should focus on a small, verifiable feature set:
 
-  API incompatibility                 Versioned protocols
+- Rust workspace and runnable server or engine binary.
+- Core audio frame and format abstractions.
+- Local media input.
+- Decoder support for explicitly documented formats.
+- PCM processing pipeline.
+- Bounded buffering and cancellation.
+- Resampling where required.
+- Opus output if the selected encoder integration is validated.
+- Basic session lifecycle.
+- Minimal REST API.
+- Basic WebSocket events if session events are part of the first client workflow.
+- Python and Node.js clients only after the API contract stabilizes.
+- Reproducible tests and benchmarks.
+- Basic metrics and operational documentation.
 
-  Audio quality degradation           Objective audio quality testing
+### Explicitly deferred from 0.1.0
 
-  Provider restrictions               Authorized source integrations
+- Kubernetes orchestration.
+- Large-scale distributed scheduling.
+- Plugin marketplace.
+- Every commercial music provider.
+- Every language SDK.
+- Claims of production-grade high availability.
+- Unverified performance guarantees.
 
-  Dependency vulnerabilities          Dependency auditing and pinning
-  -----------------------------------------------------------------------
+The 0.1.0 release should prove a reliable audio foundation before adding a large service ecosystem.
 
-------------------------------------------------------------------------
+---
 
-## 20. Initial Release Strategy
+## 22. Architecture Decision Records
 
-### NEXORA 0.1.0 --- Minimum Viable Infrastructure
+The following are proposed initial decisions. Each should become an individual ADR when the repository begins recording accepted decisions and their rationale.
 
-The first release should include:
+| ADR | Proposed decision |
+|---|---|
+| ADR-001 | Rust as the primary implementation language |
+| ADR-002 | Modular core before service extraction |
+| ADR-003 | Logical separation of control and data planes |
+| ADR-004 | Tokio for asynchronous I/O |
+| ADR-005 | gRPC for selected internal RPC contracts |
+| ADR-006 | REST and WebSocket for public control APIs |
+| ADR-007 | Native audio processing pipeline |
+| ADR-008 | Independent source adapter interfaces |
+| ADR-009 | Sandboxed plugin runtime after core maturity |
+| ADR-010 | PostgreSQL for server metadata |
+| ADR-011 | NATS for distributed events when required |
+| ADR-012 | Single-node deployment before cluster deployment |
+| ADR-013 | OpenAPI and protobuf for machine-readable contracts |
+| ADR-014 | Benchmark-driven performance optimization |
 
--   Rust audio engine.
--   Source adapter framework.
--   Local media decoder.
--   Public radio and authorized HTTP stream adapters.
--   PCM and Opus output.
--   Session management.
--   REST API.
--   WebSocket events.
--   Python SDK.
--   Node.js SDK.
--   Docker deployment.
--   Basic monitoring.
+An ADR should include context, decision, alternatives, consequences, and status. A proposed decision must not be presented as accepted until the project maintainers approve it.
 
-Not included initially:
+---
 
--   Kubernetes orchestration.
--   Advanced plugin marketplace.
--   Complex distributed scheduling.
--   Every commercial music integration.
+## 23. First Engineering Milestone
 
-The first release should establish a reliable, measurable foundation
-before expanding the platform.
+### NEXORA Core 0.1 — Standalone Rust Audio Engine
 
-------------------------------------------------------------------------
+The first milestone validates the audio data path before introducing distributed infrastructure.
 
-## 21. Architecture Decision Records
+#### Initial checklist
 
-These are the initial architecture decisions recommended for the
-project.
+- [ ] Cargo workspace and build configuration.
+- [ ] Core error and configuration types.
+- [ ] Audio format abstraction.
+- [ ] Audio frame and buffer abstraction.
+- [ ] Source adapter interface.
+- [ ] Local media input.
+- [ ] Decoder integration.
+- [ ] PCM processing pipeline.
+- [ ] Bounded buffering and cancellation.
+- [ ] Resampling.
+- [ ] Output encoder integration.
+- [ ] Unit and integration tests.
+- [ ] Reproducible benchmark suite.
+- [ ] Basic operational documentation.
 
-  ADR       Decision
-  --------- -------------------------------------------
-  ADR-001   Rust as primary implementation language
-  ADR-002   Distributed microservices
-  ADR-003   Separate control plane and data plane
-  ADR-004   Tokio asynchronous runtime
-  ADR-005   gRPC for internal RPC
-  ADR-006   REST + WebSocket for public APIs
-  ADR-007   Native audio pipeline
-  ADR-008   Independent source adapter interfaces
-  ADR-009   WASM sandbox for third-party plugins
-  ADR-010   PostgreSQL for persistent metadata
-  ADR-011   NATS for service events
-  ADR-012   Docker-first deployment
-  ADR-013   OpenAPI and protobuf as API contracts
-  ADR-014   Benchmark-driven performance optimization
+**Success condition:** The engine accepts documented, supported input, processes it, and produces verified output while reporting reproducible CPU, memory, and latency measurements.
 
-------------------------------------------------------------------------
+---
 
-## 22. First Engineering Milestone
+## 24. AI Agent Engineering Guide
 
-### NEXORA Core 0.1 --- Rust Audio Engine
+AI coding agents must treat the repository as an engineering project, not as permission to rewrite the architecture without review.
 
-The first milestone should focus on the audio data plane and validate
-its performance before expanding into the complete microservices
-ecosystem.
+Before changing code, an agent should:
 
-#### Initial Checklist
+1. Read the repository instructions and relevant documentation.
+2. Inspect the actual directory structure, Cargo workspace, and existing implementation.
+3. Check Git status and avoid overwriting unrelated user changes.
+4. Identify what is implemented, partially implemented, and only planned.
+5. Report architectural conflicts and missing prerequisites.
+6. Propose a small, testable implementation plan.
+7. Wait for approval before major architectural changes or destructive operations.
+8. Implement incrementally and run the relevant tests.
+9. Update documentation to match actual behavior.
+10. Never invent successful test results, benchmarks, integrations, or completed features.
 
--   [ ] Cargo workspace.
--   [ ] Audio frame abstraction.
--   [ ] Source adapter trait.
--   [ ] Local media input.
--   [ ] Audio decoder.
--   [ ] PCM processing pipeline.
--   [ ] Resampling.
--   [ ] Opus encoder.
--   [ ] Bounded buffering.
--   [ ] Benchmark suite.
--   [ ] Integration tests.
+**Master instructions:** [MASTER_AI_INSTRUCTIONS.md](docs/MASTER_AI_INSTRUCTIONS.md)
 
-**Success condition:** A working Rust engine that accepts supported
-audio input, processes it, and produces stable output with measurable
-CPU, memory, and latency results.
+The linked file must exist at that exact repository path. If it is stored elsewhere, update this link to match its actual location.
 
-------------------------------------------------------------------------
+Compatible coding environments may include Claude Code, OpenAI Codex, OpenCode, Cursor, and other tools that can read repository instructions. Compatibility depends on each tool's instruction-file conventions and configuration.
 
-## 23. Engineering References
+---
 
-These are starting points for implementation and technical validation.
+## 25. References
 
-1.  [Tokio --- Asynchronous Rust Runtime](https://tokio.rs/)
-2.  [Symphonia --- Rust Audio
-    Decoding](https://github.com/pdeljanov/Symphonia)
-3.  [Rubato --- Audio Resampling](https://github.com/HEnquist/rubato)
-4.  [OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/)
-5.  [WebAssembly](https://webassembly.org/)
-6.  [WASI](https://wasi.dev/)
-7.  [Axum](https://github.com/tokio-rs/axum)
-8.  [Tonic](https://github.com/hyperium/tonic)
-9.  [NATS](https://nats.io/)
+These are primary project references for evaluating the proposed stack. Check current documentation and compatibility before selecting versions.
+
+1. [Tokio — Asynchronous Rust Runtime](https://tokio.rs/)
+2. [Symphonia — Rust Media Framework](https://github.com/pdeljanov/Symphonia)
+3. [Rubato — Audio Resampling](https://github.com/HEnquist/rubato)
+4. [Axum — HTTP Framework](https://github.com/tokio-rs/axum)
+5. [Tonic — gRPC for Rust](https://github.com/hyperium/tonic)
+6. [OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/)
+7. [NATS](https://nats.io/)
+8. [WebAssembly](https://webassembly.org/)
+9. [WASI](https://wasi.dev/)
 10. [Wasmtime](https://wasmtime.dev/)
 
+---
 
-------------------------------------------------------------------------
+## 26. Project Philosophy
 
-## AI Agent Engineering Guide
+### Mission
 
-NEXORA supports AI-assisted development through a structured engineering instruction system.
+Build a universal, high-performance audio foundation that lets developers integrate audio processing and streaming into their applications without being locked into one programming language or application framework.
 
-Before modifying the repository, AI coding agents should read and follow the official engineering instructions.
+### Engineering values
 
-**Documentation:**
+- Rust-first implementation.
+- Measured resource efficiency.
+- Audio correctness and fidelity.
+- Open, documented integration contracts.
+- Modular and maintainable design.
+- Deliberate distributed scalability.
+- Provider-independent core.
+- Security and compliance by design.
+- Honest project status and reproducible results.
 
-- [Master AI Engineering Instructions](docs/MASTER_AI_INSTRUCTIONS.md)
-- [Architecture Documentation](docs/ARCHITECTURE.md)
-- [Development Guide](docs/DEVELOPMENT.md)
-- [API Documentation](docs/API.md)
-- [Project Development Status](PROJECT_STATUS.md)
+> **NEXORA — One Engine. Every Application.**
 
-**Supported coding agents:**
-
-Claude Code · OpenCode · OpenAI Codex · Cursor · Other compatible AI coding agents.
-
-> AI agents must analyze the repository and prepare an implementation plan before making major changes.
-
-
-
-------------------------------------------------------------------------
-
-## 24. Project Philosophy
-
-### NEXORA --- Universal Audio Infrastructure
-
-**Mission**
-
-Build a universal, high-performance audio infrastructure that allows
-developers to integrate audio processing and streaming capabilities into
-applications without being locked into a particular programming language
-or application framework.
-
-### Engineering Philosophy
-
--   Rust-first engineering.
--   Low resource consumption.
--   High audio fidelity.
--   Open integration standards.
--   Extensible architecture.
--   Distributed scalability.
--   Provider-independent core.
--   Security by design.
-
-> **NEXORA --- One Engine. Every Application.**
-
-------------------------------------------------------------------------
+---
 
 ## Project Status
 
-NEXORA is currently defined by this proposed architecture and
-engineering specification. Implementation status, supported codecs,
-integrations, performance results, and production readiness must be
-updated as they are actually delivered and tested.
+NEXORA's architecture and roadmap are proposals until implemented and verified. Update this section as the repository evolves.
 
-**Important:** Performance targets in this document are initial
-engineering goals, not verified benchmark results. Proposed SDK package
-names, service names, and configuration values are not claims of
-existing published releases.
+| Area | Current status in this specification |
+|---|---|
+| Product vision | Defined |
+| Target architecture | Proposed |
+| Rust technology stack | Proposed |
+| Audio engine | Not verified by this document |
+| Source adapters | Not verified by this document |
+| REST / WebSocket API | Proposed |
+| SDKs | Proposed |
+| Distributed cluster | Future phase |
+| Plugin runtime | Future phase |
+| Performance benchmarks | Not supplied by this document |
+| Production readiness | Not established |
+
+**Status policy:** Only mark a feature as implemented when the repository contains the implementation and relevant tests. Only publish performance numbers with benchmark methodology, hardware details, software versions, and reproducible results.
