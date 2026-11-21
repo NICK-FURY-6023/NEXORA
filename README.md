@@ -60,7 +60,7 @@ software.
 -   [22. First Engineering Milestone](#22-first-engineering-milestone)
 -   [23. Engineering References](#23-engineering-references)
 -   [24. Project Philosophy](#24-project-philosophy)
-
+-   [AI Agent Engineering Guide](#ai-agent-engineering-guide)
 ------------------------------------------------------------------------
 
 ## 1. Executive Summary
@@ -1433,6 +1433,31 @@ These are starting points for implementation and technical validation.
 8.  [Tonic](https://github.com/hyperium/tonic)
 9.  [NATS](https://nats.io/)
 10. [Wasmtime](https://wasmtime.dev/)
+
+
+------------------------------------------------------------------------
+
+## AI Agent Engineering Guide
+
+NEXORA supports AI-assisted development through a structured engineering instruction system.
+
+Before modifying the repository, AI coding agents should read and follow the official engineering instructions.
+
+**Documentation:**
+
+- [Master AI Engineering Instructions](docs/MASTER_AI_INSTRUCTIONS.md)
+- [Architecture Documentation](docs/ARCHITECTURE.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [API Documentation](docs/API.md)
+- [Project Development Status](PROJECT_STATUS.md)
+
+**Supported coding agents:**
+
+Claude Code · OpenCode · OpenAI Codex · Cursor · Other compatible AI coding agents.
+
+> AI agents must analyze the repository and prepare an implementation plan before making major changes.
+
+
 
 ------------------------------------------------------------------------
 
