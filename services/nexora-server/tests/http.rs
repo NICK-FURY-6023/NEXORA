@@ -122,6 +122,24 @@ async fn runtime_metrics_reflect_real_requests() {
 }
 
 #[tokio::test]
+async fn lavalink_stats_uses_v4_cpu_field_names() {
+    let response = test_app()
+        .oneshot(
+            Request::builder()
+                .uri("/v4/stats")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(value["cpu"]["lavalinkLoad"].is_number());
+}
+
+#[tokio::test]
 async fn lavalink_stats_endpoint() {
     let response = test_app()
         .oneshot(
@@ -138,4 +156,30 @@ async fn lavalink_stats_endpoint() {
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(value["op"], "stats");
+}
+
+#[tokio::test]
+async fn lavalink_loadtracks_uses_v4_load_types() {
+    let response = test_app()
+        .oneshot(
+            Request::builder()
+                .uri("/v4/loadtracks?identifier=definitely-not-a-track")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let load_type = value["loadType"].as_str().unwrap();
+    assert!(
+        matches!(
+            load_type,
+            "track" | "playlist" | "search" | "empty" | "error"
+        ),
+        "unexpected loadType: {load_type}"
+    );
 }

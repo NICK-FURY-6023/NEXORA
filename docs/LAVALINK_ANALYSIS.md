@@ -94,6 +94,14 @@ observable behavior; change one unit at a time and prove parity with contract
 tests before touching protocol-facing code. Re-run REA inspection when a new
 Lavalink release changes the shipped artifact.
 
-Next unit: contract tests comparing NEXORA `/v4/info`, `/v4/loadtracks`, and
+First parity unit (done): `/v4/loadtracks` now returns v4 lowercase
+`loadType` values (`empty` for no results, `search` for results) instead of the
+old non-standard `SEARCH_RESULT`, and `/v4/stats` uses `cpu.lavalinkLoad`
+instead of `cpu.processLoad`. Two RED-GREEN contract tests were added.
+
+Known remaining gap: the `data` array still contains NEXORA source metadata,
+not the full Lavalink `encoded`/`info` track shape. That is the next unit.
+
+Next unit: contract tests comparing `/v4/info`, `/v4/loadtracks`, and
 player response shapes against the documented v4 shapes, followed by the
 Discord bot proof of concept.

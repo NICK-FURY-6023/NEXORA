@@ -537,7 +537,7 @@ async fn lavalink_stats(
         "playingPlayers": state.metrics.active_sessions(),
         "uptime": 0,
         "memory": { "free": 0, "used": 0, "allocated": 0, "reservable": 0 },
-        "cpu": { "cores": 0, "systemLoad": 0.0, "processLoad": 0.0 },
+        "cpu": { "cores": 0, "systemLoad": 0.0, "lavalinkLoad": 0.0 },
         "frameStats": null
     })))
 }
@@ -573,9 +573,10 @@ async fn lavalink_loadtracks(
         .await?;
     results = rank_candidates(results, &query.identifier, None);
     results.truncate(25);
-    Ok(Json(
-        json!({ "loadType": "SEARCH_RESULT", "data": results }),
-    ))
+    if results.is_empty() {
+        return Ok(Json(json!({ "loadType": "empty", "data": null })));
+    }
+    Ok(Json(json!({ "loadType": "search", "data": results })))
 }
 
 async fn lavalink_create_session(
