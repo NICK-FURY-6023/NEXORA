@@ -4,7 +4,7 @@ The following decisions were approved in `README.md` and are tracked here as the
 
 | ADR | Decision | Status |
 |---|---|---|
-| ADR-001 | Rust as primary implementation language | Accepted |
+| ADR-001 | Playback pipeline architecture | Accepted |
 | ADR-002 | Distributed microservices | Accepted |
 | ADR-003 | Separate control plane and data plane | Accepted |
 | ADR-004 | Tokio asynchronous runtime | Accepted |
@@ -18,5 +18,12 @@ The following decisions were approved in `README.md` and are tracked here as the
 | ADR-012 | Docker-first deployment | Accepted (later phase) |
 | ADR-013 | OpenAPI and protobuf as API contracts | Accepted (Phase 4+) |
 | ADR-014 | Benchmark-driven performance optimization | Accepted |
+| ADR-015 | From-scratch Rust core, no JVM dependency | Accepted |
+| ADR-016 | Native `/api/v1` plus `/v4` compatibility surface | Accepted |
+| ADR-017 | In-process session state | Accepted |
+| ADR-018 | gRPC internal session service | Accepted |
+| ADR-019 | Pure-Rust Opus encoding | Accepted |
+| ADR-020 | Bounded audio queues | Accepted |
+| ADR-021 | Repository documentation layout | Accepted |
 
-Phase 1 note: only ADR-001, ADR-003, ADR-004, and ADR-014 are exercised by code so far. The others remain accepted architecture targets until their implementation phases.
+See [docs/README.md](../README.md) for the reader-facing navigation map.

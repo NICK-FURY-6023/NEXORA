@@ -25,6 +25,8 @@ NEXORA is intended for Discord and Telegram bots, web applications, desktop and 
 
 **Project status:** Phases 1-4 are implemented; Phase 5-7 foundations (SDKs, deployment, cluster registry, plugin contract) are in place. Full Lavalink client conformance, a WASM plugin runtime, durable sessions, and commercial source adapters remain planned.
 
+**Start here:** the [documentation map](docs/README.md) routes users, operators, contributors, and agents to the authoritative doc for each question. The sections below remain the long-form product and architecture reference.
+
 ---
 
 ## Table of Contents
@@ -1047,50 +1049,33 @@ This is a target structure. Create directories when the corresponding implementa
 
 ```text
 NEXORA/
-├── crates/
-│   ├── nexora-core/
-│   ├── nexora-common/
-│   ├── nexora-audio-types/
-│   ├── nexora-audio-buffer/
-│   ├── nexora-audio-codec/
-│   ├── nexora-dsp/
-│   ├── nexora-source-api/
-│   ├── nexora-resolver/
-│   ├── nexora-session/
-│   ├── nexora-protocol/
-│   ├── nexora-storage/
-│   └── nexora-telemetry/
-├── apps/
-│   ├── nexora-server/
-│   └── nexora-worker/          # Add when distributed workers exist
-├── sdks/
-│   ├── python/
-│   └── nodejs/
-├── plugins/
-│   ├── local-media/
-│   └── public-radio/
-├── protocols/
-│   ├── openapi/
-│   ├── protobuf/
-│   └── events/
-├── infrastructure/
-│   ├── docker/
-│   ├── compose/
-│   └── monitoring/
-├── examples/
-│   ├── python-client/
-│   ├── nodejs-client/
-│   └── web-client/
-├── benchmarks/
-├── fuzz/
-├── tests/
-├── docs/
-│   └── MASTER_AI_INSTRUCTIONS.md
-├── Cargo.toml
-├── Cargo.lock
-├── rust-toolchain.toml
-├── LICENSE
-├── CONTRIBUTING.md
+├── Cargo.toml / Cargo.lock       # Rust workspace, pinned dependencies
+├── crates/                       # Reusable Rust libraries
+│   ├── nexora-error              # shared error types
+│   ├── nexora-common             # shared foundation
+│   ├── nexora-audio-types        # audio frame/format abstractions
+│   ├── nexora-audio-decode       # demux/decode (Symphonia)
+│   ├── nexora-audio-codec        # encode/packetize (Opus)
+│   ├── nexora-audio-pipeline     # PCM processing pipeline
+│   ├── nexora-source-api         # AudioSource, auth, track contracts
+│   ├── nexora-source-framework   # adapter registry, ranking, local/radio/HTTP
+│   ├── nexora-session            # sessions, queue, playback control, Opus fanout
+│   ├── nexora-grpc               # tonic adapter over SessionManager
+│   ├── nexora-cluster            # cluster primitives
+│   ├── nexora-plugin-api         # versioned plugin interfaces
+│   ├── nexora-protocol           # versioned DTOs and event envelope
+│   ├── nexora-config             # shared configuration
+│   ├── nexora-telemetry          # tracing/metrics
+│   └── nexora-service            # service runtime
+├── services/                     # Deployable binaries
+│   ├── nexora-server             # REST, event WS, audio WS, gRPC listener
+│   ├── nexora-gateway            # skeleton control-plane service
+│   └── nexora-audio-engine       # standalone batch transcode CLI
+├── sdks/                         # Python, Node.js, Java, Go, C#, PHP clients
+├── deploy/                       # Docker Compose, env example, monitoring
+├── examples/                     # Runnable proof-of-concept clients
+├── assets/                       # Images and infographics
+├── docs/                         # This documentation tree
 └── README.md
 ```
 
