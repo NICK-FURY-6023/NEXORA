@@ -12,3 +12,4 @@ nexora-error = { path = "../nexora-error" }
 nexora-common = { path = "../nexora-common" }
 nexora-protocol = { path = "../nexora-protocol" }
 nexora-audio-types = { path = "../nexora-audio-types" }
+nexora-audio-pipeline = { path = "../nexora-audio-pipeline" }

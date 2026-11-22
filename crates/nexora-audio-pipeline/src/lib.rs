@@ -85,18 +85,39 @@ pub struct PipelineReport {
     pub clipped: bool,
 }
 
-/// Decode, resample, remap channels and write a standalone audio output file.
-pub fn process_file(
-    input: &Path,
-    output: &Path,
-    target_rate: u32,
-    channels: u16,
-    codec: OutputCodec,
-) -> NexoraResult<PipelineReport> {
+/// One 20 ms Opus packet ready for ordered delivery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpusFrame {
+    pub sequence: u64,
+    pub timestamp_ms: u64,
+    pub duration_ms: u16,
+    pub payload: Vec<u8>,
+}
+
+impl OpusFrame {
+    /// Build a frame with the standard 20 ms Opus cadence.
+    pub fn packet(sequence: u64, payload: Vec<u8>) -> Self {
+        Self {
+            sequence,
+            timestamp_ms: sequence.saturating_mul(20),
+            duration_ms: 20,
+            payload,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PreparedPcm {
+    samples: Vec<f32>,
+    input_rate: u32,
+    input_frames: usize,
+    output_frames: usize,
+    clipped: bool,
+}
+
+fn prepare_pcm(input: &Path, target_rate: u32, channels: u16) -> NexoraResult<PreparedPcm> {
     if channels == 0 {
-        return Err(NexoraError::audio(
-            "output channels must be greater than zero",
-        ));
+        return Err(NexoraError::audio("output channels must be greater than zero"));
     }
     let decoded = decode_file(input)?;
     let input_channels = decoded.format.channels as usize;
@@ -108,26 +129,64 @@ pub fn process_file(
         target_rate,
     )?;
     let converted = remap_channels(&resampled, input_channels, channels as usize);
-    let clipped = detect_clipping(&converted);
+    let output_frames = converted.len() / channels as usize;
+    Ok(PreparedPcm {
+        clipped: detect_clipping(&converted),
+        samples: converted,
+        input_rate: decoded.format.sample_rate,
+        input_frames,
+        output_frames,
+    })
+}
+
+/// Decode and encode a local file into 20 ms Opus packets with PCM gain.
+///
+/// Volume is applied before encoding so changes never mutate an Opus packet.
+/// Values above 100 may clip and are clamped by the encoder input path.
+pub fn encode_file_packets(
+    input: &Path,
+    target_rate: u32,
+    channels: u16,
+    volume: u8,
+) -> NexoraResult<Vec<Vec<u8>>> {
+    let mut prepared = prepare_pcm(input, target_rate, channels)?;
+    if volume != 100 {
+        let gain = (volume.min(150) as f32) / 100.0;
+        for sample in &mut prepared.samples {
+            *sample = (*sample * gain).clamp(-1.0, 1.0);
+        }
+    }
+    encode_opus_packets(target_rate, channels, &prepared.samples)
+}
+
+/// Decode, resample, remap channels and write a standalone audio output file.
+pub fn process_file(
+    input: &Path,
+    output: &Path,
+    target_rate: u32,
+    channels: u16,
+    codec: OutputCodec,
+) -> NexoraResult<PipelineReport> {
+    let prepared = prepare_pcm(input, target_rate, channels)?;
 
     let mut packets = 0;
     match codec {
-        OutputCodec::Pcm => write_wav(output, target_rate, channels, &converted)?,
+        OutputCodec::Pcm => write_wav(output, target_rate, channels, &prepared.samples)?,
         OutputCodec::Opus => {
-            let encoded = encode_opus_packets(target_rate, channels, &converted)?;
+            let encoded = encode_opus_packets(target_rate, channels, &prepared.samples)?;
             packets = encoded.len();
             write_ogg_opus(output, target_rate, channels, &encoded)?;
         }
     }
 
     Ok(PipelineReport {
-        input_frames,
-        output_frames: converted.len() / channels as usize,
-        input_rate: decoded.format.sample_rate,
+        input_frames: prepared.input_frames,
+        output_frames: prepared.output_frames,
+        input_rate: prepared.input_rate,
         output_rate: target_rate,
         channels,
         packets,
-        clipped,
+        clipped: prepared.clipped,
     })
 }
 

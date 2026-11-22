@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -79,6 +80,7 @@ async fn main() -> NexoraResult<()> {
         sources: Arc::new(sources),
         password,
         metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
 
     let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)

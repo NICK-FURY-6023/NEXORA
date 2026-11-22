@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -12,17 +14,18 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use nexora_audio_pipeline::{OutputCodec, process_file};
+use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process_file};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
-use nexora_error::NexoraError;
+use nexora_error::{NexoraError, NexoraResult};
 use nexora_protocol::{CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest};
-use nexora_session::SessionManager;
+use nexora_session::{PlaybackSignal, SessionManager};
 use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackMetadata, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{broadcast, watch};
 
 #[derive(Debug, Default)]
 pub struct RuntimeMetrics {
@@ -73,7 +76,11 @@ pub struct AppState {
     pub sources: Arc<SourceRegistry>,
     pub password: Option<String>,
     pub metrics: Arc<RuntimeMetrics>,
+    pub audio: AudioChannels,
 }
+
+pub type AudioChannels =
+    Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>>;
 
 #[derive(Debug)]
 pub struct ApiError {
@@ -232,6 +239,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/{id}/stream", get(stream_audio))
         .route("/api/v1/metrics", get(metrics))
         .route("/ws/v1/sessions/{id}", get(websocket_events))
+        .route("/ws/v1/sessions/{id}/audio", get(websocket_audio))
         .route("/v4/info", get(lavalink_info))
         .route("/v4/stats", get(lavalink_stats))
         .route("/v4/routeplanner/status", get(lavalink_routeplanner_status))
@@ -330,8 +338,130 @@ async fn play(
 ) -> Result<Json<Value>, ApiError> {
     authorize(&headers, &state)?;
     let session_id = parse_session_id(&id)?;
+    let track_id = request.track_id.clone();
+    let resolved = state
+        .sources
+        .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
+        .await?;
+    let ResolvedSource::LocalFile { path } = resolved else {
+        return Err(ApiError::unsupported());
+    };
+    let format = state.sessions.output_format(&session_id).await?;
+    let volume = state.sessions.get(&session_id).await?.volume;
+
+    let (audio_tx, _) = broadcast::channel(64);
+    state
+        .sessions
+        .audio_registry()
+        .register(&session_id, audio_tx.clone())
+        .await;
+    let (control_tx, control_rx) = watch::channel(PlaybackSignal::Resume);
+    state
+        .sessions
+        .attach_playback(&session_id, control_tx, audio_tx)
+        .await?;
     state.sessions.play(&session_id, request).await?;
+
+    let sessions = Arc::clone(&state.sessions);
+    let metrics = Arc::clone(&state.metrics);
+    tokio::spawn(run_playback(
+        session_id,
+        path,
+        format,
+        volume,
+        control_rx,
+        sessions,
+        metrics,
+    ));
     Ok(Json(json!({ "status": "playing" })))
+}
+
+async fn prepare_packets(
+    path: &FsPath,
+    format: &AudioFormat,
+    volume: u8,
+) -> NexoraResult<Vec<Vec<u8>>> {
+    let path = path.to_path_buf();
+    let sample_rate = format.sample_rate;
+    let channels = format.channels;
+    tokio::task::spawn_blocking(move || {
+        encode_file_packets(&path, sample_rate, channels, volume)
+    })
+    .await
+    .map_err(|_| NexoraError::service("playback task failed"))?
+}
+
+async fn run_playback(
+    session_id: SessionId,
+    path: PathBuf,
+    format: AudioFormat,
+    mut volume: u8,
+    mut control: watch::Receiver<PlaybackSignal>,
+    sessions: Arc<SessionManager>,
+    metrics: Arc<RuntimeMetrics>,
+) {
+    let mut packets = match prepare_packets(&path, &format, volume).await {
+        Ok(packets) => packets,
+        Err(_) => {
+            let _ = sessions.fail(&session_id, "source decode failed").await;
+            sessions.detach_playback(&session_id).await;
+            sessions.audio_registry().deregister(&session_id).await;
+            return;
+        }
+    };
+    let mut index = 0usize;
+    let mut position_ms = 0u64;
+    let mut paused = false;
+    let mut ticker = tokio::time::interval(Duration::from_millis(20));
+
+    loop {
+        tokio::select! {
+            changed = control.changed() => {
+                if changed.is_err() {
+                    break;
+                }
+                let signal = *control.borrow_and_update();
+                match signal {
+                    PlaybackSignal::Pause => paused = true,
+                    PlaybackSignal::Resume => paused = false,
+                    PlaybackSignal::Stop => break,
+                    PlaybackSignal::Seek(position) => {
+                        position_ms = position;
+                        index = (position / 20) as usize;
+                        let _ = sessions.update_position(&session_id, position_ms).await;
+                    }
+                    PlaybackSignal::SetVolume(next) => {
+                        if next == volume {
+                            continue;
+                        }
+                        volume = next;
+                        if let Ok(reencoded) = prepare_packets(&path, &format, volume).await {
+                            packets = reencoded;
+                            index = (position_ms / 20) as usize;
+                        }
+                    }
+                }
+            }
+            _ = ticker.tick() => {
+                if paused {
+                    continue;
+                }
+                let Some(payload) = packets.get(index).cloned() else {
+                    let _ = sessions.finish(&session_id).await;
+                    break;
+                };
+                let frame = OpusFrame::packet(index as u64, payload.clone());
+                let _ = sessions.audio_registry().send_frame(&session_id, frame).await;
+                metrics.streamed(payload.len());
+                index += 1;
+                position_ms += 20;
+                let _ = sessions.update_position(&session_id, position_ms).await;
+            }
+        }
+    }
+
+    sessions.detach_playback(&session_id).await;
+    sessions.audio_registry().deregister(&session_id).await;
 }
 
 async fn pause(
@@ -520,6 +650,44 @@ async fn forward_events(
                     continue;
                 };
                 if socket.send(Message::Text(text.into())).await.is_err() {
+                    break;
+                }
+            }
+            Err(RecvError::Lagged(_)) => continue,
+            Err(RecvError::Closed) => break,
+        }
+    }
+}
+
+async fn websocket_audio(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    if let Err(error) = authorize(&headers, &state) {
+        return error.into_response();
+    }
+    let session_id = match parse_session_id(&id) {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    let receiver = state.sessions.audio_registry().subscribe(&session_id).await;
+    let Some(receiver) = receiver else {
+        return ApiError::not_found().into_response();
+    };
+    upgrade.on_upgrade(move |socket| forward_audio(socket, receiver))
+}
+
+async fn forward_audio(mut socket: WebSocket, mut receiver: broadcast::Receiver<OpusFrame>) {
+    loop {
+        match receiver.recv().await {
+            Ok(frame) => {
+                if socket
+                    .send(Message::Binary(frame.payload.into()))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }

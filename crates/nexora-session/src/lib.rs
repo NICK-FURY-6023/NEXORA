@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use nexora_audio_pipeline::OpusFrame;
 use nexora_audio_types::AudioFormat;
 use nexora_common::{ApiVersion, SessionId, TimestampMs, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
@@ -9,7 +10,65 @@ use nexora_protocol::{
     SessionState,
 };
 use serde_json::json;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock, watch};
+
+/// Signals sent from session state to the single active playback task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackSignal {
+    Pause,
+    Resume,
+    Stop,
+    Seek(u64),
+    SetVolume(u8),
+}
+
+/// Per-session broadcast channel for Opus frames produced by the pacing task.
+#[derive(Debug, Default)]
+pub struct PlaybackRegistry {
+    sessions: RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>,
+}
+
+impl PlaybackRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a broadcast sender for a session. Returns `true` when this is
+    /// the first sender registered (the pacing task should start producing).
+    pub async fn register(&self, session_id: &SessionId, sender: broadcast::Sender<OpusFrame>) -> bool {
+        let mut sessions = self.sessions.write().await;
+        sessions.insert(session_id.clone(), sender).is_none()
+    }
+
+    /// Remove the broadcast sender for a session (playback ended or session
+    /// stopped).
+    pub async fn deregister(&self, session_id: &SessionId) {
+        let mut sessions = self.sessions.write().await;
+        sessions.remove(session_id);
+    }
+
+    /// Send one Opus frame to all subscribers of a session's audio channel.
+    pub async fn send_frame(&self, session_id: &SessionId, frame: OpusFrame) -> bool {
+        let sessions = self.sessions.read().await;
+        match sessions.get(session_id) {
+            Some(sender) => sender.send(frame).is_ok(),
+            None => false,
+        }
+    }
+
+    /// Returns `true` when a session currently has an audio channel registered.
+    pub async fn has_channel(&self, session_id: &SessionId) -> bool {
+        let sessions = self.sessions.read().await;
+        sessions.contains_key(session_id)
+    }
+
+    /// Subscribe to Opus frames for a session. Returns `None` when no audio
+    /// channel is registered for the session.
+    pub async fn subscribe(&self, session_id: &SessionId) -> Option<broadcast::Receiver<OpusFrame>> {
+        let sessions = self.sessions.read().await;
+        sessions.get(session_id).map(|sender| sender.subscribe())
+    }
+}
 
 #[derive(Debug, Clone)]
 struct SessionRecord {
@@ -19,11 +78,14 @@ struct SessionRecord {
     volume: u8,
     queue: Vec<TrackId>,
     output: AudioFormat,
+    playback: Option<watch::Sender<PlaybackSignal>>,
+    audio_out: Option<broadcast::Sender<OpusFrame>>,
 }
 
 #[derive(Debug)]
 pub struct SessionManager {
     sessions: RwLock<HashMap<SessionId, SessionRecord>>,
+    audio: PlaybackRegistry,
     events: broadcast::Sender<EventEnvelope>,
     counter: AtomicU64,
 }
@@ -39,6 +101,7 @@ impl SessionManager {
         let (events, _receiver) = broadcast::channel(256);
         Self {
             sessions: RwLock::new(HashMap::new()),
+            audio: PlaybackRegistry::new(),
             events,
             counter: AtomicU64::new(0),
         }
@@ -46,6 +109,116 @@ impl SessionManager {
 
     pub fn subscribe(&self) -> broadcast::Receiver<EventEnvelope> {
         self.events.subscribe()
+    }
+
+    /// Returns the per-session Opus frame broadcast registry.
+    pub fn audio_registry(&self) -> &PlaybackRegistry {
+        &self.audio
+    }
+
+    /// Attach the one playback task allowed to own this session.
+    pub async fn attach_playback(
+        &self,
+        session_id: &SessionId,
+        sender: watch::Sender<PlaybackSignal>,
+        audio_out: broadcast::Sender<OpusFrame>,
+    ) -> NexoraResult<()> {
+        let mut sessions = self.sessions.write().await;
+        let record = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| NexoraError::service("session not found"))?;
+        record.playback = Some(sender);
+        record.audio_out = Some(audio_out);
+        Ok(())
+    }
+
+    /// Remove a playback task that has ended or been replaced.
+    pub async fn detach_playback(&self, session_id: &SessionId) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(record) = sessions.get_mut(session_id) {
+            record.playback = None;
+            record.audio_out = None;
+        }
+    }
+
+    fn signal_playback(&self, session_id: &SessionId, signal: PlaybackSignal) {
+        let sessions = self.sessions.try_read();
+        if let Ok(sessions) = sessions
+            && let Some(record) = sessions.get(session_id)
+            && let Some(sender) = &record.playback
+        {
+            let _ = sender.send(signal);
+        }
+    }
+
+    /// Advance the authoritative position from the playback task.
+    pub async fn update_position(
+        &self,
+        session_id: &SessionId,
+        position_ms: u64,
+    ) -> NexoraResult<()> {
+        let mut sessions = self.sessions.write().await;
+        let record = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| NexoraError::service("session not found"))?;
+        record.position_ms = position_ms;
+        Ok(())
+    }
+
+    /// Mark the current track as finished and clear it from the session.
+    pub async fn finish(&self, session_id: &SessionId) -> NexoraResult<()> {
+        let queued = {
+            let mut sessions = self.sessions.write().await;
+            let record = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| NexoraError::service("session not found"))?;
+            record.status = "stopped".to_string();
+            record.current_track = None;
+            record.position_ms = 0;
+            record.playback = None;
+            if record.queue.is_empty() {
+                None
+            } else {
+                Some(record.queue.remove(0))
+            }
+        };
+        self.emit(
+            session_id,
+            SessionEventType::TrackEnded,
+            json!({ "reason": "finished" }),
+        );
+        // Auto-advance to the next queued track, if any.
+        if let Some(next) = queued {
+            let _ = self.play(
+                session_id,
+                PlayRequest {
+                    track_id: next,
+                    start_position_ms: 0,
+                },
+            )
+            .await;
+        }
+        Ok(())
+    }
+
+    /// Mark the current track as failed and clear it from the session.
+    pub async fn fail(&self, session_id: &SessionId, reason: &str) -> NexoraResult<()> {
+        {
+            let mut sessions = self.sessions.write().await;
+            let record = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| NexoraError::service("session not found"))?;
+            record.status = "stopped".to_string();
+            record.current_track = None;
+            record.position_ms = 0;
+            record.playback = None;
+        }
+        self.emit(
+            session_id,
+            SessionEventType::TrackFailed,
+            json!({ "reason": reason }),
+        );
+        Ok(())
     }
 
     pub async fn create(&self, output: AudioFormat) -> NexoraResult<CreateSessionResponse> {
@@ -58,6 +231,8 @@ impl SessionManager {
             volume: 100,
             queue: Vec::new(),
             output,
+            playback: None,
+            audio_out: None,
         };
         self.sessions
             .write()
@@ -112,12 +287,16 @@ impl SessionManager {
 
     pub async fn pause(&self, session_id: &SessionId) -> NexoraResult<()> {
         self.set_status(session_id, "paused", SessionEventType::PlaybackPaused)
-            .await
+            .await?;
+        self.signal_playback(session_id, PlaybackSignal::Pause);
+        Ok(())
     }
 
     pub async fn resume(&self, session_id: &SessionId) -> NexoraResult<()> {
         self.set_status(session_id, "playing", SessionEventType::PlaybackResumed)
-            .await
+            .await?;
+        self.signal_playback(session_id, PlaybackSignal::Resume);
+        Ok(())
     }
 
     async fn set_status(
@@ -147,6 +326,7 @@ impl SessionManager {
             record.current_track = None;
             record.position_ms = 0;
         }
+        self.signal_playback(session_id, PlaybackSignal::Stop);
         self.emit(session_id, SessionEventType::PlaybackStopped, json!({}));
         Ok(())
     }
@@ -159,6 +339,7 @@ impl SessionManager {
                 .ok_or_else(|| NexoraError::service("session not found"))?;
             record.position_ms = position_ms;
         }
+        self.signal_playback(session_id, PlaybackSignal::Seek(position_ms));
         self.emit(
             session_id,
             SessionEventType::TrackPosition,
@@ -178,6 +359,7 @@ impl SessionManager {
                 .ok_or_else(|| NexoraError::service("session not found"))?;
             record.volume = volume;
         }
+        self.signal_playback(session_id, PlaybackSignal::SetVolume(volume));
         self.emit(
             session_id,
             SessionEventType::SessionReady,
@@ -209,6 +391,20 @@ impl SessionManager {
             .get(session_id)
             .ok_or_else(|| NexoraError::service("session not found"))?;
         Ok(record.queue.clone())
+    }
+
+    /// Pop the next queued track from the front (FIFO), returning `None` if the
+    /// queue is empty.
+    pub async fn pop_next_queued(&self, session_id: &SessionId) -> NexoraResult<Option<TrackId>> {
+        let mut sessions = self.sessions.write().await;
+        let record = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| NexoraError::service("session not found"))?;
+        Ok(if record.queue.is_empty() {
+            None
+        } else {
+            Some(record.queue.remove(0))
+        })
     }
 
     pub async fn current_track(&self, session_id: &SessionId) -> NexoraResult<Option<TrackId>> {

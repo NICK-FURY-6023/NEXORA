@@ -4,17 +4,56 @@ use base64::Engine;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
 use nexora_session::SessionManager;
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
-fn test_app() -> axum::Router {
-    let state = AppState {
+fn test_state() -> AppState {
+    AppState {
         sessions: Arc::new(SessionManager::new()),
         sources: Arc::new(SourceRegistry::new()),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
-    };
-    build_router(state)
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    }
+}
+
+fn test_app() -> axum::Router {
+    build_router(test_state())
+}
+
+fn temp_media_root() -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("nexora-media-{unique}"));
+    fs::create_dir_all(&root).unwrap();
+
+    let frames = 4_410u32;
+    let sample_rate = 44_100u32;
+    let mut wav = Vec::with_capacity(44 + frames as usize * 2);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + frames * 2).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(frames * 2).to_le_bytes());
+    for index in 0..frames {
+        let value = ((index as f32 / frames as f32) * std::f32::consts::TAU).sin() * 0.5;
+        wav.extend_from_slice(&((value * 32_767.0) as i16).to_le_bytes());
+    }
+    fs::write(root.join("tone.wav"), wav).unwrap();
+    root
 }
 
 #[tokio::test]
@@ -33,7 +72,19 @@ async fn health_endpoint_is_available() {
 
 #[tokio::test]
 async fn nexora_session_create_and_play_contract() {
-    let app = test_app();
+    let root = temp_media_root();
+    let mut sources = SourceRegistry::new();
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let state = AppState {
+        sessions: Arc::new(SessionManager::new()),
+        sources: Arc::new(sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    };
+    let app = build_router(state);
     let create = app
         .clone()
         .oneshot(
@@ -60,13 +111,14 @@ async fn nexora_session_create_and_play_contract() {
                 .uri(format!("/api/v1/sessions/{session_id}/play"))
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    r#"{"track_id":"track_1","start_position_ms":0}"#,
+                    r#"{"track_id":"tone.wav","start_position_ms":0}"#,
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(play.status(), StatusCode::OK);
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[tokio::test]
@@ -204,6 +256,7 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
     let response = build_router(state)
         .oneshot(
