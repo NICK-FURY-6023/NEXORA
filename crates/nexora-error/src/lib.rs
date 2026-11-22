@@ -198,6 +198,14 @@ impl NexoraError {
         }
     }
 
+    /// Creates a protocol error and attaches a source to it.
+    pub fn protocol_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::protocol_with_source(message, source)
+    }
+
     /// Creates a service error.
     pub fn service(message: impl IntoErrorMessage) -> Self {
         Self::Service {
@@ -215,6 +223,14 @@ impl NexoraError {
             message: message.into_error_message(),
             source: Some(Box::new(source)),
         }
+    }
+
+    /// Creates a service error and attaches a source to it.
+    pub fn service_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::service_with_source(message, source)
     }
 
     /// Creates an audio error.
@@ -236,6 +252,14 @@ impl NexoraError {
         }
     }
 
+    /// Creates an audio error and attaches a source to it.
+    pub fn audio_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::audio_with_source(message, source)
+    }
+
     /// Creates an I/O error.
     pub fn io(message: impl IntoErrorMessage) -> Self {
         Self::Io {
@@ -253,6 +277,14 @@ impl NexoraError {
             message: message.into_error_message(),
             source: Some(Box::new(source)),
         }
+    }
+
+    /// Creates an I/O error and attaches a source to it.
+    pub fn io_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::io_with_source(message, source)
     }
 
     /// Creates an invalid-input error.
@@ -274,6 +306,14 @@ impl NexoraError {
         }
     }
 
+    /// Creates an invalid-input error and attaches a source to it.
+    pub fn invalid_input_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::invalid_input_with_source(message, source)
+    }
+
     /// Creates an internal error.
     pub fn internal(message: impl IntoErrorMessage) -> Self {
         Self::Internal {
@@ -291,6 +331,14 @@ impl NexoraError {
             message: message.into_error_message(),
             source: Some(Box::new(source)),
         }
+    }
+
+    /// Creates an internal error and attaches a source to it.
+    pub fn internal_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::internal_with_source(message, source)
     }
 
     /// Attaches additional static context while preserving the original source
@@ -511,6 +559,24 @@ mod tests {
     }
 
     #[test]
+    fn category_context_helpers_attach_sources() {
+        let errors = [
+            NexoraError::config_with_context("failed", std::io::Error::other("source detail")),
+            NexoraError::protocol_with_context("failed", std::io::Error::other("source detail")),
+            NexoraError::service_with_context("failed", std::io::Error::other("source detail")),
+            NexoraError::audio_with_context("failed", std::io::Error::other("source detail")),
+            NexoraError::io_with_context("failed", std::io::Error::other("source detail")),
+            NexoraError::invalid_input_with_context(
+                "failed",
+                std::io::Error::other("source detail"),
+            ),
+            NexoraError::internal_with_context("failed", std::io::Error::other("source detail")),
+        ];
+
+        assert!(errors.iter().all(|error| error.source().is_some()));
+    }
+
+    #[test]
     fn attached_context_preserves_the_previous_error() {
         let error = NexoraError::invalid_input("input is invalid")
             .with_context("request validation failed");
@@ -572,12 +638,16 @@ mod tests {
 
     #[test]
     fn runtime_context_and_source_details_are_redacted() {
-        let runtime_message = String::from("token=secret-value");
-        let error = NexoraError::internal(runtime_message);
+        let runtime_message = String::from("dynamic-sensitive-value");
+        let owned_error = NexoraError::internal(runtime_message.clone());
+        let borrowed_error = NexoraError::internal(&runtime_message);
 
-        assert!(!error.to_string().contains("secret-value"));
-        assert!(!format!("{error:?}").contains("secret-value"));
-        assert!(error.source().is_none());
+        assert!(!owned_error.to_string().contains("dynamic-sensitive-value"));
+        assert!(!format!("{owned_error:?}").contains("dynamic-sensitive-value"));
+        assert!(owned_error.source().is_none());
+        assert!(!borrowed_error.to_string().contains("dynamic-sensitive-value"));
+        assert!(!format!("{borrowed_error:?}").contains("dynamic-sensitive-value"));
+        assert!(borrowed_error.source().is_none());
     }
 
     #[test]

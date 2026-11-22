@@ -77,6 +77,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.92"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
 name = "atomic"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -603,6 +614,27 @@ version = "0.1.0"
 dependencies = [
  "nexora-common",
  "nexora-error",
+ "tokio",
+]
+
+[[package]]
+name = "nexora-source-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "nexora-common",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "nexora-source-framework"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "nexora-common",
+ "nexora-error",
+ "nexora-source-api",
  "tokio",
 ]
 

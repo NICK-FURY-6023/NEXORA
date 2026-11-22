@@ -404,7 +404,7 @@ mod tests {
             ("NEXORA_SERVER__PORT", "9200"),
         ]);
         let result = NexoraConfig::load_with_env_getter(Some(&path), &|name| {
-            values.get(name).map(|value| (*value).to_owned())
+            values.get(name).cloned()
         });
         let _ = fs::remove_file(&path);
         let config = result.expect("load configuration with environment overrides");
@@ -432,7 +432,7 @@ mod tests {
         ]);
 
         let config = NexoraConfig::load_with_env_getter(None, &|name| {
-            values.get(name).map(|value| (*value).to_owned())
+            values.get(name).cloned()
         })
         .expect("load environment configuration");
 
@@ -449,6 +449,25 @@ mod tests {
         assert_eq!(config.cluster.role, "worker");
         assert!(!config.plugins.enabled);
         assert!(!config.plugins.sandbox);
+    }
+
+    #[test]
+    fn invalid_environment_values_return_an_error_without_panicking() {
+        let result = std::panic::catch_unwind(|| {
+            NexoraConfig::load_with_env_getter(None, &|name| {
+                if name == "NEXORA_SERVER__PORT" {
+                    Some("not-a-port".to_owned())
+                } else {
+                    None
+                }
+            })
+        });
+
+        assert!(result.is_ok(), "configuration loading must not panic");
+        let error = result
+            .expect("load result should be available")
+            .expect_err("invalid environment value should be rejected");
+        assert_eq!(error.code(), ErrorCode::Config);
     }
 
     #[test]

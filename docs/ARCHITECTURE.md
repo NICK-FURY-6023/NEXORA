@@ -23,7 +23,14 @@ services/nexora-gateway  -> Phase 1 skeleton binary
 crates/nexora-audio-decode   -> Symphonia decoder to f32 PCM
 crates/nexora-audio-codec    -> WAV writer, Opus packets, Ogg Opus writer
 crates/nexora-audio-pipeline -> resampling, clipping, bounded queue, channel remap
-services/nexora-audio-engine -> standalone decode -> resample -> encode CLI
+services/nexora-audio-engine -> standalone CLI orchestrating decode -> resample -> encode
+```
+
+### Source framework (Phase 3)
+
+```text
+crates/nexora-source-api       -> AudioSource trait, auth/track/resolution contracts
+crates/nexora-source-framework -> registry, ranking, timeout, cancellation, adapters
 ```
 
 ## Dependency direction
@@ -61,4 +68,4 @@ Audio frames must never be routed through the gateway. Gateway owns commands and
 
 ## Deferred to later phases
 
-Source adapters and SSRF validation (Phase 3), HTTP/WebSocket/gRPC APIs (Phase 4), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).
+HTTP/WebSocket/gRPC APIs and Lavalink-compatible server surface (Phase 4), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).

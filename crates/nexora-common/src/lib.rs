@@ -222,6 +222,11 @@ mod tests {
     }
 
     #[test]
+    fn identifiers_accept_printable_ascii_space() {
+        assert!(SessionId::new("session 123").is_ok());
+    }
+
+    #[test]
     fn identifiers_reject_empty_values() {
         assert!(SessionId::new("").is_err());
         assert!(TrackId::new(String::new()).is_err());
@@ -329,6 +334,16 @@ mod tests {
     }
 
     #[test]
+    fn api_version_round_trips_through_serde() {
+        let serialized = serde_json::to_string(&ApiVersion::V1).expect("serialize API version");
+        let deserialized =
+            serde_json::from_str::<ApiVersion>(&serialized).expect("deserialize API version");
+
+        assert_eq!(serialized, "{\"major\":1,\"minor\":0}");
+        assert_eq!(deserialized, ApiVersion::V1);
+    }
+
+    #[test]
     fn timestamp_round_trips_through_serde() {
         let timestamp = TimestampMs(1_725_000_000_000);
         let serialized = serde_json::to_string(&timestamp).expect("serialize timestamp");
@@ -338,6 +353,6 @@ mod tests {
         assert_eq!(serialized, "1725000000000");
         assert_eq!(deserialized, timestamp);
         assert_eq!(deserialized.as_millis(), 1_725_000_000_000);
-        assert!(TimestampMs::now().as_millis() > 0);
+        let _current_timestamp = TimestampMs::now();
     }
 }

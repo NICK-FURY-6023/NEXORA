@@ -4,6 +4,12 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - Phase 3 Source Framework
+
+- `nexora-source-api` and `nexora-source-framework`.
+- Registry, ranking, timeouts, cancellation, health aggregation, and SSRF-safe URL validation.
+- Local media, public radio, and authorized HTTP stream adapters.
+
 ### Added - Phase 2 Audio Engine
 
 - `nexora-audio-decode`, `nexora-audio-codec`, `nexora-audio-pipeline`, and `nexora-audio-engine`.
@@ -21,7 +27,7 @@ All notable changes to NEXORA are documented here.
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace` (42 tests passed); end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
+- `cargo test --workspace` (57 tests passed); end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
 
 ### Not included
 

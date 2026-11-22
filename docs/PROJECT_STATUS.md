@@ -1,8 +1,17 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 2 - Audio Engine
+## Current milestone: Phase 3 - Source Framework
 
 Status: **implemented and verified** on 2026-11-22.
+
+### Implemented in Phase 3
+
+- `nexora-source-api`: `AudioSource` trait, auth context, track metadata/reference, resolved source, source health, normalized `SourceError`.
+- `nexora-source-framework`: source registry, timeout wrapper, cancellation token, candidate ranking, health aggregation.
+- Adapters: local media (directory-scoped, path-traversal blocked), public radio (configured stations), authorized HTTP stream (scope + URL validation).
+- SSRF-safe URL validation for http(s) targets; private/loopback/link-local/localhost targets are rejected without DNS resolution.
+
+Phase 3 adds 9 tests; the workspace total is now 57 passing tests.
 
 ### Implemented in Phase 2
 
@@ -47,7 +56,7 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Next milestone
 
-Phase 3 - Source Framework, followed by a Lavalink-compatible hosted server surface. Deliverable: extensible, permission-aware source adapters for local media, public radio, and authorized HTTP streams.
+Phase 4 - API Infrastructure. Deliverable: Lavalink-compatible hosted server surface (REST commands, WebSocket events, sessions/players) plus the NEXORA `/api/v1` contract.
 
 ### Status policy
 

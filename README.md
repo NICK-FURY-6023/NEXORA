@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
   <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
-  <img src="https://img.shields.io/badge/Status-Phase%202%20Audio%20Engine-green" alt="Project status">
+  <img src="https://img.shields.io/badge/Status-Phase%203%20Sources-green" alt="Project status">
 </p>
 
 > **One audio foundation. Multiple services. Any application ecosystem.**
@@ -23,7 +23,7 @@ NEXORA is built from scratch as an independent Rust alternative to hosted audio 
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Phase 2 (standalone audio engine) is implemented and verified: local decoding, resampling, PCM/Opus output, a CLI, tests, and a benchmark. The next milestones are the source framework and a Lavalink-compatible hosted server surface; NEXORA-native APIs, SDKs, cluster, and plugins follow in later phases.
+**Project status:** Phases 1-3 are implemented and verified: Rust foundation, standalone audio engine, and an extensible source framework with local media, public radio, and authorized HTTP adapters. The next milestone is the Lavalink-compatible hosted server surface; NEXORA-native APIs, SDKs, cluster, and plugins follow later.
 
 ---
 
@@ -1306,10 +1306,10 @@ Phases 1 and 2 are implemented and verified. Later phases remain planned until t
 | Area | Current status in this specification |
 |---|---|
 | Product vision | Defined: from-scratch Rust alternative with a Lavalink-like hosted server experience |
-| Target architecture | Defined; Phase 1/2 structure implemented |
+| Target architecture | Defined; Phase 1/2/3 structure implemented |
 | Rust technology stack | Foundation and audio deps pinned; API deps planned for Phase 4 |
 | Audio engine | Implemented (Phase 2): decode, resample, PCM/Opus output, CLI |
-| Source adapters | Planned (Phase 3) |
+| Source adapters | Implemented (Phase 3): registry, ranking, local/radio/HTTP adapters, SSRF validation |
 | REST / WebSocket API | Planned (Phase 4); gateway skeleton only in Phase 1 |
 | SDKs | Planned (Phase 5) |
 | Distributed cluster | Future phase |
