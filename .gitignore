@@ -4,3 +4,6 @@
 .env
 config.local.toml
 .DS_Store
+__pycache__/
+*.pyc
+node_modules/

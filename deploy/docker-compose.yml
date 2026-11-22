@@ -1,0 +1,20 @@
+services:
+  nexora:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["--log-filter", "${RUST_LOG:-info}"]
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      NEXORA_SERVER_PASSWORD: ${NEXORA_SERVER_PASSWORD:-}
+    volumes:
+      - ../data/media:/app/data/media:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
