@@ -1,4 +1,4 @@
-# ADR-001: Playback pipeline architecture
+# ADR-022: Playback pipeline architecture
 
 ## Context
 
@@ -16,7 +16,7 @@ Implement the playback pipeline as a per-session pacing task with the following 
 - **Bounded broadcast delivery.** A `broadcast::Sender<OpusFrame>` per session fans packets to the audio WebSocket. Lagging consumers skip missed packets (`RecvError::Lagged(n)`) rather than blocking the producer.
 - **PCM gain before encoding.** Volume (0..150) is applied as PCM gain clamped to -1.0..1.0 before encoding, so encoded packets are never mutated and gain is always correct at the current position.
 - **Session state owns position and status.** `SessionManager` tracks `status`, `position_ms`, `volume`, `current_track`, and `queue`; the pacing task advances `position_ms` via `SessionManager::update_position`.
-- **End-of-track and failure handling.** End of packets emits `TrackEnded` and clears the track; decode failure emits `TrackFailed`. `finish()` pops the FIFO queue via `pop_next_queued()` and, if a next track exists, calls `play()` for it — emitting a new `TrackStarted` and starting a new pacing task. Empty queue stops playback.
+- **End-of-track and failure handling.** End of packets emits `TrackEnded` and clears the track; decode failure emits `TrackFailed`. `finish()` is terminal. Queue auto-advance is deferred to slice 2; `pop_next_queued()` exposes FIFO order so the playback task can own advancement later.
 
 ## Consequences
 
@@ -30,7 +30,7 @@ Positive:
 Negative / tradeoffs:
 
 - Whole-file packet preparation is acceptable for the first slice but bounded by a documented local-file size policy; streaming decode from a reader is a later optimization.
-- Queue auto-advance is implemented: `finish()` pulls the next item from the FIFO queue. One pacing task per session does not yet scale to many concurrent sessions without a worker pool.
+- Queue auto-advance is deferred to slice 2. `finish()` is terminal; the playback task does not yet call `pop_next_queued()` to spawn a new pacing task. One pacing task per session does not yet scale to many concurrent sessions without a worker pool.
 
 ## Alternatives
 

@@ -2,7 +2,7 @@
 
 ## Before opening a pull request
 
-1. Read `README.md` and `docs/MASTER_AI_INSTRUCTIONS.md`.
+1. Read [the documentation map](docs/README.md), `README.md`, and `docs/MASTER_AI_INSTRUCTIONS.md`.
 2. Keep changes scoped to the current milestone.
 3. Use safe Rust; document and test any `unsafe` with a safety argument.
 4. Add tests for every implemented component.
@@ -14,7 +14,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-6. Update `docs/PROJECT_STATUS.md`, `CHANGELOG.md`, and relevant docs.
+6. Update `docs/PROJECT_STATUS.md`, `CHANGELOG.md`, relevant docs, and the [documentation map](docs/README.md) when adding a new doc.
 7. Never commit `.env`, credentials, tokens, or local databases.
 
 ## Architecture decisions

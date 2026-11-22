@@ -73,7 +73,7 @@ async fn health_endpoint_is_available() {
 #[tokio::test]
 async fn nexora_session_create_and_play_contract() {
     let root = temp_media_root();
-    let mut sources = SourceRegistry::new();
+    let sources = SourceRegistry::new();
     sources
         .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
         .unwrap();

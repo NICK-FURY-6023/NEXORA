@@ -4,7 +4,7 @@ The following decisions were approved in `README.md` and are tracked here as the
 
 | ADR | Decision | Status |
 |---|---|---|
-| ADR-001 | Playback pipeline architecture | Accepted |
+| ADR-001 | Rust as primary implementation language | Accepted |
 | ADR-002 | Distributed microservices | Accepted |
 | ADR-003 | Separate control plane and data plane | Accepted |
 | ADR-004 | Tokio asynchronous runtime | Accepted |
@@ -25,5 +25,9 @@ The following decisions were approved in `README.md` and are tracked here as the
 | ADR-019 | Pure-Rust Opus encoding | Accepted |
 | ADR-020 | Bounded audio queues | Accepted |
 | ADR-021 | Repository documentation layout | Accepted |
+| ADR-022 | Playback pipeline architecture | Accepted |
+
+Concrete ADR files exist for ADR-015..022; ADR-001..014 remain the accepted
+architecture index from the original plan.
 
 See [docs/README.md](../README.md) for the reader-facing navigation map.

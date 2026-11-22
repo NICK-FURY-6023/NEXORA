@@ -117,7 +117,9 @@ struct PreparedPcm {
 
 fn prepare_pcm(input: &Path, target_rate: u32, channels: u16) -> NexoraResult<PreparedPcm> {
     if channels == 0 {
-        return Err(NexoraError::audio("output channels must be greater than zero"));
+        return Err(NexoraError::audio(
+            "output channels must be greater than zero",
+        ));
     }
     let decoded = decode_file(input)?;
     let input_channels = decoded.format.channels as usize;

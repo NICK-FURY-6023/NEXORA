@@ -20,8 +20,7 @@ fn write_test_wav(path: &PathBuf, sample_rate: u32, frames: usize) {
     data.extend_from_slice(b"data");
     data.extend_from_slice(&(frames as u32 * 2).to_le_bytes());
     for index in 0..frames {
-        let value =
-            ((index as f32 / frames as f32) * std::f32::consts::TAU).sin() * 0.5;
+        let value = ((index as f32 / frames as f32) * std::f32::consts::TAU).sin() * 0.5;
         data.extend_from_slice(&((value * 32767.0) as i16).to_le_bytes());
     }
     fs::write(path, data).unwrap();

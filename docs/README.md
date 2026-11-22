@@ -14,8 +14,9 @@ them.
 | Migrate from Lavalink | [Lavalink analysis](LAVALINK_ANALYSIS.md) → [v4 surface](API.md) |
 | Understand implemented architecture | [Implemented structure](ARCHITECTURE.md) |
 | Understand why decisions were made | [ADR index](adr/README.md) |
-| Develop or review code | [Development](DEVELOPMENT.md) → [Contributing](../CONTRIBUTING.md) |
-| Check current truth/status | [Project status](PROJECT_STATUS.md) → [Changelog](../CHANGELOG.md) |
+| Develop or review code | [Development](DEVELOPMENT.md) → [Detailed contributing guide](CONTRIBUTING.md) → [Root checklist](../CONTRIBUTING.md) |
+| Check current truth/status | [Project status](PROJECT_STATUS.md) → [Changelog](../CHANGELOG.md) → [Today's schedule](TODAY_SCHEDULE.md) |
+| Review security posture | [Security review](SECURITY_REVIEW.md) |
 | Study reference evidence | [Research index](#research-and-reference-evidence) |
 | See a bot-shaped example | [Bot PoC](BOT_POC.md) and [example script](../examples/bot_poc.py) |
 
@@ -86,7 +87,8 @@ and in the table below.
 | [README.md](../README.md) | Product vision and long-term architecture |
 | [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) | Implemented system design and invariants |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Current crate/service structure |
-| [API.md](API.md) | Native `/api/v1`, audio WS, and `/v4` contracts |
+| [API.md](API.md) | Native `/api/v1`, audio WS, and `/v4` API contracts |
+| [PROTOCOL.md](PROTOCOL.md) | Implemented wire contract, auth, and error envelope |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | What is verified right now |
 | [LAVALINK_ANALYSIS.md](LAVALINK_ANALYSIS.md) | Lavalink protocol reference and boundaries |
 | [ADRs](adr/README.md) | Why decisions were made |
@@ -99,6 +101,7 @@ and in the table below.
 - [Lavalink analysis](LAVALINK_ANALYSIS.md) — short protocol reference.
 - [Lavalink deep dive](LAVALINK_DEEP_DIVE.md) — observed/inferred internals.
 - [REA static analysis](research/lavalink-rea-static-analysis.md) — shipped JAR evidence.
+- [Source architecture](research/lavalink-source-architecture.md) — line-cited source-level behavior spec.
 - [System design](SYSTEM_DESIGN.md) — what NEXORA actually implements.
 
 Official contract: <https://lavalink.dev/api/rest.html>,

@@ -4,6 +4,22 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Repository documentation map and ADR-021
+
+- Added `docs/README.md` as the single reader-facing documentation index with
+  repository map, ownership table, and quick start.
+- Added ADR-021 for the documentation layout decision; marked the older
+  `NEXORA_SYSTEM_DESIGN.md` draft as superseded.
+- Updated contribution guide and root README to point to the docs map.
+
+### Added - real-time local playback
+
+- `play` resolves the track before mutating session state and starts a paced
+  20 ms Opus playback task.
+- Added binary audio WebSocket `/ws/v1/sessions/{id}/audio`, typed playback
+  signals, `TrackEnded`/`TrackFailed`, and per-session bounded frame fanout.
+- Verified with 82 passing tests and a live 43-packet Opus WebSocket smoke test.
+
 ### Added - SDK, deployment, cluster and plugin foundations
 
 - Python and Node.js SDKs with tests; Java/Go/C#/PHP SDK sources.

@@ -10,7 +10,7 @@ use nexora_protocol::{
     SessionState,
 };
 use serde_json::json;
-use tokio::sync::{broadcast, RwLock, watch};
+use tokio::sync::{RwLock, broadcast, watch};
 
 /// Signals sent from session state to the single active playback task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +35,11 @@ impl PlaybackRegistry {
 
     /// Register a broadcast sender for a session. Returns `true` when this is
     /// the first sender registered (the pacing task should start producing).
-    pub async fn register(&self, session_id: &SessionId, sender: broadcast::Sender<OpusFrame>) -> bool {
+    pub async fn register(
+        &self,
+        session_id: &SessionId,
+        sender: broadcast::Sender<OpusFrame>,
+    ) -> bool {
         let mut sessions = self.sessions.write().await;
         sessions.insert(session_id.clone(), sender).is_none()
     }
@@ -64,7 +68,10 @@ impl PlaybackRegistry {
 
     /// Subscribe to Opus frames for a session. Returns `None` when no audio
     /// channel is registered for the session.
-    pub async fn subscribe(&self, session_id: &SessionId) -> Option<broadcast::Receiver<OpusFrame>> {
+    pub async fn subscribe(
+        &self,
+        session_id: &SessionId,
+    ) -> Option<broadcast::Receiver<OpusFrame>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).map(|sender| sender.subscribe())
     }
@@ -166,8 +173,9 @@ impl SessionManager {
     }
 
     /// Mark the current track as finished and clear it from the session.
+    /// Queue auto-advance belongs to the playback task, not session state.
     pub async fn finish(&self, session_id: &SessionId) -> NexoraResult<()> {
-        let queued = {
+        {
             let mut sessions = self.sessions.write().await;
             let record = sessions
                 .get_mut(session_id)
@@ -176,28 +184,12 @@ impl SessionManager {
             record.current_track = None;
             record.position_ms = 0;
             record.playback = None;
-            if record.queue.is_empty() {
-                None
-            } else {
-                Some(record.queue.remove(0))
-            }
-        };
+        }
         self.emit(
             session_id,
             SessionEventType::TrackEnded,
             json!({ "reason": "finished" }),
         );
-        // Auto-advance to the next queued track, if any.
-        if let Some(next) = queued {
-            let _ = self.play(
-                session_id,
-                PlayRequest {
-                    track_id: next,
-                    start_position_ms: 0,
-                },
-            )
-            .await;
-        }
         Ok(())
     }
 

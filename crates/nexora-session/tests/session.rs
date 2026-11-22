@@ -76,10 +76,7 @@ async fn attached_playback_receives_control_signals() {
 
     manager.set_volume(&session_id, 40).await.unwrap();
     assert!(receiver.has_changed().unwrap());
-    assert_eq!(
-        *receiver.borrow_and_update(),
-        PlaybackSignal::SetVolume(40)
-    );
+    assert_eq!(*receiver.borrow_and_update(), PlaybackSignal::SetVolume(40));
 
     manager.stop(&session_id).await.unwrap();
     assert!(receiver.has_changed().unwrap());
@@ -117,7 +114,10 @@ async fn track_failed_emits_error() {
         .await
         .unwrap();
     let session_id = nexora_common::SessionId::new(created.session_id.as_str()).unwrap();
-    manager.fail(&session_id, "source decode failed").await.unwrap();
+    manager
+        .fail(&session_id, "source decode failed")
+        .await
+        .unwrap();
 
     let mut saw_fail = false;
     for _ in 0..2 {
@@ -133,7 +133,7 @@ async fn track_failed_emits_error() {
 }
 
 #[tokio::test]
-async fn queue_auto_advances_on_track_ended() {
+async fn finish_is_terminal_and_queue_pop_is_fifo() {
     let manager = SessionManager::new();
     let mut events = manager.subscribe();
     let created = manager
@@ -147,31 +147,45 @@ async fn queue_auto_advances_on_track_ended() {
     manager.enqueue(&session_id, track_a.clone()).await.unwrap();
     manager.enqueue(&session_id, track_b.clone()).await.unwrap();
 
-    manager.play(&session_id, PlayRequest { track_id: track_a, start_position_ms: 0 }).await.unwrap();
-
-    let state = manager.get(&session_id).await.unwrap();
-    assert_eq!(state.status, "playing");
-
+    manager
+        .play(
+            &session_id,
+            PlayRequest {
+                track_id: track_a.clone(),
+                start_position_ms: 0,
+            },
+        )
+        .await
+        .unwrap();
     manager.finish(&session_id).await.unwrap();
 
-    // TrackEnded should be emitted for track_a.
+    // create + 2 queue updates + initial start + end. No auto-advance event.
+    let mut starts = 0;
     let mut saw_end = false;
-    let mut saw_start = false;
-    for _ in 0..4 {
+    for _ in 0..5 {
         let event = events.recv().await.unwrap();
         if event.session_id == session_id {
             match event.event_type {
+                SessionEventType::TrackStarted => starts += 1,
                 SessionEventType::TrackEnded => saw_end = true,
-                SessionEventType::TrackStarted => saw_start = true,
                 _ => {}
             }
         }
     }
     assert!(saw_end);
-    // Auto-advance should play track_b.
-    assert!(saw_start);
+    assert_eq!(starts, 1);
     let state = manager.get(&session_id).await.unwrap();
-    assert_eq!(state.status, "playing");
+    assert_eq!(state.status, "stopped");
+
+    assert_eq!(
+        manager.pop_next_queued(&session_id).await.unwrap(),
+        Some(track_a)
+    );
+    assert_eq!(
+        manager.pop_next_queued(&session_id).await.unwrap(),
+        Some(track_b)
+    );
+    assert_eq!(manager.pop_next_queued(&session_id).await.unwrap(), None);
 }
 
 #[tokio::test]

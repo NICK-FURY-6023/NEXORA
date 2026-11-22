@@ -79,8 +79,7 @@ pub struct AppState {
     pub audio: AudioChannels,
 }
 
-pub type AudioChannels =
-    Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>>;
+pub type AudioChannels = Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>>;
 
 #[derive(Debug)]
 pub struct ApiError {
@@ -365,13 +364,7 @@ async fn play(
     let sessions = Arc::clone(&state.sessions);
     let metrics = Arc::clone(&state.metrics);
     tokio::spawn(run_playback(
-        session_id,
-        path,
-        format,
-        volume,
-        control_rx,
-        sessions,
-        metrics,
+        session_id, path, format, volume, control_rx, sessions, metrics,
     ));
     Ok(Json(json!({ "status": "playing" })))
 }
@@ -384,11 +377,9 @@ async fn prepare_packets(
     let path = path.to_path_buf();
     let sample_rate = format.sample_rate;
     let channels = format.channels;
-    tokio::task::spawn_blocking(move || {
-        encode_file_packets(&path, sample_rate, channels, volume)
-    })
-    .await
-    .map_err(|_| NexoraError::service("playback task failed"))?
+    tokio::task::spawn_blocking(move || encode_file_packets(&path, sample_rate, channels, volume))
+        .await
+        .map_err(|_| NexoraError::service("playback task failed"))?
 }
 
 async fn run_playback(

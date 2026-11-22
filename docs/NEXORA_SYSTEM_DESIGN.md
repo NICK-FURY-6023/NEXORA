@@ -1,5 +1,11 @@
 # NEXORA — Independent Rust Audio System Design
 
+> **Superseded historical draft.** This document reflects an earlier plan whose
+> crate names (`nexora-core`, `nexora-voice`, `nexora-codecs`) do not match the
+> implemented workspace. The authoritative design is
+> [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md). Keep this file only as research
+> history and evidence trail.
+
 **Goal:** A complete, lightweight, from-scratch Rust audio engine + service platform (a Lavalink alternative) with **zero third-party runtime dependency** — no JVM, no Spring Boot, no Lavaplayer service, no Lavalink wrapper. Native Rust codec crates are acceptable as *libraries* (not an external runtime).
 
 **Evidence base:** `docs/LAVALINK_DEEP_DIVE.md`, `docs/research/lavalink-rea-static-analysis.md`, cloned `lavalink-devs/Lavalink@4.2.2` source, official `lavalink.dev` v4 REST/WS/plugin docs. All structural claims carry OBSERVED / INFERRED labels.
