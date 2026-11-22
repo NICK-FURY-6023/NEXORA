@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document describes what exists after Phase 1. The target product architecture remains in `README.md`; this file tracks the implemented structure.
+This document tracks what exists after Phase 2. The target product architecture remains in `README.md`; this file tracks the implemented structure.
 
 ## Workspace
 
@@ -15,6 +15,15 @@ crates/nexora-config     -> Figment defaults + TOML + environment overrides
 crates/nexora-telemetry  -> tracing init, metric names
 crates/nexora-service    -> Service trait, health, shutdown
 services/nexora-gateway  -> Phase 1 skeleton binary
+```
+
+### Audio engine (Phase 2)
+
+```text
+crates/nexora-audio-decode   -> Symphonia decoder to f32 PCM
+crates/nexora-audio-codec    -> WAV writer, Opus packets, Ogg Opus writer
+crates/nexora-audio-pipeline -> resampling, clipping, bounded queue, channel remap
+services/nexora-audio-engine -> standalone decode -> resample -> encode CLI
 ```
 
 ## Dependency direction
@@ -35,21 +44,21 @@ No cycles. Shared types do not depend on services. The audio-types crate does no
 
 ## Control plane and data plane
 
-Phase 1 implements only foundation types and a gateway skeleton. The approved split for later phases:
+Phase 1 provided the foundation. Phase 2 adds the standalone data plane: local file input -> decode -> resample -> channel remap -> encode -> output file. The approved split for later phases:
 
 - Control plane: gateway, auth, registry, resolver, session, configuration, cluster.
 - Data plane: source-worker, decoder, audio-engine, delivery, buffer manager.
 
 Audio frames must never be routed through the gateway. Gateway owns commands and events; delivery workers own audio transport.
 
-## Security posture in Phase 1
+## Security posture
 
 - No secrets in code, config defaults, logs, or errors.
-- No network listeners in the gateway skeleton.
-- No provider integrations and no external media access.
+- No network listeners in either binary.
+- No provider integrations, external media access, or open-proxy behavior.
 - No unsafe Rust.
 - Dependency versions are pinned in the workspace manifest and locked in `Cargo.lock`.
 
 ## Deferred to later phases
 
-Audio decoding (Phase 2), source adapters and SSRF validation (Phase 3), HTTP/WebSocket/gRPC APIs (Phase 4), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).
+Source adapters and SSRF validation (Phase 3), HTTP/WebSocket/gRPC APIs (Phase 4), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).

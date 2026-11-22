@@ -1,0 +1,11 @@
+[package]
+name = "nexora-audio-codec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+opus-rs = { workspace = true }
+ogg = { workspace = true }
+nexora-error = { path = "../nexora-error" }

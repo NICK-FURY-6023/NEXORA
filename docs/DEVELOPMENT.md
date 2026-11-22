@@ -27,6 +27,28 @@ cargo run -p nexora-gateway -- --config ./config.toml
 
 The Phase 1 gateway is a skeleton: it loads configuration, starts tracing, waits for Ctrl-C, and shuts down gracefully. It does not open HTTP/WebSocket/gRPC listeners yet.
 
+## Running the Phase 2 audio engine
+
+```bash
+cargo run -p nexora-audio-engine -- \
+  --input ./input.wav \
+  --output ./output.opus \
+  --target-rate 48000 \
+  --channels 2 \
+  --codec opus \
+  --log-filter info
+```
+
+`--codec pcm` writes a 16-bit PCM WAV file. `--codec opus` writes an Ogg Opus file. The engine reports frames, elapsed time, and measured real-time factor.
+
+## Benchmark
+
+```bash
+cargo bench -p nexora-audio-pipeline --bench audio_pipeline
+```
+
+Use Criterion flags such as `--warm-up-time 0.1 --measurement-time 0.2 --sample-size 10` for a quick noisy check. Document hardware, versions, input, and settings before treating any number as a performance result.
+
 ## Configuration precedence
 
 1. Built-in defaults in `nexora-config`.

@@ -1,0 +1,23 @@
+[package]
+name = "nexora-audio-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+rubato = { workspace = true }
+audioadapter = { workspace = true }
+audioadapter-buffers = { workspace = true }
+tokio = { workspace = true }
+nexora-error = { path = "../nexora-error" }
+nexora-audio-types = { path = "../nexora-audio-types" }
+nexora-audio-decode = { path = "../nexora-audio-decode" }
+nexora-audio-codec = { path = "../nexora-audio-codec" }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "audio_pipeline"
+harness = false

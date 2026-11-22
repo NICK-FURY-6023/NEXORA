@@ -1,10 +1,18 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 1 - Foundation
+## Current milestone: Phase 2 - Audio Engine
 
 Status: **implemented and verified** on 2026-11-22.
 
-### Implemented
+### Implemented in Phase 2
+
+- `nexora-audio-decode`: Symphonia local-media decoding to interleaved f32 PCM.
+- `nexora-audio-codec`: PCM16 WAV writer, pure-Rust Opus encoder, Ogg Opus container writer.
+- `nexora-audio-pipeline`: Rubato resampling, clipping detection, bounded queue, channel remap, `process_file` orchestration.
+- `services/nexora-audio-engine`: CLI with frames, elapsed time, and real-time-factor reporting.
+- Criterion benchmark and regression test for Opus partial final-frame padding.
+
+### Previously completed (Phase 1)
 
 - Rust workspace pinned to Rust 1.100.0 and edition 2024.
 - `nexora-error`: structured error codes and redaction-safe error messages.
@@ -25,18 +33,21 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-All three checks passed locally. 22 unit tests passed across the workspace. No performance benchmarks have been run; no performance results are claimed.
+All three checks passed locally. 42 tests passed across the workspace.
+
+End-to-end: 1 s 44.1 kHz mono WAV -> 48 kHz Ogg Opus. Input frames 44,100; output frames 48,001; 51 packets; 111 ms elapsed; 8.98x real-time factor; 8,519-byte Ogg file with valid OpusHead/OpusTags.
+
+Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0, Windows GNU, 100 ms warm-up, 200 ms measurement, 10 samples): `time: [1.5484 ms 3.4276 ms 7.2193 ms]`, 2 high-severe outliers. This is a short noisy run, not a production performance claim.
 
 ### Not implemented yet
 
-- Phase 2: decoding, PCM pipeline, resampling, Opus encoding, bounded audio buffers, benchmarks.
 - Phase 3: source adapters, resolver, health checks, SSRF-safe URL handling.
 - Phase 4: REST, WebSocket events, gRPC, session lifecycle.
 - Phase 5-8: SDKs, distributed cluster, plugins, production hardening.
 
 ### Next milestone
 
-Phase 2 - Audio Engine. Deliverable: a functional standalone audio engine with measured CPU, memory, and latency results.
+Phase 3 - Source Framework. Deliverable: extensible, permission-aware source adapters for local media, public radio, and authorized HTTP streams.
 
 ### Status policy
 

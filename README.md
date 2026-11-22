@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
   <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
-  <img src="https://img.shields.io/badge/Status-Phase%201%20Foundation-green" alt="Project status">
+  <img src="https://img.shields.io/badge/Status-Phase%202%20Audio%20Engine-green" alt="Project status">
 </p>
 
 > **One audio foundation. Multiple services. Any application ecosystem.**
@@ -21,7 +21,7 @@ NEXORA is an independent audio infrastructure written primarily in Rust. It aims
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Phase 1 (Rust foundation) is implemented and verified with `cargo fmt`, `cargo clippy`, and `cargo test`. The audio engine, source framework, APIs, SDKs, cluster, and plugin runtime remain planned until their own phases deliver code and tests.
+**Project status:** Phase 2 (standalone audio engine) is implemented and verified: local decoding, resampling, PCM/Opus output, a CLI, tests, and a benchmark. The source framework, APIs, SDKs, cluster, and plugin runtime remain planned until their own phases deliver code and tests.
 
 ---
 
@@ -1299,20 +1299,20 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-Phase 1 (Rust foundation) is implemented and verified. Later phases remain planned until their code, tests, and documentation exist. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
+Phases 1 and 2 are implemented and verified. Later phases remain planned until their code, tests, and documentation exist. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
 | Area | Current status in this specification |
 |---|---|
 | Product vision | Defined |
 | Target architecture | Defined; Phase 1 structure implemented |
-| Rust technology stack | Foundation deps pinned; audio/API deps planned for later phases |
-| Audio engine | Planned (Phase 2); shared audio types only in Phase 1 |
+| Rust technology stack | Foundation and audio deps pinned; API deps planned for Phase 4 |
+| Audio engine | Implemented (Phase 2): decode, resample, PCM/Opus output, CLI |
 | Source adapters | Planned (Phase 3) |
 | REST / WebSocket API | Planned (Phase 4); gateway skeleton only in Phase 1 |
 | SDKs | Planned (Phase 5) |
 | Distributed cluster | Future phase |
 | Plugin runtime | Future phase |
-| Performance benchmarks | Planned (Phase 2+); no results claimed yet |
+| Performance benchmarks | Short Criterion run completed; see `docs/PROJECT_STATUS.md` |
 | Production readiness | Not established |
 
 **Status policy:** Only mark a feature as implemented when the repository contains the implementation and relevant tests. Only publish performance numbers with benchmark methodology, hardware details, software versions, and reproducible results.
