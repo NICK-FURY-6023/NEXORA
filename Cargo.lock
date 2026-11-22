@@ -907,6 +907,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexora-cluster"
+version = "0.1.0"
+dependencies = [
+ "nexora-common",
+ "nexora-error",
+]
+
+[[package]]
 name = "nexora-common"
 version = "0.1.0"
 dependencies = [
@@ -961,6 +969,13 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
+]
+
+[[package]]
+name = "nexora-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "nexora-error",
 ]
 
 [[package]]

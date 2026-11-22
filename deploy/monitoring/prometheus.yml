@@ -1,0 +1,11 @@
+# Example scrape configuration only.
+# NEXORA currently exposes JSON metrics at /api/v1/metrics, not Prometheus text exposition.
+# Add an exporter before using this job in production.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: nexora
+    static_configs:
+      - targets: ["nexora:8080"]
+    metrics_path: /api/v1/metrics

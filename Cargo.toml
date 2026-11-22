@@ -10,6 +10,8 @@ members = [
     "crates/nexora-source-framework",
     "crates/nexora-session",
     "crates/nexora-grpc",
+    "crates/nexora-cluster",
+    "crates/nexora-plugin-api",
     "crates/nexora-protocol",
     "crates/nexora-config",
     "crates/nexora-telemetry",

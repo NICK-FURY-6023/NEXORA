@@ -1,0 +1,14 @@
+# Example alerts. No Prometheus exposition is wired yet; these rules are illustrative.
+groups:
+  - name: nexora-examples
+    rules:
+      - alert: NexoraHighApiErrors
+        expr: nexora_api_errors_total > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "NEXORA API errors above threshold" }
+      - alert: NexoraNoActiveSessions
+        expr: nexora_active_sessions == 0
+        for: 30m
+        labels: { severity: info }
+        annotations: { summary: "NEXORA has no active sessions" }

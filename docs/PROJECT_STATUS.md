@@ -1,8 +1,18 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 4b - Internal gRPC
+## Current milestone: Phase 5-7 foundations + deployment
 
 Status: **implemented and verified** on 2026-11-22.
+
+### Implemented after Phase 4b
+
+- Runtime API counters exposed through `/api/v1/metrics` and `/v4/stats`.
+- Python SDK (6 tests) and Node.js SDK (5 tests); Java/Go/C#/PHP SDK sources are provided but their toolchains are unavailable on this host, so they are unverified by compilers.
+- Docker/compose deployment artifacts, `.env.example`, and deployment docs.
+- `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
+- ADR-015..020 and example monitoring configs.
+
+Workspace total is now 70 passing Rust tests.
 
 ### Implemented in Phase 4b
 
@@ -77,7 +87,7 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Next milestone
 
-Remaining Phase 4 work: runtime metric counters and broader Lavalink client conformance.
+Remaining work: full Lavalink client conformance, WASM plugin runtime, durable session store, and production security review.
 Next milestone after that: Phase 5 SDKs.
 
 ### Status policy

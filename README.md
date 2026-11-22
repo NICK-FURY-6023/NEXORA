@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
   <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
-  <img src="https://img.shields.io/badge/Status-Phase%204b%20gRPC-green" alt="Project status">
+  <img src="https://img.shields.io/badge/Status-Phase%205-7%20Foundations-green" alt="Project status">
 </p>
 
 > **One audio foundation. Multiple services. Any application ecosystem.**
@@ -23,7 +23,7 @@ NEXORA is built from scratch as an independent Rust alternative to hosted audio 
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Phases 1-4b are implemented and verified: Rust foundation, standalone engine, source framework, hosted REST/WebSocket server with a Lavalink-compatible surface, and internal gRPC session RPC. Full Lavalink client conformance, SDKs, cluster, plugins, and commercial source adapters remain planned.
+**Project status:** Phases 1-4 are implemented; Phase 5-7 foundations (SDKs, deployment, cluster registry, plugin contract) are in place. Full Lavalink client conformance, a WASM plugin runtime, durable sessions, and commercial source adapters remain planned.
 
 ---
 
@@ -1312,9 +1312,9 @@ Phases 1 and 2 are implemented and verified. Later phases remain planned until t
 | Source adapters | Implemented (Phase 3): registry, ranking, local/radio/HTTP adapters, SSRF validation |
 | REST / WebSocket API | Implemented: `/api/v1` + Lavalink-compatible `/v4` |
 | Internal gRPC | Implemented (Phase 4b): `nexora.v1.SessionService` |
-| SDKs | Planned (Phase 5) |
-| Distributed cluster | Future phase |
-| Plugin runtime | Future phase |
+| SDKs | Python + Node verified; Java/Go/C#/PHP source-only (toolchains unavailable) |
+| Distributed cluster | Foundation implemented: registry + weighted scheduler |
+| Plugin runtime | Contract implemented; WASM execution deferred |
 | Performance benchmarks | Short Criterion run completed; see `docs/PROJECT_STATUS.md` |
 | Production readiness | Not established |
 

@@ -21,20 +21,20 @@ Manager: Hermes Agent. Goal: finish the remaining high-value increments today wi
 
 No worker may edit root `Cargo.toml`, existing `crates/**`, `services/**`, `README.md`, or other workers' scopes.
 
-## Wave 2 — manager completes or repairs worker output
+## Wave 2 — completed
 
-- Review every worker diff; revert unapproved changes.
-- Run each SDK's own test command.
-- Integrate Rust core changes and re-run workspace checks.
-- Push wave 2 with a conventional commit.
+- OpenCode produced Java/Go/C#/PHP SDK sources; toolchains for those languages are not installed on this host, so they are source-only and unverified by compilers.
+- Pi claimed ADR files but wrote none; manager wrote ADR-015..020 directly.
+- Agy failed with a gateway error; manager wrote monitoring examples directly.
+- Python 6 tests and Node 5 tests pass; Rust workspace 70 tests pass.
 
-## Wave 3 — distributed + plugins
+## Wave 3 — completed
 
-- Add `crates/nexora-cluster` registry/skeleton and tests.
-- Add plugin manifest contract and sandboxed plugin boundary documentation; WASM runtime only if verifiable today.
-- Push after green checks.
+- `crates/nexora-cluster`: worker registry, capability filtering, weighted scheduler, 2 tests.
+- `crates/nexora-plugin-api`: manifest validation and restrictive sandbox policy, 3 tests.
+- WASM runtime execution remains deferred; the contract and limits are explicit.
 
-## Wave 4 — production hardening
+## Wave 4 — active
 
 - Security review of HTTP auth, SSRF validation, secrets, and dependency licenses.
 - Update `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `CHANGELOG.md`, and README.

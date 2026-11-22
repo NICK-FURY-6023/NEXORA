@@ -4,6 +4,13 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - SDK, deployment, cluster and plugin foundations
+
+- Python and Node.js SDKs with tests; Java/Go/C#/PHP SDK sources.
+- Docker/compose deployment artifacts and ADR-015..020.
+- `nexora-cluster` registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
+- Example monitoring configs and runtime metrics endpoints.
+
 ### Added - Phase 4b Internal gRPC
 
 - `nexora-grpc` with `nexora.v1.SessionService` protobuf contract and tonic server.
@@ -38,7 +45,7 @@ All notable changes to NEXORA are documented here.
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace` (63 tests passed); live REST, WebSocket, and gRPC smoke tests; end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
+- `cargo test --workspace` (70 tests passed); Python 6 and Node 5 SDK tests; live REST, WebSocket, and gRPC smoke tests; end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
 
 ### Not included
 
