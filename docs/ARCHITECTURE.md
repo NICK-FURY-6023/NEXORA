@@ -2,7 +2,8 @@
 
 ## Scope
 
-This document tracks what exists after Phase 2. Product positioning: NEXORA is a from-scratch Rust alternative to hosted Lavalink, with a Lavalink-compatible server surface planned for migration and the universal `/api/v1` contract as the long-term integration point. The target product architecture remains in `README.md`; this file tracks the implemented structure.
+This document tracks what exists after Phase 2. Product positioning: NEXORA is a from-scratch Rust alternative to hosted Lavalink, with a Lavalink-compatible server surface planned for migration and the universal `/api/v1` contract as the long-term integration point. The target product architecture remains in `README.md`; this file tracks the implemented structure. Lavalink's observed behavior and
+the deliberately non-copied parts are recorded in `docs/LAVALINK_ANALYSIS.md`.
 
 ## Workspace
 
