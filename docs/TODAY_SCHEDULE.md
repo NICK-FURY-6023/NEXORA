@@ -34,7 +34,7 @@ No worker may edit root `Cargo.toml`, existing `crates/**`, `services/**`, `READ
 - `crates/nexora-plugin-api`: manifest validation and restrictive sandbox policy, 3 tests.
 - WASM runtime execution remains deferred; the contract and limits are explicit.
 
-## Wave 4 — active
+## Wave 4 — completed
 
 - Security review of HTTP auth, SSRF validation, secrets, and dependency licenses.
 - Update `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `CHANGELOG.md`, and README.
@@ -48,3 +48,5 @@ No worker may edit root `Cargo.toml`, existing `crates/**`, `services/**`, `READ
 3. No orphan CLI workers; stop and verify before staging.
 4. Worker output is evidence, not truth — manager re-runs decisive checks.
 5. If a worker stalls, kill it and take over its scope directly.
+
+Final chain: `8313fa4` -> `9872c76` -> `7ed6b6e` -> `b8d8e84` -> `7619e60` -> `765e0e1` -> `d408d5f` -> `ca44509` -> final hardening push. Every phase was verified before the next started.
