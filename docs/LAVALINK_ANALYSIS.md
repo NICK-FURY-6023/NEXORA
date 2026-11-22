@@ -110,6 +110,11 @@ local-media adapter and decodes the blob to prove it is non-empty.
 Remaining gap: Lavalink binary track encoding and `/v4/decodetrack` are not
 implemented. That is a material compatibility boundary, not an accident.
 
-Next unit: contract tests comparing `/v4/info`, `/v4/loadtracks`, and
-player response shapes against the documented v4 shapes, followed by the
-Discord bot proof of concept.
+Third parity unit (done): `/v4/info` now has the documented `version` object,
+numeric `buildTime` and `git.commitTime`, and real `sourceManagers` from the
+registry. `/v4` player responses carry `state.time`, `state.connected`,
+`state.ping` and `filters`; `POST /v4/sessions` returns 201. Two more
+RED-GREEN contract tests cover these shapes.
+
+Next unit: Discord bot proof of concept that talks to `/api/v1` and proves
+session create → play → event flow with a live server.

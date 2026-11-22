@@ -238,3 +238,81 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
 
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[tokio::test]
+async fn lavalink_info_matches_documented_v4_shape() {
+    let response = test_app()
+        .oneshot(
+            Request::builder()
+                .uri("/v4/info")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(value["version"]["semver"].is_string());
+    assert!(value["version"]["major"].is_u64());
+    assert!(value["version"]["minor"].is_u64());
+    assert!(value["version"]["patch"].is_u64());
+    assert!(value["buildTime"].is_u64());
+    assert!(value["git"]["branch"].is_string());
+    assert!(value["git"]["commit"].is_string());
+    assert!(value["git"]["commitTime"].is_u64());
+    assert!(value["jvm"].is_string());
+    assert!(value["lavaplayer"].is_string());
+    assert!(value["sourceManagers"].is_array());
+    assert!(value["filters"].is_array());
+    assert!(value["plugins"].is_array());
+}
+
+#[tokio::test]
+async fn lavalink_player_matches_documented_v4_shape() {
+    let app = test_app();
+    let created = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v4/sessions")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let session_id = created["sessionId"].as_str().unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v4/sessions/{session_id}/player"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(value["guildId"], session_id);
+    assert!(value["volume"].is_u64());
+    assert!(value["paused"].is_boolean());
+    assert!(value["state"]["time"].is_u64());
+    assert!(value["state"]["position"].is_u64());
+    assert!(value["state"]["connected"].is_boolean());
+    assert!(value["state"]["ping"].is_i64());
+    assert!(value["filters"].is_object());
+}

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -552,14 +553,39 @@ async fn lavalink_routeplanner_status(
     Ok(Json(json!({ "class": null, "details": {} })))
 }
 
-async fn lavalink_info() -> Json<Value> {
+fn process_start_ms() -> u64 {
+    static START: OnceLock<u64> = OnceLock::new();
+    *START.get_or_init(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    })
+}
+
+async fn lavalink_info(State(state): State<AppState>) -> Json<Value> {
+    let build_time = process_start_ms();
     Json(json!({
         "name": "NEXORA",
-        "version": "0.1.0",
-        "buildTime": "2026-11-22T00:00:00Z",
-        "git": { "branch": "main", "commit": "nexora" },
+        "version": {
+            "semver": env!("CARGO_PKG_VERSION"),
+            "major": 0,
+            "minor": 1,
+            "patch": 0,
+            "preRelease": Value::Null,
+            "build": Value::Null,
+        },
+        "buildTime": build_time,
+        "git": {
+            "branch": "main",
+            "commit": "nexora",
+            "commitTime": build_time,
+        },
         "jvm": "rust-native",
-        "lavaplayer": "nexora-audio-engine"
+        "lavaplayer": "nexora-audio-engine",
+        "sourceManagers": state.sources.source_ids(),
+        "filters": Vec::<&str>::new(),
+        "plugins": Vec::<&str>::new(),
     }))
 }
 
@@ -616,7 +642,7 @@ async fn lavalink_loadtracks(
 async fn lavalink_create_session(
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<(StatusCode, Json<Value>), ApiError> {
     authorize(&headers, &state)?;
     let response = state
         .sessions
@@ -626,7 +652,10 @@ async fn lavalink_create_session(
             nexora_audio_types::AudioCodec::Opus,
         ))
         .await?;
-    Ok(Json(json!({ "sessionId": response.session_id.as_str() })))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "sessionId": response.session_id.as_str() })),
+    ))
 }
 
 async fn lavalink_player(
@@ -637,12 +666,23 @@ async fn lavalink_player(
     authorize(&headers, &state)?;
     let session_id = parse_session_id(&id)?;
     let state = state.sessions.get(&session_id).await?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
     Ok(Json(json!({
         "guildId": session_id.as_str(),
-        "track": null,
+        "track": Value::Null,
         "volume": state.volume,
         "paused": state.status == "paused",
-        "state": { "status": state.status, "position": state.position_ms }
+        "state": {
+            "status": state.status,
+            "time": now,
+            "position": state.position_ms,
+            "connected": false,
+            "ping": -1,
+        },
+        "filters": {},
     })))
 }
 

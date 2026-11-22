@@ -12,7 +12,7 @@ Status: **implemented and verified** on 2026-11-22.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
 - ADR-015..020 and example monitoring configs.
 
-Workspace total is now 73 passing Rust tests.
+Workspace total is now 75 passing Rust tests.
 
 ### Lavalink v4 parity (after the Phase 5-7 foundations)
 
@@ -21,6 +21,10 @@ Workspace total is now 73 passing Rust tests.
 - `/v4/loadtracks` now returns documented lowercase `loadType` values and the
   v4 track shape (`encoded`, `info`, `pluginInfo`, `userData`); `/v4/stats`
   uses `cpu.lavalinkLoad`. Three RED-GREEN contract tests cover the parity.
+- `/v4/info` now returns the documented `version` object, numeric `buildTime`
+  and `git.commitTime`, and real `sourceManagers` from the registry; `/v4`
+  player responses carry `state.time`, `state.connected`, `state.ping` and
+  `filters`; `POST /v4/sessions` returns 201. Two more contract tests cover it.
 - Known compatibility boundary: `encoded` is an opaque NEXORA base64 JSON
   blob, not Lavalink's binary track encoding; `/v4/decodetrack` is absent.
 
