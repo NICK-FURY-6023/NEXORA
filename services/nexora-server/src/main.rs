@@ -9,7 +9,7 @@ use nexora_config::NexoraConfig;
 use nexora_error::NexoraResult;
 use nexora_grpc::NexoraGrpcService;
 use nexora_grpc::nexora::session_service_server::SessionServiceServer;
-use nexora_server::{AppState, build_router};
+use nexora_server::{AppState, RuntimeMetrics, build_router};
 use nexora_session::SessionManager;
 use nexora_source_framework::{
     AuthorizedHttpAdapter, LocalMediaAdapter, PublicRadioAdapter, RadioStation, SourceRegistry,
@@ -78,6 +78,7 @@ async fn main() -> NexoraResult<()> {
         sessions: sessions.clone(),
         sources: Arc::new(sources),
         password,
+        metrics: Arc::new(RuntimeMetrics::default()),
     };
 
     let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)

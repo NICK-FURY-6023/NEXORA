@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
@@ -20,11 +21,55 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
 
+#[derive(Debug, Default)]
+pub struct RuntimeMetrics {
+    active_sessions: AtomicU64,
+    api_requests: AtomicU64,
+    search_requests: AtomicU64,
+    stream_bytes: AtomicU64,
+    errors: AtomicU64,
+}
+
+impl RuntimeMetrics {
+    pub fn active_sessions(&self) -> u64 {
+        self.active_sessions.load(Ordering::Relaxed)
+    }
+
+    pub fn session_created(&self) {
+        self.active_sessions.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn session_stopped(&self) {
+        let _ = self
+            .active_sessions
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                Some(value.saturating_sub(1))
+            });
+    }
+
+    pub fn request(&self) {
+        self.api_requests.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn search(&self) {
+        self.search_requests.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn streamed(&self, bytes: usize) {
+        self.stream_bytes.fetch_add(bytes as u64, Ordering::Relaxed);
+    }
+
+    pub fn error(&self) {
+        self.errors.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub sessions: Arc<SessionManager>,
     pub sources: Arc<SourceRegistry>,
     pub password: Option<String>,
+    pub metrics: Arc<RuntimeMetrics>,
 }
 
 #[derive(Debug)]
@@ -133,6 +178,7 @@ pub struct SearchQuery {
 }
 
 fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), ApiError> {
+    state.metrics.request();
     let Some(expected) = state.password.as_deref() else {
         return Ok(());
     };
@@ -144,6 +190,7 @@ fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), ApiError> {
     if supplied == expected {
         Ok(())
     } else {
+        state.metrics.error();
         Err(ApiError::unauthorized())
     }
 }
@@ -183,6 +230,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/metrics", get(metrics))
         .route("/ws/v1/sessions/{id}", get(websocket_events))
         .route("/v4/info", get(lavalink_info))
+        .route("/v4/stats", get(lavalink_stats))
+        .route("/v4/routeplanner/status", get(lavalink_routeplanner_status))
         .route("/v4/loadtracks", get(lavalink_loadtracks))
         .route("/v4/sessions", post(lavalink_create_session))
         .route(
@@ -197,7 +246,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthStatus> {
     Json(HealthStatus {
         service: nexora_common::ServiceName::Gateway,
         healthy: true,
-        message: format!("sessions={}", state.sessions.subscribe().try_recv().is_ok()),
+        message: format!("sessions={}", state.metrics.active_sessions()),
     })
 }
 
@@ -230,6 +279,7 @@ async fn search(
     Json(request): Json<SearchRequest>,
 ) -> Result<Json<Value>, ApiError> {
     authorize(&headers, &state)?;
+    state.metrics.search();
     let mut results = state
         .sources
         .search(&request.query, &internal_auth())
@@ -255,6 +305,7 @@ async fn create_session(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     authorize(&headers, &state)?;
     let response = state.sessions.create_from_request(request).await?;
+    state.metrics.session_created();
     Ok((StatusCode::CREATED, Json(json!(response))))
 }
 
@@ -310,6 +361,7 @@ async fn stop(
     authorize(&headers, &state)?;
     let session_id = parse_session_id(&id)?;
     state.sessions.stop(&session_id).await?;
+    state.metrics.session_stopped();
     Ok(Json(json!({ "status": "stopped" })))
 }
 
@@ -410,6 +462,7 @@ async fn stream_audio(
     let bytes = tokio::fs::read(&output)
         .await
         .map_err(|_| ApiError::not_found())?;
+    state.metrics.streamed(bytes.len());
     let _ = tokio::fs::remove_file(&output).await;
     Ok((
         StatusCode::OK,
@@ -425,9 +478,11 @@ async fn metrics(
 ) -> Result<Json<Value>, ApiError> {
     authorize(&headers, &state)?;
     Ok(Json(json!({
-        "nexora_active_sessions": 0,
-        "nexora_stream_bytes_total": 0,
-        "note": "counters are placeholders until runtime instrumentation is wired"
+        "nexora_active_sessions": state.metrics.active_sessions(),
+        "nexora_api_requests_total": state.metrics.api_requests.load(Ordering::Relaxed),
+        "nexora_search_requests_total": state.metrics.search_requests.load(Ordering::Relaxed),
+        "nexora_stream_bytes_total": state.metrics.stream_bytes.load(Ordering::Relaxed),
+        "nexora_api_errors_total": state.metrics.errors.load(Ordering::Relaxed)
     })))
 }
 
@@ -469,6 +524,30 @@ async fn forward_events(
             Err(RecvError::Closed) => break,
         }
     }
+}
+
+async fn lavalink_stats(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
+    authorize(&headers, &state)?;
+    Ok(Json(json!({
+        "op": "stats",
+        "players": state.metrics.active_sessions(),
+        "playingPlayers": state.metrics.active_sessions(),
+        "uptime": 0,
+        "memory": { "free": 0, "used": 0, "allocated": 0, "reservable": 0 },
+        "cpu": { "cores": 0, "systemLoad": 0.0, "processLoad": 0.0 },
+        "frameStats": null
+    })))
+}
+
+async fn lavalink_routeplanner_status(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
+    authorize(&headers, &state)?;
+    Ok(Json(json!({ "class": null, "details": {} })))
 }
 
 async fn lavalink_info() -> Json<Value> {
