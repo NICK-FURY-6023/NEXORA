@@ -4,6 +4,12 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - Phase 4b Internal gRPC
+
+- `nexora-grpc` with `nexora.v1.SessionService` protobuf contract and tonic server.
+- gRPC session lifecycle RPCs sharing the HTTP session manager.
+- Live client example and integration test.
+
 ### Added - Phase 4a Hosted Server
 
 - `nexora-session` and `nexora-server` with NEXORA REST/WebSocket API and Lavalink-compatible `/v4` surface.
@@ -32,7 +38,7 @@ All notable changes to NEXORA are documented here.
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace` (62 tests passed); live REST + WebSocket smoke test; end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
+- `cargo test --workspace` (63 tests passed); live REST, WebSocket, and gRPC smoke tests; end-to-end WAV to Ogg Opus conversion; short Criterion benchmark run
 
 ### Not included
 

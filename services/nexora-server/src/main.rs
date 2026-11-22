@@ -7,12 +7,16 @@ use clap::Parser;
 use nexora_audio_types::AudioCodec;
 use nexora_config::NexoraConfig;
 use nexora_error::NexoraResult;
+use nexora_grpc::NexoraGrpcService;
+use nexora_grpc::nexora::session_service_server::SessionServiceServer;
 use nexora_server::{AppState, build_router};
 use nexora_session::SessionManager;
 use nexora_source_framework::{
     AuthorizedHttpAdapter, LocalMediaAdapter, PublicRadioAdapter, RadioStation, SourceRegistry,
 };
 use nexora_telemetry::init_tracing;
+use tokio_stream::wrappers::TcpListenerStream;
+use tonic::transport::Server;
 
 #[derive(Debug, Parser)]
 #[command(name = "nexora-server", version, about = "NEXORA hosted audio server")]
@@ -25,6 +29,9 @@ struct Args {
 
     #[arg(long)]
     port: Option<u16>,
+
+    #[arg(long, default_value_t = 9090)]
+    grpc_port: u16,
 
     #[arg(long)]
     password: Option<String>,
@@ -66,11 +73,34 @@ async fn main() -> NexoraResult<()> {
         .or_else(|| env::var("NEXORA_SERVER_PASSWORD").ok())
         .filter(|value| !value.is_empty());
 
+    let sessions = Arc::new(SessionManager::new());
     let state = AppState {
-        sessions: Arc::new(SessionManager::new()),
+        sessions: sessions.clone(),
         sources: Arc::new(sources),
         password,
     };
+
+    let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)
+        .parse()
+        .map_err(|_| nexora_error::NexoraError::invalid_input("invalid gRPC bind address"))?;
+    let grpc_sessions = sessions.clone();
+    tokio::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind(grpc_address).await {
+            Ok(listener) => listener,
+            Err(error) => {
+                tracing::error!(%error, %grpc_address, "cannot bind gRPC address");
+                return;
+            }
+        };
+        let service = NexoraGrpcService::new(grpc_sessions);
+        if let Err(error) = Server::builder()
+            .add_service(SessionServiceServer::new(service))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+        {
+            tracing::error!(%error, "gRPC server failed");
+        }
+    });
 
     let address: SocketAddr = format!("{}:{}", config.server.host, config.server.port)
         .parse()
@@ -81,7 +111,7 @@ async fn main() -> NexoraResult<()> {
             nexora_error::NexoraError::io_with_source("cannot bind server address", error)
         })?;
 
-    tracing::info!(%address, codec = %AudioCodec::Opus, "nexora server listening");
+    tracing::info!(%address, %grpc_address, codec = %AudioCodec::Opus, "nexora server listening");
     axum::serve(listener, build_router(state))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;

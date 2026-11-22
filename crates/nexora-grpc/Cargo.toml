@@ -1,0 +1,25 @@
+[package]
+name = "nexora-grpc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+tonic = { workspace = true }
+prost = { workspace = true }
+tonic-prost = { workspace = true }
+tokio = { workspace = true }
+nexora-error = { path = "../nexora-error" }
+nexora-common = { path = "../nexora-common" }
+nexora-audio-types = { path = "../nexora-audio-types" }
+nexora-protocol = { path = "../nexora-protocol" }
+nexora-session = { path = "../nexora-session" }
+
+[build-dependencies]
+tonic-prost-build = "=0.14.9"
+protoc-bin-vendored = "=3.3.0"
+
+[dev-dependencies]
+tokio-stream = "=0.1.19"

@@ -9,6 +9,7 @@ members = [
     "crates/nexora-source-api",
     "crates/nexora-source-framework",
     "crates/nexora-session",
+    "crates/nexora-grpc",
     "crates/nexora-protocol",
     "crates/nexora-config",
     "crates/nexora-telemetry",
@@ -43,3 +44,7 @@ audioadapter = "=5.0.0"
 criterion = "=0.8.2"
 async-trait = "=0.1.92"
 axum = { version = "=0.8.9", features = ["ws"] }
+tonic = { version = "=0.14.9", features = ["transport"] }
+prost = "=0.14.6"
+tonic-prost = "=0.14.9"
+tokio-stream = "=0.1.19"

@@ -2,7 +2,7 @@
 
 ## Phase 1 status
 
-Phase 4a implements REST and WebSocket endpoints in `nexora-server`. gRPC remains planned.
+Phase 4a implements REST and WebSocket endpoints in `nexora-server`. Phase 4b adds internal gRPC via `nexora.v1.SessionService`.
 
 NEXORA API: `/health`, `/api/v1/info`, `/api/v1/sources`, `/api/v1/search`, session create/read/play/pause/resume/stop/seek/volume/queue/stream, `/api/v1/metrics`, and `/ws/v1/sessions/{id}`.
 

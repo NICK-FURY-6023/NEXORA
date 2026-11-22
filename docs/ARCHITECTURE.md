@@ -40,6 +40,14 @@ crates/nexora-session         -> session lifecycle, queue, event broadcast
 services/nexora-server        -> Axum REST + WebSocket, /api/v1 and /v4 surfaces
 ```
 
+### Internal RPC (Phase 4b)
+
+```text
+proto/nexora.proto        -> nexora.v1.SessionService contract
+crates/nexora-grpc        -> tonic server/client, shared SessionManager
+services/nexora-server    -> gRPC listener on --grpc-port (default 9090)
+```
+
 ## Dependency direction
 
 ```text
@@ -75,4 +83,4 @@ Audio frames must never be routed through the gateway. Gateway owns commands and
 
 ## Deferred to later phases
 
-Internal gRPC and full Lavalink client conformance (Phase 4 remainder), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).
+Full Lavalink client conformance and runtime metrics (Phase 4 remainder), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).

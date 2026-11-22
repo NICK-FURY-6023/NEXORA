@@ -1,8 +1,17 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 4a - Hosted HTTP/WebSocket Surface
+## Current milestone: Phase 4b - Internal gRPC
 
 Status: **implemented and verified** on 2026-11-22.
+
+### Implemented in Phase 4b
+
+- `nexora-grpc` with a versioned `nexora.v1.SessionService` protobuf contract (tonic/prost, vendored protoc).
+- gRPC RPCs: `CreateSession`, `GetSession`, `Play`, `Pause`, `Stop`, backed by the same in-memory `SessionManager` as the HTTP surface.
+- `nexora-server` starts the gRPC listener alongside REST/WebSocket; `--grpc-port` (default 9090) configures it.
+- Live gRPC smoke: `session=nx_session_1 created_status=created live_status=created`.
+
+Phase 4b adds 1 integration test and 1 example client; the workspace total is now 63 passing tests.
 
 ### Implemented in Phase 4a
 
@@ -68,7 +77,7 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Next milestone
 
-Remaining Phase 4 work: internal gRPC contracts, runtime metric counters, and broader Lavalink client conformance.
+Remaining Phase 4 work: runtime metric counters and broader Lavalink client conformance.
 Next milestone after that: Phase 5 SDKs.
 
 ### Status policy

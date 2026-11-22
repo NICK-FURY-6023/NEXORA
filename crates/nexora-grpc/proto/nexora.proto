@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package nexora.v1;
+
+service SessionService {
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc GetSession(SessionRequest) returns (SessionState);
+  rpc Play(PlayCommand) returns (Empty);
+  rpc Pause(SessionRequest) returns (Empty);
+  rpc Stop(SessionRequest) returns (Empty);
+}
+
+message Empty {}
+
+message AudioFormat {
+  uint32 sample_rate = 1;
+  uint32 channels = 2;
+  string codec = 3;
+}
+
+message CreateSessionRequest {
+  string application = 1;
+  string version = 2;
+  AudioFormat output = 3;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  string status = 2;
+  string engine = 3;
+  string api_version = 4;
+}
+
+message SessionRequest {
+  string session_id = 1;
+}
+
+message SessionState {
+  string session_id = 1;
+  string status = 2;
+  uint64 position_ms = 3;
+  uint32 volume = 4;
+}
+
+message PlayCommand {
+  string session_id = 1;
+  string track_id = 2;
+  uint64 start_position_ms = 3;
+}

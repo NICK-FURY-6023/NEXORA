@@ -9,6 +9,8 @@ license.workspace = true
 axum = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
@@ -21,6 +23,7 @@ nexora-telemetry = { path = "../../crates/nexora-telemetry" }
 nexora-source-api = { path = "../../crates/nexora-source-api" }
 nexora-source-framework = { path = "../../crates/nexora-source-framework" }
 nexora-session = { path = "../../crates/nexora-session" }
+nexora-grpc = { path = "../../crates/nexora-grpc" }
 nexora-audio-pipeline = { path = "../../crates/nexora-audio-pipeline" }
 
 [dev-dependencies]
