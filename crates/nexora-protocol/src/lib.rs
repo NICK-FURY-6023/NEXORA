@@ -4,6 +4,13 @@ use nexora_audio_types::AudioFormat;
 use nexora_common::{ApiVersion, ApplicationId, ServiceName, SessionId, TimestampMs, TrackId};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SearchRequest {
+    pub query: String,
+    pub sources: Option<Vec<String>>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     pub application: ApplicationId,
     pub version: String,

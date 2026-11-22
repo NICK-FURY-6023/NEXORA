@@ -1,8 +1,20 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 3 - Source Framework
+## Current milestone: Phase 4a - Hosted HTTP/WebSocket Surface
 
 Status: **implemented and verified** on 2026-11-22.
+
+### Implemented in Phase 4a
+
+- `nexora-session`: in-memory session lifecycle with queue, volume, seek, pause/resume/stop and broadcast event envelopes.
+- `nexora-server`: Axum server with NEXORA `/api/v1` REST endpoints, WebSocket events at `/ws/v1/sessions/{id}`, and a Lavalink-compatible `/v4` surface (`info`, `loadtracks`, sessions, player GET/PATCH, WebSocket events).
+- Bearer-token authorization via `--password` or `NEXORA_SERVER_PASSWORD`; unset password keeps local development open.
+- Consistent `{ error: { code, message } }` API errors.
+- Local-file audio streaming endpoint that decodes/resamples/encodes to Ogg Opus through the Phase 2 pipeline.
+
+Live smoke: `/health` 200, `/v4/info` 200, NEXORA session create 201, play 200, Lavalink session create 200, and a real WebSocket `session_ready` event after a volume change.
+
+Phase 4a adds 5 tests; the workspace total is now 62 passing tests.
 
 ### Implemented in Phase 3
 
@@ -56,7 +68,8 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Next milestone
 
-Phase 4 - API Infrastructure. Deliverable: Lavalink-compatible hosted server surface (REST commands, WebSocket events, sessions/players) plus the NEXORA `/api/v1` contract.
+Remaining Phase 4 work: internal gRPC contracts, runtime metric counters, and broader Lavalink client conformance.
+Next milestone after that: Phase 5 SDKs.
 
 ### Status policy
 

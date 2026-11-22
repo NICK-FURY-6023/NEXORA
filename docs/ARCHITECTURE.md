@@ -33,6 +33,13 @@ crates/nexora-source-api       -> AudioSource trait, auth/track/resolution contr
 crates/nexora-source-framework -> registry, ranking, timeout, cancellation, adapters
 ```
 
+### Hosted server (Phase 4a)
+
+```text
+crates/nexora-session         -> session lifecycle, queue, event broadcast
+services/nexora-server        -> Axum REST + WebSocket, /api/v1 and /v4 surfaces
+```
+
 ## Dependency direction
 
 ```text
@@ -68,4 +75,4 @@ Audio frames must never be routed through the gateway. Gateway owns commands and
 
 ## Deferred to later phases
 
-HTTP/WebSocket/gRPC APIs and Lavalink-compatible server surface (Phase 4), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).
+Internal gRPC and full Lavalink client conformance (Phase 4 remainder), SDKs (Phase 5), clustering (Phase 6), WASM plugins (Phase 7), and production hardening (Phase 8).

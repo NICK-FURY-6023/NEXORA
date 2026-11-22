@@ -1,0 +1,27 @@
+[package]
+name = "nexora-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+nexora-error = { path = "../../crates/nexora-error" }
+nexora-common = { path = "../../crates/nexora-common" }
+nexora-config = { path = "../../crates/nexora-config" }
+nexora-audio-types = { path = "../../crates/nexora-audio-types" }
+nexora-protocol = { path = "../../crates/nexora-protocol" }
+nexora-telemetry = { path = "../../crates/nexora-telemetry" }
+nexora-source-api = { path = "../../crates/nexora-source-api" }
+nexora-source-framework = { path = "../../crates/nexora-source-framework" }
+nexora-session = { path = "../../crates/nexora-session" }
+nexora-audio-pipeline = { path = "../../crates/nexora-audio-pipeline" }
+
+[dev-dependencies]
+tower = "=0.5.3"

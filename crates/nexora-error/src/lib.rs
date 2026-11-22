@@ -645,7 +645,11 @@ mod tests {
         assert!(!owned_error.to_string().contains("dynamic-sensitive-value"));
         assert!(!format!("{owned_error:?}").contains("dynamic-sensitive-value"));
         assert!(owned_error.source().is_none());
-        assert!(!borrowed_error.to_string().contains("dynamic-sensitive-value"));
+        assert!(
+            !borrowed_error
+                .to_string()
+                .contains("dynamic-sensitive-value")
+        );
         assert!(!format!("{borrowed_error:?}").contains("dynamic-sensitive-value"));
         assert!(borrowed_error.source().is_none());
     }

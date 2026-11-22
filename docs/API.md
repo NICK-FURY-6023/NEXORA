@@ -2,7 +2,11 @@
 
 ## Phase 1 status
 
-No public HTTP, WebSocket, or gRPC endpoint is implemented in Phase 1. The gateway binary is a skeleton.
+Phase 4a implements REST and WebSocket endpoints in `nexora-server`. gRPC remains planned.
+
+NEXORA API: `/health`, `/api/v1/info`, `/api/v1/sources`, `/api/v1/search`, session create/read/play/pause/resume/stop/seek/volume/queue/stream, `/api/v1/metrics`, and `/ws/v1/sessions/{id}`.
+
+Lavalink-compatible surface: `/v4/info`, `/v4/loadtracks`, `/v4/sessions`, `/v4/sessions/{id}/player`, and `/v4/sessions/{id}` WebSocket events.
 
 Versioned contract types live in the `nexora-protocol` crate:
 
@@ -14,7 +18,7 @@ Versioned contract types live in the `nexora-protocol` crate:
 - `SessionEventType`
 - `Command`
 
-These are Serde-serializable Rust contracts and have round-trip tests. They are the basis for the Phase 4 API, not a published wire API yet.
+These contracts now back the implemented HTTP surface; contract tests cover the JSON shapes used by the server.
 
 ## Planned endpoint groups
 
