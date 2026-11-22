@@ -20,7 +20,7 @@ Status: **implemented and verified** on 2026-11-22.
   --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
   82 passing tests. Live server smoke delivered 43 raw Opus packets in 1.3 s
   (first bytes `fc7f06de6f6e6d19`) and advanced session position to 900 ms.
-- Deferred: packet-level pause/seek timing tests, Discord voice sender, and `/v4/decodetrack`.
+- Deferred: queue auto-advance, packet-level pause/seek timing tests, Discord voice sender, and `/v4/decodetrack`.
 
 ### Implemented after Phase 4b
 

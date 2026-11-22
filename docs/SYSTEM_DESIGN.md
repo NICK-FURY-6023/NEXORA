@@ -273,7 +273,7 @@ timing. Those measurements belong to slice 2 along with auto-advance.
 |---|---|---|
 | 0 (done) | Workspace, protocol, config, errors, audio crates, source framework, REST/WS/gRPC, SDKs, deployment, partial v4 | 75 tests; REA + docs recorded |
 | 1 (done) | Real-time local-file playback + dedicated binary Opus WS + working controls | fmt/clippy; tests green; live Opus packets |
-| 2 (done) | Queue auto-advance + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
+| 2 | Queue auto-advance + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
 | 3 | Discord voice sender: voice update REST, voice gateway v8, UDP, encryption, DAVE boundary | Live test against a disposable voice server or documented harness |
 | 4 | `/v4/decodetrack`, filters, resumable sessions, frame stats, real CPU/memory metrics | Lavalink client compatibility tests |
 | 5 | Durable sessions, clustering, WASM plugins, production hardening | Deployment and chaos/conformance tests |
