@@ -22,6 +22,14 @@ Versioned contract types live in the `nexora-protocol` crate:
 
 These contracts now back the implemented HTTP surface; contract tests cover the JSON shapes used by the server.
 
+## Native audio delivery
+
+`GET /ws/v1/sessions/{id}/audio` is the data-plane WebSocket. It uses the same
+Bearer authorization as the REST API. Each binary message is one raw 20 ms Opus
+packet; message order is packet order. The nominal rate is 50 packets/second.
+Consumers that lag skip missed broadcasts rather than blocking the producer.
+The event WebSocket at `/ws/v1/sessions/{id}` stays text-only.
+
 ## Planned endpoint groups
 
 See `README.md` section 7 for the complete planned list: health/info, sources, search, resolve, sessions, playback controls, filters, queue, stream, and metrics. Base path: `/api/v1/`.

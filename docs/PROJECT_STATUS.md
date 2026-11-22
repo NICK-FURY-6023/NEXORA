@@ -4,6 +4,24 @@
 
 Status: **implemented and verified** on 2026-11-22.
 
+### Slice 1: real-time local playback (2026-11-22)
+
+- `POST /api/v1/sessions/{id}/play` now resolves the track before mutating
+  session state, prepares 20 ms Opus packets through the audio pipeline, and
+  runs one paced playback task per session.
+- `GET /ws/v1/sessions/{id}/audio` streams raw Opus packets as binary messages.
+  The event WebSocket remains text-only.
+- Pause/resume/seek/volume/stop send typed `PlaybackSignal`s to the playback
+  task; volume is applied as PCM gain before encoding; `TrackEnded` and
+  `TrackFailed` are real events.
+- `nexora-session` owns a bounded per-session `PlaybackRegistry`; blocking
+  locks were replaced with async locks so the runtime is never blocked.
+- Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
+  82 passing tests. Live server smoke delivered 43 raw Opus packets in 1.3 s
+  (first bytes `fc7f06de6f6e6d19`) and advanced session position to 900 ms.
+- Deferred: packet-level pause/seek timing tests, Discord voice sender, and `/v4/decodetrack`.
+
 ### Implemented after Phase 4b
 
 - Runtime API counters exposed through `/api/v1/metrics` and `/v4/stats`.
@@ -12,7 +30,7 @@ Status: **implemented and verified** on 2026-11-22.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
 - ADR-015..020 and example monitoring configs.
 
-Workspace total is now 75 passing Rust tests.
+Workspace total is now 82 passing Rust tests.
 
 ### Lavalink v4 parity (after the Phase 5-7 foundations)
 
