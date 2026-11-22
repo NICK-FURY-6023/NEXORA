@@ -372,7 +372,7 @@ mod tests {
         )
         .expect("write temporary TOML file");
 
-        let result = NexoraConfig::load_with_env_getter(Some(&path), &|_| None);
+        let result = NexoraConfig::load_with_env_getter(Some(path.as_path()), &|_| None);
         let _ = fs::remove_file(&path);
         let config = result.expect("load TOML configuration");
 
@@ -403,8 +403,8 @@ mod tests {
             ("NEXORA_SERVER__HOST", "192.0.2.2"),
             ("NEXORA_SERVER__PORT", "9200"),
         ]);
-        let result = NexoraConfig::load_with_env_getter(Some(&path), &|name| {
-            values.get(name).cloned()
+        let result = NexoraConfig::load_with_env_getter(Some(path.as_path()), &|name| {
+            values.get(name).map(|value| (*value).to_string())
         });
         let _ = fs::remove_file(&path);
         let config = result.expect("load configuration with environment overrides");
@@ -432,7 +432,7 @@ mod tests {
         ]);
 
         let config = NexoraConfig::load_with_env_getter(None, &|name| {
-            values.get(name).cloned()
+            values.get(name).map(|value| (*value).to_string())
         })
         .expect("load environment configuration");
 
