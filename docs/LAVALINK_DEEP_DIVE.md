@@ -130,6 +130,8 @@ Playback: client sends `PATCH /v4/players/{guildId}` with `encodedTrack` → `de
 
 → resample to Discord Opus (48 kHz stereo, 20 ms frames) → `AudioFrameProvider` writes Opus frames to `ByteBuf` → sent over Discord voice UDP gateway.
 
+**DAVE E2EE voice (v4.2.0+):** Voice state carries an additional `channelId` field for Discord's DAVE (Discord Audio Voice Encryption) end-to-end encryption. (OBSERVED from changelog + protocol `VoiceState.channelId?: String?`.)
+
 Events: `EventEmitter` (`AudioEventAdapter`) → `onTrackStart`/`onTrackEnd`/`onTrackException`/`onTrackStuck` → WS `event` op + `playerUpdate`.
 
 ### 3.6 Encoded-track format (OBSERVED mechanism, INFERRED byte layout)

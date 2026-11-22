@@ -255,12 +255,19 @@ Observed in `PluginManager.kt`:
 4. `loadJars()` builds a child `URLClassLoader` from plugin jars, loads all `.class` entries under allowed package paths, and parses `lavalink-plugins/*.properties` manifests (`name`, `path`, `version`).
 5. Manifests are merged into `pluginManifests`, which drive `componentScan` paths in the main context — so plugin `@Service` beans (e.g. `AudioSourceManager`, `MediaContainerProbe`, `RestInterceptor`, `AudioPluginInfoModifier`, `AudioFilterExtension`) are auto-registered as Spring beans.
 
-**Plugin extension points (observed from plugin-api docs + source imports):**
-- `AudioSourceManager` (bean) — add a source
-- `MediaContainerProbe` (bean) — HTTP/local container probe
-- `RestInterceptor` — intercept/modify REST endpoints
-- `AudioPluginInfoModifier` — add custom info to track/playlist JSON
-- `AudioFilterExtension` — custom DSP filter (used by `FilterChain.parsePluginConfigs`)
+**Plugin API interfaces (OBSERVED from `plugin-api/` source):**
+
+| Interface | Role |
+|-----------|------|
+| `IPlayer` | Controls playback (play/stop/pause/seek/setVolume), exposes Lavaplayer `AudioPlayer` |
+| `ISocketContext` | Represents a WS connection; has `players` map, `sendMessage()`, `destroyPlayer()`, `closeWebSocket()` |
+| `ISocketServer` | Server-level; exposes `sessions` and `resumableSessions` maps |
+| `PluginEventHandler` | Handle events |
+| `RestInterceptor` | Intercept REST calls |
+| `AudioFilterExtension` | Custom audio filters |
+| `AudioPluginInfoModifier` | Modify plugin info |
+
+Plugins are `.jar` files dropped in a `plugins/` directory; Lavalink v4 added a default plugin repository for auto-download.
 
 ---
 
@@ -294,7 +301,7 @@ Observed in `PluginManager.kt`:
 2. Lavaplayer source is NOT inside this JAR's server classes; it is a separate dependency jar. Its `encodeTrack`/`decodeTrack` byte format and `AudioSourceManager` implementations were not reverse-engineered here.
 3. Static analysis cannot confirm runtime behaviour (thread scheduling, frame pacing, actual dependency loading, network behaviour).
 4. REA extraction limitation: "nested archive contents remain represented by their containing file" — inner jars' classes were extracted separately for `javap` but REA did not recurse into them for analysis.
-5. Plugin `@Service` bean registration and `AudioFilterExtension` contract inferred from docs + imports, not from decompiled plugin bytecode.
+5. Plugin `@Service` bean registration OBSERVED from `PluginManager.kt`; `AudioFilterExtension`/`AudioSourceManager` interface contracts now OBSERVED from `plugin-api/` source — not from decompiled plugin bytecode.
 
 ---
 
