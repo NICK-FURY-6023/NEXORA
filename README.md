@@ -19,9 +19,11 @@
 
 NEXORA is an independent audio infrastructure written primarily in Rust. It aims to provide media ingestion, decoding, audio processing, transcoding, session orchestration, and audio delivery through documented interfaces that applications can consume from different programming languages.
 
+NEXORA is built from scratch as an independent Rust alternative to hosted audio servers such as Lavalink. It is not a wrapper around Lavalink, not a JVM application, and not dependent on a third-party audio server. The practical goal is the same hosting experience: run one server, expose REST commands and WebSocket events, create per-application sessions, resolve media through pluggable source adapters, and deliver Opus audio to a connected client. NEXORA keeps its own Rust-native core and adds a Lavalink-compatible surface where it helps existing Discord bots migrate, while its universal `/api/v1` contract remains the long-term integration point for every application ecosystem.
+
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Phase 2 (standalone audio engine) is implemented and verified: local decoding, resampling, PCM/Opus output, a CLI, tests, and a benchmark. The source framework, APIs, SDKs, cluster, and plugin runtime remain planned until their own phases deliver code and tests.
+**Project status:** Phase 2 (standalone audio engine) is implemented and verified: local decoding, resampling, PCM/Opus output, a CLI, tests, and a benchmark. The next milestones are the source framework and a Lavalink-compatible hosted server surface; NEXORA-native APIs, SDKs, cluster, and plugins follow in later phases.
 
 ---
 
@@ -1303,8 +1305,8 @@ Phases 1 and 2 are implemented and verified. Later phases remain planned until t
 
 | Area | Current status in this specification |
 |---|---|
-| Product vision | Defined |
-| Target architecture | Defined; Phase 1 structure implemented |
+| Product vision | Defined: from-scratch Rust alternative with a Lavalink-like hosted server experience |
+| Target architecture | Defined; Phase 1/2 structure implemented |
 | Rust technology stack | Foundation and audio deps pinned; API deps planned for Phase 4 |
 | Audio engine | Implemented (Phase 2): decode, resample, PCM/Opus output, CLI |
 | Source adapters | Planned (Phase 3) |

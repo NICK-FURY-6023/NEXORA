@@ -5,6 +5,37 @@ use thiserror::Error;
 
 const REDACTED_CONTEXT: &str = "<dynamic context omitted>";
 
+/// Display-safe error context.
+///
+/// The inner value is private so downstream crates cannot bypass redaction by
+/// constructing a [`NexoraError`] variant directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SafeErrorMessage(String);
+
+impl SafeErrorMessage {
+    fn from_static(message: &'static str) -> Self {
+        Self(message.to_owned())
+    }
+}
+
+impl fmt::Display for SafeErrorMessage {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for SafeErrorMessage {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&'static str> for SafeErrorMessage {
+    fn from(message: &'static str) -> Self {
+        Self::from_static(message)
+    }
+}
+
 /// A boxed error that can be preserved as the source of a [`NexoraError`].
 pub type NexoraSource = Box<dyn Error + Send + Sync + 'static>;
 
@@ -17,6 +48,7 @@ mod sealed {
 
 impl sealed::Sealed for &'static str {}
 impl sealed::Sealed for String {}
+impl sealed::Sealed for &String {}
 
 /// Converts caller-provided context into a message safe for error output.
 ///
@@ -26,18 +58,24 @@ impl sealed::Sealed for String {}
 #[allow(private_bounds)]
 pub trait IntoErrorMessage: sealed::Sealed {
     /// Converts the value into a display-safe message.
-    fn into_error_message(self) -> String;
+    fn into_error_message(self) -> SafeErrorMessage;
 }
 
 impl IntoErrorMessage for &'static str {
-    fn into_error_message(self) -> String {
-        self.to_owned()
+    fn into_error_message(self) -> SafeErrorMessage {
+        SafeErrorMessage::from_static(self)
     }
 }
 
 impl IntoErrorMessage for String {
-    fn into_error_message(self) -> String {
-        REDACTED_CONTEXT.to_owned()
+    fn into_error_message(self) -> SafeErrorMessage {
+        SafeErrorMessage(REDACTED_CONTEXT.to_owned())
+    }
+}
+
+impl IntoErrorMessage for &String {
+    fn into_error_message(self) -> SafeErrorMessage {
+        SafeErrorMessage(REDACTED_CONTEXT.to_owned())
     }
 }
 
@@ -52,7 +90,7 @@ pub enum NexoraError {
     #[error("configuration error: {message}")]
     Config {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -61,7 +99,7 @@ pub enum NexoraError {
     #[error("protocol error: {message}")]
     Protocol {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -70,7 +108,7 @@ pub enum NexoraError {
     #[error("service error: {message}")]
     Service {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -79,7 +117,7 @@ pub enum NexoraError {
     #[error("audio error: {message}")]
     Audio {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -88,7 +126,7 @@ pub enum NexoraError {
     #[error("io error: {message}")]
     Io {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -97,7 +135,7 @@ pub enum NexoraError {
     #[error("invalid input: {message}")]
     InvalidInput {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -106,7 +144,7 @@ pub enum NexoraError {
     #[error("internal error: {message}")]
     Internal {
         /// Display-safe description of the failed operation.
-        message: String,
+        message: SafeErrorMessage,
         /// Optional underlying error.
         #[source]
         source: Option<NexoraSource>,
@@ -131,6 +169,14 @@ impl NexoraError {
             message: message.into_error_message(),
             source: Some(Box::new(source)),
         }
+    }
+
+    /// Creates a configuration error and attaches a source to it.
+    pub fn config_with_context(
+        message: impl IntoErrorMessage,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::config_with_source(message, source)
     }
 
     /// Creates a protocol error.
@@ -255,7 +301,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Config {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Config {
                     message: previous_message,
                     source: previous_source,
@@ -265,7 +311,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Protocol {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Protocol {
                     message: previous_message,
                     source: previous_source,
@@ -275,7 +321,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Service {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Service {
                     message: previous_message,
                     source: previous_source,
@@ -285,7 +331,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Audio {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Audio {
                     message: previous_message,
                     source: previous_source,
@@ -295,7 +341,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Io {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Io {
                     message: previous_message,
                     source: previous_source,
@@ -305,7 +351,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::InvalidInput {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::InvalidInput {
                     message: previous_message,
                     source: previous_source,
@@ -315,7 +361,7 @@ impl NexoraError {
                 message: previous_message,
                 source: previous_source,
             } => Self::Internal {
-                message: context.to_owned(),
+                message: SafeErrorMessage::from_static(context),
                 source: Some(Box::new(Self::Internal {
                     message: previous_message,
                     source: previous_source,
@@ -480,6 +526,26 @@ mod tests {
             .downcast_ref::<NexoraError>()
             .expect("the source should be a NEXORA error");
         assert_eq!(previous.to_string(), "invalid input: input is invalid");
+    }
+
+    #[test]
+    fn attached_context_preserves_an_existing_source_chain() {
+        let source = std::io::Error::new(std::io::ErrorKind::InvalidData, "source detail");
+        let error = NexoraError::config_with_source("configuration load failed", source)
+            .with_context("service startup failed");
+
+        let previous = error
+            .source()
+            .expect("the contextual error should have a source")
+            .downcast_ref::<NexoraError>()
+            .expect("the source should be a NEXORA error");
+        let original = previous
+            .source()
+            .expect("the previous error should preserve its source")
+            .downcast_ref::<std::io::Error>()
+            .expect("the original source should be an I/O error");
+
+        assert_eq!(original.kind(), std::io::ErrorKind::InvalidData);
     }
 
     #[test]

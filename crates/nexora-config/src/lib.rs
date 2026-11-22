@@ -211,15 +211,13 @@ impl NexoraConfig {
     }
 }
 
-fn apply_env_string<F>(getter: &F, name: &str, target: &mut String) -> NexoraResult<()>
+fn apply_env_string<F>(getter: &F, name: &str, target: &mut String)
 where
     F: Fn(&str) -> Option<String>,
 {
     if let Some(value) = getter(name) {
         *target = value;
     }
-
-    Ok(())
 }
 
 fn apply_env_value<T, F>(
@@ -245,7 +243,7 @@ fn apply_env_overrides<F>(config: &mut NexoraConfig, getter: &F) -> NexoraResult
 where
     F: Fn(&str) -> Option<String>,
 {
-    apply_env_string(getter, "NEXORA_SERVER__HOST", &mut config.server.host)?;
+    apply_env_string(getter, "NEXORA_SERVER__HOST", &mut config.server.host);
     apply_env_value(
         getter,
         "NEXORA_SERVER__PORT",
@@ -268,7 +266,7 @@ where
         getter,
         "NEXORA_AUDIO__DEFAULT_CODEC",
         &mut config.audio.default_codec,
-    )?;
+    );
     apply_env_value(
         getter,
         "NEXORA_AUDIO__SAMPLE_RATE",
@@ -299,7 +297,7 @@ where
         &mut config.cluster.enabled,
         "NEXORA_CLUSTER__ENABLED must be true or false",
     )?;
-    apply_env_string(getter, "NEXORA_CLUSTER__ROLE", &mut config.cluster.role)?;
+    apply_env_string(getter, "NEXORA_CLUSTER__ROLE", &mut config.cluster.role);
     apply_env_value(
         getter,
         "NEXORA_PLUGINS__ENABLED",
@@ -389,9 +387,36 @@ mod tests {
     }
 
     #[test]
+    fn environment_variables_override_toml_values() {
+        let path = unique_toml_path();
+        fs::write(
+            &path,
+            r#"
+                [server]
+                host = "10.0.0.1"
+                port = 9000
+            "#,
+        )
+        .expect("write temporary TOML file");
+
+        let values = HashMap::from([
+            ("NEXORA_SERVER__HOST", "192.0.2.2"),
+            ("NEXORA_SERVER__PORT", "9200"),
+        ]);
+        let result = NexoraConfig::load_with_env_getter(Some(&path), &|name| {
+            values.get(name).map(|value| (*value).to_owned())
+        });
+        let _ = fs::remove_file(&path);
+        let config = result.expect("load configuration with environment overrides");
+
+        assert_eq!(config.server.host, "192.0.2.2");
+        assert_eq!(config.server.port, 9200);
+    }
+
+    #[test]
     fn environment_variables_override_defaults() {
         let values = HashMap::from([
-            ("NEXORA_SERVER__HOST", "0.0.0.0"),
+            ("NEXORA_SERVER__HOST", "192.0.2.1"),
             ("NEXORA_SERVER__PORT", "9100"),
             ("NEXORA_ENGINE__WORKER_THREADS", "3"),
             ("NEXORA_ENGINE__MAX_SESSIONS", "77"),
@@ -411,7 +436,7 @@ mod tests {
         })
         .expect("load environment configuration");
 
-        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.host, "192.0.2.1");
         assert_eq!(config.server.port, 9100);
         assert_eq!(config.engine.worker_threads, 3);
         assert_eq!(config.engine.max_sessions, 77);

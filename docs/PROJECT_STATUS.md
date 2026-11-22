@@ -47,7 +47,7 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Next milestone
 
-Phase 3 - Source Framework. Deliverable: extensible, permission-aware source adapters for local media, public radio, and authorized HTTP streams.
+Phase 3 - Source Framework, followed by a Lavalink-compatible hosted server surface. Deliverable: extensible, permission-aware source adapters for local media, public radio, and authorized HTTP streams.
 
 ### Status policy
 
