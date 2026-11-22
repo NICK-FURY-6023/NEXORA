@@ -12,16 +12,16 @@
   <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
   <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
-  <img src="https://img.shields.io/badge/Status-Architecture%20%2F%20Planning-yellow" alt="Project status">
+  <img src="https://img.shields.io/badge/Status-Phase%201%20Foundation-green" alt="Project status">
 </p>
 
 > **One audio foundation. Multiple services. Any application ecosystem.**
 
-NEXORA is a proposed, independent audio infrastructure written primarily in Rust. It aims to provide media ingestion, decoding, audio processing, transcoding, session orchestration, and audio delivery through documented interfaces that applications can consume from different programming languages.
+NEXORA is an independent audio infrastructure written primarily in Rust. It aims to provide media ingestion, decoding, audio processing, transcoding, session orchestration, and audio delivery through documented interfaces that applications can consume from different programming languages.
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** This repository currently describes the target architecture and engineering plan. A feature, SDK, service, codec, integration, or performance target must not be considered implemented until its code, tests, and documentation demonstrate that it works.
+**Project status:** Phase 1 (Rust foundation) is implemented and verified with `cargo fmt`, `cargo clippy`, and `cargo test`. The audio engine, source framework, APIs, SDKs, cluster, and plugin runtime remain planned until their own phases deliver code and tests.
 
 ---
 
@@ -1299,20 +1299,20 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-NEXORA's architecture and roadmap are proposals until implemented and verified. Update this section as the repository evolves.
+Phase 1 (Rust foundation) is implemented and verified. Later phases remain planned until their code, tests, and documentation exist. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
 | Area | Current status in this specification |
 |---|---|
 | Product vision | Defined |
-| Target architecture | Proposed |
-| Rust technology stack | Proposed |
-| Audio engine | Not verified by this document |
-| Source adapters | Not verified by this document |
-| REST / WebSocket API | Proposed |
-| SDKs | Proposed |
+| Target architecture | Defined; Phase 1 structure implemented |
+| Rust technology stack | Foundation deps pinned; audio/API deps planned for later phases |
+| Audio engine | Planned (Phase 2); shared audio types only in Phase 1 |
+| Source adapters | Planned (Phase 3) |
+| REST / WebSocket API | Planned (Phase 4); gateway skeleton only in Phase 1 |
+| SDKs | Planned (Phase 5) |
 | Distributed cluster | Future phase |
 | Plugin runtime | Future phase |
-| Performance benchmarks | Not supplied by this document |
+| Performance benchmarks | Planned (Phase 2+); no results claimed yet |
 | Production readiness | Not established |
 
 **Status policy:** Only mark a feature as implemented when the repository contains the implementation and relevant tests. Only publish performance numbers with benchmark methodology, hardware details, software versions, and reproducible results.

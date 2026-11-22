@@ -1,0 +1,16 @@
+[package]
+name = "nexora-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+nexora-error = { path = "../../crates/nexora-error" }
+nexora-common = { path = "../../crates/nexora-common" }
+nexora-config = { path = "../../crates/nexora-config" }
+nexora-telemetry = { path = "../../crates/nexora-telemetry" }
+nexora-service = { path = "../../crates/nexora-service" }
