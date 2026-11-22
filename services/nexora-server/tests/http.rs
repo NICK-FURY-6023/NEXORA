@@ -1,8 +1,9 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use base64::Engine;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
 use nexora_session::SessionManager;
-use nexora_source_framework::SourceRegistry;
+use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -182,4 +183,58 @@ async fn lavalink_loadtracks_uses_v4_load_types() {
         ),
         "unexpected loadType: {load_type}"
     );
+}
+
+#[tokio::test]
+async fn lavalink_loadtracks_returns_v4_track_shape() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("nexora-parity-{unique}"));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("sample.wav"), b"not-a-real-wav").unwrap();
+
+    let sources = SourceRegistry::new();
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let state = AppState {
+        sessions: Arc::new(SessionManager::new()),
+        sources: Arc::new(sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+    };
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v4/loadtracks?identifier=sample.wav")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(value["loadType"], "search");
+    let track = &value["data"][0];
+    let encoded = track["encoded"].as_str().expect("encoded track");
+    assert!(
+        !base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(track["info"]["title"], "sample.wav");
+    assert_eq!(track["info"]["sourceName"], "local-media");
+    assert_eq!(track["info"]["isSeekable"], false);
+    assert_eq!(track["info"]["length"], 0);
+    assert_eq!(track["info"]["isStream"], false);
+    assert_eq!(track["pluginInfo"], serde_json::json!({}));
+
+    std::fs::remove_dir_all(&root).unwrap();
 }

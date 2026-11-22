@@ -993,6 +993,7 @@ name = "nexora-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "clap",
  "nexora-audio-pipeline",
  "nexora-audio-types",

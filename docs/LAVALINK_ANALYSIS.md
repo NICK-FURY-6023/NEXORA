@@ -99,8 +99,16 @@ First parity unit (done): `/v4/loadtracks` now returns v4 lowercase
 old non-standard `SEARCH_RESULT`, and `/v4/stats` uses `cpu.lavalinkLoad`
 instead of `cpu.processLoad`. Two RED-GREEN contract tests were added.
 
-Known remaining gap: the `data` array still contains NEXORA source metadata,
-not the full Lavalink `encoded`/`info` track shape. That is the next unit.
+Second parity unit (done): `/v4/loadtracks` now maps every result to the v4
+track shape: `encoded`, `info` (identifier, isSeekable, author, length,
+isStream, position, title, uri, artworkUrl, isrc, sourceName), `pluginInfo`,
+`userData`. The `encoded` string is an opaque NEXORA base64 JSON blob, not
+Lavalink's binary track format; clients must round-trip it through NEXORA
+rather than decode it with a Lavalink library. Integration test uses a real
+local-media adapter and decodes the blob to prove it is non-empty.
+
+Remaining gap: Lavalink binary track encoding and `/v4/decodetrack` are not
+implemented. That is a material compatibility boundary, not an accident.
 
 Next unit: contract tests comparing `/v4/info`, `/v4/loadtracks`, and
 player response shapes against the documented v4 shapes, followed by the

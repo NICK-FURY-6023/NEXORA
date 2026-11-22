@@ -9,13 +9,15 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use nexora_audio_pipeline::{OutputCodec, process_file};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::NexoraError;
 use nexora_protocol::{CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest};
 use nexora_session::SessionManager;
-use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackReference};
+use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackMetadata, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -561,6 +563,37 @@ async fn lavalink_info() -> Json<Value> {
     }))
 }
 
+fn lavalink_track(metadata: &TrackMetadata) -> Value {
+    let identifier = metadata.track_id.as_str();
+    let compact = json!({
+        "track_id": identifier,
+        "source_id": metadata.source_id,
+        "title": metadata.title,
+        "duration_ms": metadata.duration_ms,
+    });
+    let payload = serde_json::to_vec(&compact).unwrap_or_default();
+    let encoded = STANDARD.encode(payload);
+
+    json!({
+        "encoded": encoded,
+        "info": {
+            "identifier": identifier,
+            "isSeekable": metadata.duration_ms.is_some(),
+            "author": metadata.artist.clone().unwrap_or_else(|| "unknown".to_owned()),
+            "length": metadata.duration_ms.unwrap_or(0),
+            "isStream": false,
+            "position": 0,
+            "title": metadata.title,
+            "uri": Value::Null,
+            "artworkUrl": Value::Null,
+            "isrc": Value::Null,
+            "sourceName": metadata.source_id,
+        },
+        "pluginInfo": {},
+        "userData": {},
+    })
+}
+
 async fn lavalink_loadtracks(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -576,7 +609,8 @@ async fn lavalink_loadtracks(
     if results.is_empty() {
         return Ok(Json(json!({ "loadType": "empty", "data": null })));
     }
-    Ok(Json(json!({ "loadType": "search", "data": results })))
+    let tracks: Vec<Value> = results.iter().map(lavalink_track).collect();
+    Ok(Json(json!({ "loadType": "search", "data": tracks })))
 }
 
 async fn lavalink_create_session(

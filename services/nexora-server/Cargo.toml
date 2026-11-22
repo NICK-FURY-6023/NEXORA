@@ -13,6 +13,7 @@ tokio-stream = { workspace = true }
 tonic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+base64 = { workspace = true }
 tracing = { workspace = true }
 nexora-error = { path = "../../crates/nexora-error" }
 nexora-common = { path = "../../crates/nexora-common" }
