@@ -1,6 +1,8 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use base64::Engine;
+use nexora_common::SessionId;
+use nexora_protocol::SessionEventType;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
 use nexora_session::SessionManager;
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
@@ -8,7 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
 fn test_state() -> AppState {
@@ -118,6 +120,106 @@ async fn nexora_session_create_and_play_contract() {
         .await
         .unwrap();
     assert_eq!(play.status(), StatusCode::OK);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn playback_advances_to_the_next_queued_track() {
+    let root = temp_media_root();
+    fs::copy(root.join("tone.wav"), root.join("tone2.wav")).unwrap();
+    let sources = SourceRegistry::new();
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let sessions = Arc::new(SessionManager::new());
+    let mut events = sessions.subscribe();
+    let state = AppState {
+        sessions: Arc::clone(&sessions),
+        sources: Arc::new(sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    };
+    let app = build_router(state);
+
+    let create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"application":"bot","version":"1.0.0","output":{"sample_rate":48000,"channels":2,"codec":"opus"}}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(create.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let session_id = value["session_id"].as_str().unwrap();
+
+    let enqueue = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/queue"))
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"track_id":"tone2.wav"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(enqueue.status(), StatusCode::OK);
+
+    let play = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/play"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"track_id":"tone.wav","start_position_ms":0}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(play.status(), StatusCode::OK);
+
+    let mut ended = false;
+    let mut started_next = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while tokio::time::Instant::now() < deadline {
+        let Ok(Ok(event)) = tokio::time::timeout(Duration::from_secs(2), events.recv()).await
+        else {
+            continue;
+        };
+        match event.event_type {
+            SessionEventType::TrackEnded => ended = true,
+            SessionEventType::TrackStarted if ended && event.payload["track_id"] == "tone2.wav" => {
+                started_next = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(ended, "expected TrackEnded for the finished track");
+    assert!(started_next, "expected the queued track to start");
+
+    let session = SessionId::new(session_id.to_string()).unwrap();
+    assert_eq!(
+        sessions
+            .current_track(&session)
+            .await
+            .unwrap()
+            .map(|track| track.as_str().to_string()),
+        Some("tone2.wav".to_string())
+    );
     let _ = fs::remove_dir_all(&root);
 }
 

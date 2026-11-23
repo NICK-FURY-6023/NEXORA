@@ -193,6 +193,27 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Mark the current track as ended while the playback task keeps running.
+    ///
+    /// The playback task owns queue advancement: it clears the finished track
+    /// here and then starts the next queued one.
+    pub async fn end_track(&self, session_id: &SessionId) -> NexoraResult<()> {
+        {
+            let mut sessions = self.sessions.write().await;
+            let record = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| NexoraError::service("session not found"))?;
+            record.current_track = None;
+            record.position_ms = 0;
+        }
+        self.emit(
+            session_id,
+            SessionEventType::TrackEnded,
+            json!({ "reason": "finished" }),
+        );
+        Ok(())
+    }
+
     /// Mark the current track as failed and clear it from the session.
     pub async fn fail(&self, session_id: &SessionId, reason: &str) -> NexoraResult<()> {
         {

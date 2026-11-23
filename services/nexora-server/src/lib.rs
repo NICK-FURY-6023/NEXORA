@@ -346,7 +346,6 @@ async fn play(
         return Err(ApiError::unsupported());
     };
     let format = state.sessions.output_format(&session_id).await?;
-    let volume = state.sessions.get(&session_id).await?.volume;
 
     let (audio_tx, _) = broadcast::channel(64);
     state
@@ -363,8 +362,9 @@ async fn play(
 
     let sessions = Arc::clone(&state.sessions);
     let metrics = Arc::clone(&state.metrics);
+    let sources = Arc::clone(&state.sources);
     tokio::spawn(run_playback(
-        session_id, path, format, volume, control_rx, sessions, metrics,
+        session_id, path, format, control_rx, sessions, metrics, sources,
     ));
     Ok(Json(json!({ "status": "playing" })))
 }
@@ -384,13 +384,18 @@ async fn prepare_packets(
 
 async fn run_playback(
     session_id: SessionId,
-    path: PathBuf,
+    mut path: PathBuf,
     format: AudioFormat,
-    mut volume: u8,
     mut control: watch::Receiver<PlaybackSignal>,
     sessions: Arc<SessionManager>,
     metrics: Arc<RuntimeMetrics>,
+    sources: Arc<SourceRegistry>,
 ) {
+    let mut volume = sessions
+        .get(&session_id)
+        .await
+        .map(|state| state.volume)
+        .unwrap_or(100);
     let mut packets = match prepare_packets(&path, &format, volume).await {
         Ok(packets) => packets,
         Err(_) => {
@@ -438,8 +443,43 @@ async fn run_playback(
                     continue;
                 }
                 let Some(payload) = packets.get(index).cloned() else {
-                    let _ = sessions.finish(&session_id).await;
-                    break;
+                    // The track ended: advance to the next queued track when one exists.
+                    let Some(next_track) = sessions.pop_next_queued(&session_id).await.ok().flatten()
+                    else {
+                        let _ = sessions.finish(&session_id).await;
+                        break;
+                    };
+                    let _ = sessions.end_track(&session_id).await;
+                    let Ok(ResolvedSource::LocalFile { path: next_path }) = sources
+                        .resolve(&TrackReference::new(next_track.as_str()), &internal_auth())
+                        .await
+                    else {
+                        let _ = sessions.fail(&session_id, "source resolve failed").await;
+                        break;
+                    };
+                    match prepare_packets(&next_path, &format, volume).await {
+                        Ok(next_packets) => {
+                            let _ = sessions
+                                .play(
+                                    &session_id,
+                                    PlayRequest {
+                                        track_id: next_track,
+                                        start_position_ms: 0,
+                                    },
+                                )
+                                .await;
+                            path = next_path;
+                            packets = next_packets;
+                            index = 0;
+                            position_ms = 0;
+                            ticker.reset();
+                        }
+                        Err(_) => {
+                            let _ = sessions.fail(&session_id, "source decode failed").await;
+                            break;
+                        }
+                    }
+                    continue;
                 };
                 let frame = OpusFrame::packet(index as u64, payload.clone());
                 let _ = sessions.audio_registry().send_frame(&session_id, frame).await;

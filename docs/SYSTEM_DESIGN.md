@@ -75,8 +75,8 @@ proprietary source extraction are deliberate non-goals
 Slice 1 closed the original playback gap: `play` now resolves before mutating
 session state, produces paced 20 ms Opus packets, advances position, and emits
 `TrackEnded` or `TrackFailed`. Queue auto-advance from `TrackEnded` into the next
-queue item is implemented in this slice (`finish()` pops the FIFO queue and
-calls `play()` for the next track; `pop_next_queued()` exposes FIFO order).
+queue item is implemented in the pacing task (`pop_next_queued()` exposes FIFO
+order; the task pops the next track and calls `play()` for it — ADR-023).
 NEXORA is still not a drop-in Lavalink replacement because no Discord voice
 sender exists yet.
 
@@ -181,10 +181,12 @@ Runtime flow:
    position, counts streamed bytes, and reacts to pause/resume/seek/volume/stop.
    A volume change restarts packet preparation with the new PCM gain at the
    current position; this keeps gain correct without touching encoded packets.
-5. On end-of-packets it emits `TrackEnded`, clears the current track, removes
-   the delivery channel, and auto-advances: `finish()` pops the FIFO queue and,
-   if a next track exists, calls `play()` for it — which starts a new pacing
-   task and emits a new `TrackStarted`.
+5. On end-of-packets it pops the FIFO queue. With an empty queue it emits
+   `TrackEnded` and stops the session. With a queued track it emits
+   `TrackEnded`, clears the current track, resolves and prepares the next
+   track, and calls `play()` for it — the same pacing task continues and emits
+   a new `TrackStarted`, so connected audio subscribers keep their channel
+   (ADR-023).
 6. The audio WebSocket sends one Opus packet per binary message in order. The
    event WebSocket remains text-only.
 
@@ -265,7 +267,8 @@ Acceptance evidence for slice 1 (fresh run, 2026-11-22):
 
 Slice 1 does not prove every acceptance condition above: pause/resume/seek/stop
 were verified by session signal and protocol tests, not by packet-level live
-timing. Those measurements belong to slice 2 along with auto-advance.
+timing. Those measurements belong to slice 2; queue auto-advance is done
+(ADR-023).
 
 ## 10. Roadmap
 
@@ -273,7 +276,7 @@ timing. Those measurements belong to slice 2 along with auto-advance.
 |---|---|---|
 | 0 (done) | Workspace, protocol, config, errors, audio crates, source framework, REST/WS/gRPC, SDKs, deployment, partial v4 | 75 tests; REA + docs recorded |
 | 1 (done) | Real-time local-file playback + dedicated binary Opus WS + working controls | fmt/clippy; tests green; live Opus packets |
-| 2 | Queue auto-advance + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
+| 2 (in progress) | Queue auto-advance (done, ADR-023) + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
 | 3 | Discord voice sender: voice update REST, voice gateway v8, UDP, encryption, DAVE boundary | Live test against a disposable voice server or documented harness |
 | 4 | `/v4/decodetrack`, filters, resumable sessions, frame stats, real CPU/memory metrics | Lavalink client compatibility tests |
 | 5 | Durable sessions, clustering, WASM plugins, production hardening | Deployment and chaos/conformance tests |
@@ -284,9 +287,11 @@ fanout. Later slices stay behind explicit evidence gates.
 
 ## 11. Current unresolved boundaries
 
-- Queue auto-advance is deliberately deferred to slice 2. `finish()` is terminal
-  and `pop_next_queued()` exposes FIFO order, but the server does not yet spawn
-  a new playback task from the queue.
+- Queue auto-advance is implemented in the pacing task (ADR-023): it pops the
+  FIFO queue, emits `TrackEnded`, and starts the next track in place. The
+  remaining slice-2 work is the Lavalink `playerUpdate` event and
+  packet-level pause/seek timing tests; one pacing task still serves one
+  session, so many concurrent sessions need a worker pool.
 - No real voice delivery means NEXORA is not yet a drop-in replacement for a
   Discord music bot; slice 3 is required for that claim.
 - `encoded` is an opaque NEXORA base64 JSON blob, not Lavalink's binary track

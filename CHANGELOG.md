@@ -4,6 +4,20 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - queue auto-advance in the playback task
+
+- The pacing task now advances the queue when a track's packets run out: it
+  pops the next queued track, emits `TrackEnded`, resolves and prepares it, and
+  calls `play()` for it, which emits a new `TrackStarted` and resets the
+  position to 0.
+- The advance stays in the same task, so connected audio WebSocket clients keep
+  their channel and pause/resume/seek/volume keep working across the track
+  change (ADR-023).
+- New `SessionManager::end_track()` marks a track as ended while the playback
+  task stays attached to the session; a failed resolve or decode of the next
+  track emits `TrackFailed`.
+- Added ADR-023 for the queue auto-advance decision.
+
 ### Repository documentation map and ADR-021
 
 - Added `docs/README.md` as the single reader-facing documentation index with

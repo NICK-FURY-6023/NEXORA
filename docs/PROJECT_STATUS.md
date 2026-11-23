@@ -2,7 +2,7 @@
 
 ## Current milestone: Phase 5-7 foundations + deployment
 
-Status: **implemented and verified** on 2026-11-22.
+Status: **implemented and verified** on 2026-11-23.
 
 ### Slice 1: real-time local playback (2026-11-22)
 
@@ -22,6 +22,32 @@ Status: **implemented and verified** on 2026-11-22.
   (first bytes `fc7f06de6f6e6d19`) and advanced session position to 900 ms.
 - Deferred: queue auto-advance, packet-level pause/seek timing tests, Discord voice sender, and `/v4/decodetrack`.
 
+### Slice 2: queue auto-advance (2026-11-23)
+
+- The pacing task advances the queue itself: on end-of-packets it pops the next
+  queued track (`pop_next_queued()`), emits `TrackEnded`, resolves and prepares
+  the next track, and calls `play()` for it, which emits a new `TrackStarted`
+  and resets the position to 0.
+- The advance happens in the same task, so connected audio WebSocket clients
+  keep their channel and pause/resume/seek/volume keep working across the
+  track change (ADR-023).
+- A failed resolve or decode of the next track emits `TrackFailed` and stops
+  the session; an empty queue keeps the old terminal `finish()` behaviour.
+- New `SessionManager::end_track()` marks a track as ended while the playback
+  task stays attached to the session.
+- Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
+  83 passing tests, including the new
+  `playback_advances_to_the_next_queued_track` integration test.
+- Live smoke: with a 3 s track playing and an 8 s track queued, the event
+  WebSocket reported `track_started(toneA)` → `track_ended(reason=finished)` →
+  `track_started(toneLong)` → `track_ended(reason=finished)`, the audio
+  WebSocket received 256 Opus packets with no zero-length frame and no drop
+  across the track change, and the session position restarted from 0 on the
+  queued track.
+- Deferred: packet-level pause/seek timing tests, the Lavalink `playerUpdate`
+  event, Discord voice sender, and `/v4/decodetrack`.
+
 ### Implemented after Phase 4b
 
 - Runtime API counters exposed through `/api/v1/metrics` and `/v4/stats`.
@@ -30,7 +56,7 @@ Status: **implemented and verified** on 2026-11-22.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
 - ADR-015..020 and example monitoring configs.
 
-Workspace total is now 82 passing Rust tests.
+Workspace total is now 83 passing Rust tests.
 
 ### Lavalink v4 parity (after the Phase 5-7 foundations)
 

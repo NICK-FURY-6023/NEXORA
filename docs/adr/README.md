@@ -25,9 +25,10 @@ The following decisions were approved in `README.md` and are tracked here as the
 | ADR-019 | Pure-Rust Opus encoding | Accepted |
 | ADR-020 | Bounded audio queues | Accepted |
 | ADR-021 | Repository documentation layout | Accepted |
-| ADR-022 | Playback pipeline architecture | Accepted |
+| ADR-022 | Playback pipeline architecture | Accepted (queue auto-advance closed by ADR-023) |
+| ADR-023 | Queue auto-advance inside the pacing task | Accepted |
 
-Concrete ADR files exist for ADR-015..022; ADR-001..014 remain the accepted
+Concrete ADR files exist for ADR-015..023; ADR-001..014 remain the accepted
 architecture index from the original plan.
 
 See [docs/README.md](../README.md) for the reader-facing navigation map.
