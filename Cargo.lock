@@ -982,6 +982,7 @@ dependencies = [
 name = "nexora-protocol"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "nexora-audio-types",
  "nexora-common",
  "nexora-error",
