@@ -11,8 +11,10 @@ them.
 | Understand what NEXORA is | [Root README](../README.md) → [System design](SYSTEM_DESIGN.md) |
 | Run the server locally | [Quick start](#quick-start) → [Deployment](DEPLOYMENT.md) |
 | Call the API | [API contracts](API.md) → [Wire contract](PROTOCOL.md) |
+| Check Lavalink/NodeLink compatibility | [Compatibility matrix](COMPATIBILITY.md) |
 | Migrate from Lavalink | [Lavalink analysis](LAVALINK_ANALYSIS.md) → [v4 surface](API.md) |
 | Understand implemented architecture | [Implemented structure](ARCHITECTURE.md) |
+| Understand the full-parity rebuild plan | [Full-parity design](superpowers/specs/2026-11-24-nexora-full-parity-design.md) |
 | Understand why decisions were made | [ADR index](adr/README.md) |
 | Develop or review code | [Development](DEVELOPMENT.md) → [Detailed contributing guide](CONTRIBUTING.md) → [Root checklist](../CONTRIBUTING.md) |
 | Check current truth/status | [Project status](PROJECT_STATUS.md) → [Changelog](../CHANGELOG.md) → [Today's schedule](TODAY_SCHEDULE.md) |
