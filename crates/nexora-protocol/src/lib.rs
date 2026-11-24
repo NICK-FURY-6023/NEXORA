@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{ApiVersion, ApplicationId, ServiceName, SessionId, TimestampMs, TrackId};
 
+pub mod v4;
+
+pub use v4::{V4EmittedEvent, V4EventType, V4Op};
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchRequest {
     pub query: String,
