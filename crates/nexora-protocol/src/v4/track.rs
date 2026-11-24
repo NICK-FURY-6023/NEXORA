@@ -104,7 +104,10 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
 fn merge_source_payload(mut payload: Value, source_payload: &Value) -> Value {
     if let (Some(target), Some(source)) = (payload.as_object_mut(), source_payload.as_object()) {
         for (key, value) in source {
-            if !matches!(key.as_str(), "track_id" | "source_id" | "title" | "duration_ms") {
+            if !matches!(
+                key.as_str(),
+                "track_id" | "source_id" | "title" | "duration_ms"
+            ) {
                 target.insert(key.clone(), value.clone());
             }
         }

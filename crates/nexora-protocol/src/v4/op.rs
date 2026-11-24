@@ -124,7 +124,12 @@ mod tests {
             event: None,
             data: json!({}),
         };
-        assert!(serde_json::to_value(&no_event).unwrap().get("event").is_none());
+        assert!(
+            serde_json::to_value(&no_event)
+                .unwrap()
+                .get("event")
+                .is_none()
+        );
     }
 
     #[test]
@@ -133,6 +138,9 @@ mod tests {
         assert_eq!(V4EventType::TrackEnd.as_str(), "TrackEndEvent");
         assert_eq!(V4EventType::TrackException.as_str(), "TrackExceptionEvent");
         assert_eq!(V4EventType::PlayerUpdate.as_str(), "playerUpdate");
-        assert_eq!(V4EventType::WebSocketClosed.as_str(), "WebSocketClosedEvent");
+        assert_eq!(
+            V4EventType::WebSocketClosed.as_str(),
+            "WebSocketClosedEvent"
+        );
     }
 }

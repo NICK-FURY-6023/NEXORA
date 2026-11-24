@@ -79,7 +79,7 @@ mostly exist already, under the project's `nexora-` naming and the
 | `crates/voice` | — | **new** `crates/nexora-voice` |
 | `crates/config` | `crates/nexora-config` | keep |
 | `crates/observability` | `crates/nexora-telemetry` | keep; extend metrics |
-| `tests/compat` | — | **new** root `tests/compat` (compatibility matrix + real-client fixtures) |
+| `tests/compat` | — | **new** `services/nexora-server/tests/compat/` — cargo has no root test target, so the harness lives with the package it exercises |
 
 Why: the names, ownership table and ADR-021 documentation layout already
 describe this structure. Renaming 15 crates would touch every import, the

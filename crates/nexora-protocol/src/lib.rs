@@ -7,8 +7,8 @@ pub mod v4;
 
 pub use v4::{
     LAVALINK_V4_PROTOCOL_VERSION, V4EmittedEvent, V4Error, V4ErrorEnvelope, V4ErrorSeverity,
-    V4EventType, V4Git, V4Info, V4Op, V4Plugin, V4Track, V4TrackInfo, V4Version, check_protocol_version,
-    decode_track, encode_track,
+    V4EventType, V4Git, V4Info, V4Op, V4Plugin, V4Track, V4TrackInfo, V4Version,
+    check_protocol_version, decode_track, encode_track,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

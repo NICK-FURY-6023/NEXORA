@@ -27,6 +27,19 @@ Evidence ids: `rea: ev_…` are REA records, `ev_…` are craft-anything records
 | NodeLink size | 686 files (337 TypeScript, 337 JavaScript), 185,577 TS LOC | craft-anything `app_source_import`, `E:\nodelink-src.dtcD` |
 | NodeLink analysis | 29 compatibility files analysed, 427 findings, 19,852 data-flow relations | `rea: ev_c5adb52346647930108c05a95bfdbd85b8f096e4c424bcd041320c47272b5370` |
 
+## Protocol core (M0)
+
+The v4 wire types NEXORA owns are typed in `crates/nexora-protocol/src/v4/` and
+proved by `services/nexora-server/tests/compat/`.
+
+| Piece | Wire contract | Evidence | Proof |
+|---|---|---|---|
+| Op codes | `"ready"`, `"stats"`, `"playerUpdate"`, `"event"` | `Message$Op` in the shipped `protocol-jvm-4.2.2.jar` | `compat_protocol_op_codes_are_the_reference_values` |
+| Event envelope | `{"op":…,"event":…,"data":…}`, `event` omitted when absent | `Message$EmittedEvent` | `nexora-protocol` unit tests |
+| Error envelope | `{"timestamp":…,"error":{"code","message","severity","cause"}}`, severities `COMMON`/`SUSPICIOUS`/`FAULT` | `Exception$Severity` in the shipped protocol jar | `nexora-protocol` unit tests |
+| Track encoding | base64 of `{track_id, source_id, title, duration_ms, artist}`; decodes to the v4 `info` shape | `docs/LAVALINK_DEEP_DIVE.md` §3 (semantic, not byte, compatibility) | `compat_v4_loadtracks_track_shape` |
+| Version negotiation | `4` and `4.x.y` accepted, other generations rejected | `spec:` §1.4 | `nexora-protocol` unit tests |
+
 ## REST routes — Lavalink v4.2.2
 
 Reference inventory: `spec:` `docs/research/lavalink-source-architecture.md`
