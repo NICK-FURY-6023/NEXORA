@@ -88,6 +88,12 @@ pub struct V4EmittedEvent {
     pub data: Value,
 }
 
+/// Payload of the `ready` op frame.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct V4Ready {
+    pub version: crate::v4::info::V4Version,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
