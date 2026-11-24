@@ -10,3 +10,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 nexora-common = { path = "../nexora-common" }
 nexora-audio-types = { path = "../nexora-audio-types" }
+nexora-error = { path = "../nexora-error" }

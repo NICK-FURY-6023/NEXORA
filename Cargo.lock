@@ -984,6 +984,7 @@ version = "0.1.0"
 dependencies = [
  "nexora-audio-types",
  "nexora-common",
+ "nexora-error",
  "serde",
  "serde_json",
 ]
