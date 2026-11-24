@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/NICK-FURY-6023/NEXORA/blob/main/SECURITY.md
+    about: Report security problems privately — do not open a public issue.
+  - name: Code of conduct
+    url: https://github.com/NICK-FURY-6023/NEXORA/blob/main/CODE_OF_CONDUCT.md
+    about: The behaviour expected in this project's spaces, and how to report a problem.
+  - name: Compatibility matrix
+    url: https://github.com/NICK-FURY-6023/NEXORA/blob/main/docs/COMPATIBILITY.md
+    about: What NEXORA implements today, row by row, with the proof for each row.
