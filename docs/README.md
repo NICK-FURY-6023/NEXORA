@@ -15,7 +15,8 @@ them.
 | Migrate from Lavalink | [Lavalink analysis](LAVALINK_ANALYSIS.md) → [v4 surface](API.md) |
 | Understand implemented architecture | [Implemented structure](ARCHITECTURE.md) |
 | Understand the full-parity rebuild plan | [Full-parity design](superpowers/specs/2026-11-24-nexora-full-parity-design.md) |
-| Follow a milestone plan | [M0 protocol core plan](superpowers/plans/2026-11-24-nexora-m0-protocol-core.md) |
+| Follow a milestone plan | [M0 protocol core plan](superpowers/plans/2026-11-24-nexora-m0-protocol-core.md) → [M1 v4 websocket plan](superpowers/plans/2026-11-24-nexora-m1-v4-websocket.md) |
+| Understand why decisions were made | [ADR index](adr/README.md) → [ADR-022 playback pipeline](adr/ADR-022-playback-pipeline-architecture.md) → [ADR-023 queue auto-advance](adr/ADR-023-queue-auto-advance.md) |
 | Understand why decisions were made | [ADR index](adr/README.md) |
 | Develop or review code | [Development](DEVELOPMENT.md) → [Detailed contributing guide](CONTRIBUTING.md) → [Root checklist](../CONTRIBUTING.md) |
 | Check current truth/status | [Project status](PROJECT_STATUS.md) → [Changelog](../CHANGELOG.md) → [Today's schedule](TODAY_SCHEDULE.md) |
