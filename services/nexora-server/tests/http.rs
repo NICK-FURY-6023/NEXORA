@@ -427,6 +427,31 @@ async fn lavalink_info_matches_documented_v4_shape() {
 }
 
 #[tokio::test]
+async fn lavalink_info_reports_the_typed_v4_shape() {
+    let response = test_app()
+        .oneshot(
+            Request::builder()
+                .uri("/v4/info")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(value["version"]["semver"].is_string());
+    assert!(value["version"]["major"].is_number());
+    assert!(value["buildTime"].is_number());
+    assert!(value["git"]["branch"].is_string());
+    assert!(value["filters"].is_array());
+    assert!(value["sourceManagers"].is_array());
+}
+
+#[tokio::test]
 async fn lavalink_player_matches_documented_v4_shape() {
     let app = test_app();
     let created = app

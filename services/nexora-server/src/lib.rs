@@ -12,13 +12,14 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process_file};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
-use nexora_protocol::{CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest};
+use nexora_protocol::{
+    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, V4Git, V4Info, V4Track,
+    V4TrackInfo, V4Version, encode_track,
+};
 use nexora_session::{PlaybackSignal, SessionManager};
 use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackMetadata, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
@@ -764,59 +765,54 @@ fn process_start_ms() -> u64 {
 
 async fn lavalink_info(State(state): State<AppState>) -> Json<Value> {
     let build_time = process_start_ms();
-    Json(json!({
-        "name": "NEXORA",
-        "version": {
-            "semver": env!("CARGO_PKG_VERSION"),
-            "major": 0,
-            "minor": 1,
-            "patch": 0,
-            "preRelease": Value::Null,
-            "build": Value::Null,
+    let info = V4Info {
+        name: "NEXORA".to_owned(),
+        version: V4Version::nexora(),
+        build_time: build_time as i64,
+        git: V4Git {
+            branch: "main".to_owned(),
+            commit: "nexora".to_owned(),
+            commit_time: build_time as i64,
         },
-        "buildTime": build_time,
-        "git": {
-            "branch": "main",
-            "commit": "nexora",
-            "commitTime": build_time,
-        },
-        "jvm": "rust-native",
-        "lavaplayer": "nexora-audio-engine",
-        "sourceManagers": state.sources.source_ids(),
-        "filters": Vec::<&str>::new(),
-        "plugins": Vec::<&str>::new(),
-    }))
+        jvm: Some("rust-native".to_owned()),
+        lavaplayer: Some("nexora-audio-engine".to_owned()),
+        source_managers: state
+            .sources
+            .source_ids()
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        filters: Vec::new(),
+        plugins: Vec::new(),
+    };
+    Json(serde_json::to_value(info).unwrap_or_else(|_| json!({})))
 }
 
-fn lavalink_track(metadata: &TrackMetadata) -> Value {
-    let identifier = metadata.track_id.as_str();
-    let compact = json!({
-        "track_id": identifier,
-        "source_id": metadata.source_id,
-        "title": metadata.title,
-        "duration_ms": metadata.duration_ms,
-    });
-    let payload = serde_json::to_vec(&compact).unwrap_or_default();
-    let encoded = STANDARD.encode(payload);
-
-    json!({
-        "encoded": encoded,
-        "info": {
-            "identifier": identifier,
-            "isSeekable": metadata.duration_ms.is_some(),
-            "author": metadata.artist.clone().unwrap_or_else(|| "unknown".to_owned()),
-            "length": metadata.duration_ms.unwrap_or(0),
-            "isStream": false,
-            "position": 0,
-            "title": metadata.title,
-            "uri": Value::Null,
-            "artworkUrl": Value::Null,
-            "isrc": Value::Null,
-            "sourceName": metadata.source_id,
-        },
-        "pluginInfo": {},
-        "userData": {},
-    })
+fn lavalink_track(metadata: &TrackMetadata) -> NexoraResult<Value> {
+    let info = V4TrackInfo {
+        identifier: metadata.track_id.as_str().to_owned(),
+        is_seekable: metadata.duration_ms.is_some(),
+        author: metadata
+            .artist
+            .clone()
+            .unwrap_or_else(|| "unknown".to_owned()),
+        length: metadata.duration_ms.unwrap_or(0),
+        is_stream: false,
+        position: 0,
+        title: metadata.title.clone(),
+        uri: None,
+        artwork_url: None,
+        isrc: None,
+        source_name: metadata.source_id.clone(),
+    };
+    let encoded = encode_track(&info, &json!({ "source_id": metadata.source_id }))?;
+    let track = V4Track {
+        encoded,
+        info,
+        plugin_info: json!({}),
+        user_data: json!({}),
+    };
+    Ok(serde_json::to_value(track).unwrap_or(Value::Null))
 }
 
 async fn lavalink_loadtracks(
@@ -834,7 +830,10 @@ async fn lavalink_loadtracks(
     if results.is_empty() {
         return Ok(Json(json!({ "loadType": "empty", "data": null })));
     }
-    let tracks: Vec<Value> = results.iter().map(lavalink_track).collect();
+    let tracks: Vec<Value> = results
+        .iter()
+        .map(lavalink_track)
+        .collect::<NexoraResult<Vec<Value>>>()?;
     Ok(Json(json!({ "loadType": "search", "data": tracks })))
 }
 
