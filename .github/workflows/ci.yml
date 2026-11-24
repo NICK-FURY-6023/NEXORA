@@ -45,3 +45,20 @@ jobs:
 
       - name: Check relative markdown links
         run: python scripts/check_links.py
+
+  site:
+    name: documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the book
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          path: .
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./book
+

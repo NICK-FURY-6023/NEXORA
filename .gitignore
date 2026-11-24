@@ -7,3 +7,4 @@ config.local.toml
 __pycache__/
 *.pyc
 node_modules/
+/book/

@@ -1,0 +1,22 @@
+[book]
+title = "NEXORA"
+description = "Universal audio infrastructure in Rust — a Lavalink-compatible audio node built from scratch"
+authors = ["NEXORA maintainers"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+create-missing = false
+use-default-preprocessors = true
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/NICK-FURY-6023/NEXORA"
+edit-url-template = "https://github.com/NICK-FURY-6023/NEXORA/edit/main/docs/{path}"
+no-section-label = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
