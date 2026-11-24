@@ -107,7 +107,7 @@ counts as done only when `gate` passes.
 | M1 | Server skeleton: `/health`, `/v4/info`, `/version`, auth, `/v4/websocket` handshake | real Lavalink client connects; matrix row green |
 | M2 | Session lifecycle: create, `loadTracks`, play, pause, stop, seek, volume, `PATCH /v4/sessions/{id}` | real client play/pause/resume; matrix rows green |
 | M3 | Events: `playerUpdate`, `TrackStart/End/Exception`, queue events | event ordering tests against recorded Lavalink behaviour |
-| M4 | Filters: the ten Lavalink filters plus the NodeLink extras, applied to PCM before encoding | filter unit tests + parity diff |
+| M4 | Filters: Lavalink's ten built-ins (`volume`, `equalizer`, `karaoke`, `timescale`, `tremolo`, `vibrato`, `distortion`, `rotation`, `channelMix`, `lowPass`) plus the NodeLink extras, applied to PCM before encoding | filter unit tests + parity diff |
 | M5 | Discord voice: gateway voice update, UDP, encryption, DAVE E2EE | live voice test against a disposable voice server or a documented harness |
 | M6 | Session resume: reconnect restores player state and position | reconnect/resume test |
 | M7 | Missing v4 surface: `/v4/decodetrack`, `/v4/decodetracks`, `/v4/sessions/{id}/players[/guildId]`, route-planner free endpoints | matrix rows green |

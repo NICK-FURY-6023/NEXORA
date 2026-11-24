@@ -121,15 +121,19 @@ Reference: NodeLink `src/constants.ts` `EndReasons`.
 
 ## Filters
 
-Reference: Lavalink ships ten built-in filters (spec §3.8); NodeLink ships 21
-filter classes plus a mixer (`src/playback/filters/`, `src/playback/processing/`).
+Reference: Lavalink's ten built-in filters are the extension list its
+`InfoRestHandler` advertises — `volume`, `equalizer`, `karaoke`, `timescale`,
+`tremolo`, `vibrato`, `distortion`, `rotation`, `channelMix`, `lowPass`
+(craft-anything `java_class_show` on `lavalink.server.info.InfoRestHandler` in
+the shipped `Lavalink.jar`); NodeLink ships 21 filter classes plus a mixer
+(`src/playback/filters/`, `src/playback/processing/`).
 
 | Filter | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `equalizer`, `karaoke`, `timescale`, `channelMix` | yes | yes | — | missing (M4) |
-| `lowpass`, `highpass`, `rotation`, `distortion` | yes | yes | — | missing (M4) |
-| `compressor`, `echo`, `phaser` | yes | yes | — | missing (M4) |
-| `tremolo`, `vibrato` | no | yes | — | missing (M4) |
+| `volume`, `equalizer`, `karaoke`, `timescale` | yes | yes | — | missing (M4) |
+| `tremolo`, `vibrato`, `distortion`, `rotation` | yes | yes | — | missing (M4) |
+| `channelMix`, `lowPass` | yes | yes | — | missing (M4) |
+| `highpass`, `compressor`, `echo`, `phaser` | no | yes | — | missing (M4, NodeLink extra) |
 | `chorus`, `flanger`, `reverb`, `spatial`, `phonograph`, `tesseract` | no | yes | — | not-targeted |
 | JS script filters | yes (Rhino engine bundled) | no | — | missing (M4); needs a JS engine in Rust |
 | Audio mixer (TTS/SFX layering) | no | yes | — | not-targeted |
