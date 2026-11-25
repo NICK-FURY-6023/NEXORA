@@ -106,16 +106,17 @@ struct Biquad {
 
 impl Biquad {
     fn peaking(sample_rate: u32, gain_db: f32, center_freq: f32, q: f32) -> Self {
-        let a0 = 1.0 + (sample_rate as f32 / (q * center_freq));
-        let k = (2.0 * PI * center_freq / sample_rate as f32).tan();
-        let v = (10.0_f32.powf(gain_db / 20.0) - 1.0) / (10.0_f32.powf(gain_db / 20.0) + 1.0);
-
-        let b0 = 1.0 + v * k / q;
-        let b1 = -2.0 * k.cos();
-        let b2 = 1.0 - v * k / q;
-        let a1 = -2.0 * k.cos();
-        let a2 = 1.0 - k / q;
-
+        // RBJ peaking biquad, normalized by a0.
+        let w0 = 2.0 * PI * center_freq / sample_rate as f32;
+        let alpha = w0.sin() / (2.0 * q);
+        let a = 10.0_f32.powf(gain_db / 40.0);
+        let cos_w0 = w0.cos();
+        let b0 = 1.0 + alpha * a;
+        let b1 = -2.0 * cos_w0;
+        let b2 = 1.0 - alpha * a;
+        let a0 = 1.0 + alpha / a;
+        let a1 = -2.0 * cos_w0;
+        let a2 = 1.0 - alpha / a;
         Self {
             b0: b0 / a0,
             b1: b1 / a0,
@@ -151,18 +152,13 @@ fn apply_equalizer(
 ) {
     let mut filters: Vec<Biquad> = bands.iter().map(|b| eq_band(sample_rate, b)).collect();
     for frame in 0..samples.len() / channels {
-        let mut sum = 0.0;
         for channel in 0..channels {
             let idx = frame * channels + channel;
             let mut band_sum = 0.0;
             for filt in filters.iter_mut() {
                 band_sum += filt.process(samples[idx]);
             }
-            sum += band_sum;
-        }
-        let avg = sum / channels as f32;
-        for channel in 0..channels {
-            samples[frame * channels + channel] = avg.clamp(-1.0, 1.0);
+            samples[idx] = (samples[idx] + band_sum).clamp(-1.0, 1.0);
         }
     }
 }
@@ -497,5 +493,94 @@ fn apply_phaser(samples: &mut [f32], sample_rate: u32, phaser: &V4PhaserFilter) 
         if phase > 2.0 * PI {
             phase -= 2.0 * PI;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sine(freq: f32, sample_rate: u32, frames: usize) -> Vec<f32> {
+        (0..frames)
+            .map(|i| (2.0 * PI * freq * i as f32 / sample_rate as f32).sin() * 0.5)
+            .collect()
+    }
+
+    fn peak(samples: &[f32]) -> f32 {
+        let mut m = 0.0f32;
+        for s in samples {
+            m = m.max(s.abs());
+        }
+        m
+    }
+
+    #[test]
+    fn filter_chain_empty_is_identity() {
+        let mut samples = sine(440.0, 48_000, 960);
+        let before = samples.clone();
+        apply_filters(&mut samples, 1, 48_000, &V4Filters::default()).unwrap();
+        assert_eq!(samples, before);
+    }
+
+    #[test]
+    fn filter_applies_gain() {
+        let mut samples = vec![0.5, -0.5, 1.0, -1.0];
+        apply_filters(
+            &mut samples,
+            1,
+            48_000,
+            &V4Filters {
+                volume: Some(0.5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!((samples[0] - 0.25).abs() < 1e-6);
+        assert!((samples[2] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn filter_preserves_sample_count() {
+        let mut samples = sine(440.0, 48_000, 1000);
+        let n = samples.len();
+        apply_filters(&mut samples, 1, 48_000, &V4Filters::default()).unwrap();
+        assert_eq!(samples.len(), n);
+    }
+
+    #[test]
+    fn filter_low_pass_attenuates_high_freq() {
+        let mut samples = sine(12_000.0, 48_000, 960);
+        let before = peak(&samples);
+        apply_filters(
+            &mut samples,
+            1,
+            48_000,
+            &V4Filters {
+                low_pass: Some(V4LowPassFilter { smoothing: 1.0 }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(peak(&samples) < before);
+    }
+
+    #[test]
+    fn filter_equalizer_band_gain() {
+        let mut samples = sine(1_000.0, 48_000, 4800);
+        let before = peak(&samples);
+        apply_filters(
+            &mut samples,
+            1,
+            48_000,
+            &V4Filters {
+                equalizer: Some(vec![V4EqualizerBand {
+                    band: 1000,
+                    gain: 12.0,
+                }]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(peak(&samples) > before);
     }
 }
