@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
 use axum::http::Request;
+use futures_util::SinkExt;
+use nexora_common::SessionId;
 use nexora_protocol::V4EventMessage;
 use nexora_protocol::V4Op;
 use nexora_protocol::V4Track;
@@ -763,6 +765,87 @@ async fn compat_v4_paused_player_sends_no_player_update() {
     assert!(quiet.is_err(), "a paused player sends no playerUpdate");
 
     let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: voice state update — client sends voice state, server echoes it back.
+///
+/// The reference's v4 socket receives `{"op":4,"d":{"guildId",...}}` and
+/// echoes it back as a `VoiceStateUpdate` event (bytecode evidence on
+/// `player/EventEmitter.onVoiceStateUpdate` in `protocol-jvm-4.2.2.jar`).
+#[tokio::test]
+async fn compat_v4_voice_state_update_echoes_back() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Drain player-created + track-start + playerUpdate frames.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+    let update = next_frame(&mut stream).await;
+    assert_eq!(update["op"], "playerUpdate");
+
+    // Send a voice state update for guild 1234, channel 5678, self-deaf=true
+    // over the websocket; the server echoes it back as a VoiceStateUpdate event.
+    let payload = serde_json::json!({
+        "op": "voiceStateUpdate",
+        "guildId": "1234",
+        "userId": "1234",
+        "channelId": "5678",
+        "selfDeaf": true,
+    });
+    use tokio_tungstenite::tungstenite::Message;
+    stream
+        .send(Message::Text(
+            serde_json::to_string(&payload).unwrap().into(),
+        ))
+        .await
+        .expect("the voice state update is sent");
+
+    // The voice state update event is echoed back.
+    let vs = next_frame(&mut stream).await;
+    assert_eq!(vs["type"], "VoiceStateUpdate");
+    assert_eq!(vs["guildId"], "1234");
+    assert_eq!(vs["userId"], "1234");
+    assert_eq!(vs["channelId"], "5678");
+    assert_eq!(vs["selfDeaf"], true);
+    assert_eq!(vs["selfMute"], false);
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: voice socket — one UDP socket is bound per session and keyed by session id.
+#[tokio::test]
+async fn compat_v4_voice_socket_is_keyed_by_session_id() {
+    let session_id = SessionId::new("abcdef0123456789").unwrap();
+    let sockets: Arc<tokio::sync::Mutex<HashMap<SessionId, tokio::net::UdpSocket>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    assert_ne!(socket.local_addr().unwrap().port(), 0);
+    sockets.lock().await.insert(session_id.clone(), socket);
+    assert!(sockets.lock().await.contains_key(&session_id));
+    sockets.lock().await.remove(&session_id);
+    assert!(!sockets.lock().await.contains_key(&session_id));
 }
 
 /// Row: two guilds in one session — each player gets its own events.

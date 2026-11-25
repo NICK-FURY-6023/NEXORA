@@ -12,6 +12,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
 use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process_file};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
@@ -388,10 +389,20 @@ pub(crate) async fn start_playback(
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
     let v4_sessions = Arc::clone(&state.v4_sessions);
-    let filters = v4_player_for(&v4_sessions, session_id, track_id)
-        .await
+    // M5: one UDP voice socket per session, bound to an ephemeral port.
+    // M5: one UDP voice socket per session, bound to an ephemeral port.
+    // If the bind fails, voice transport is unavailable but audio still plays.
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok();
+    let player = v4_player_for(&v4_sessions, session_id, track_id).await;
+    let filters = player
+        .as_ref()
         .map(|p| p.filters.clone())
         .unwrap_or_default();
+    let voice_endpoint = player.as_ref().and_then(|p| p.voice.endpoint.clone());
+    let voice_key = player
+        .as_ref()
+        .and_then(|p| p.voice.token.as_deref())
+        .map(xsecret_key);
     let handle = tokio::spawn(run_playback(
         session_id.clone(),
         track_id.clone(),
@@ -404,6 +415,9 @@ pub(crate) async fn start_playback(
             sources,
             v4_sessions,
             filters,
+            voice_socket: socket,
+            voice_endpoint,
+            voice_key,
         },
     ));
     // Store the handle so a later replacement can abort this task.
@@ -558,6 +572,14 @@ struct PlaybackContext {
     sources: Arc<SourceRegistry>,
     v4_sessions: Arc<V4SessionManager>,
     filters: V4Filters,
+    /// The session's UDP voice socket, if one could be bound.
+    ///
+    /// The socket is dropped when the playback task ends, closing the port.
+    voice_socket: Option<tokio::net::UdpSocket>,
+    /// The Discord voice gateway endpoint to send Opus packets to, if any.
+    voice_endpoint: Option<String>,
+    /// The XSecret key derived from the voice session token, if any.
+    voice_key: Option<[u8; 16]>,
 }
 
 async fn run_playback(
@@ -574,6 +596,9 @@ async fn run_playback(
         sources,
         v4_sessions,
         filters,
+        voice_socket,
+        voice_endpoint,
+        voice_key,
     } = context;
     let mut volume = sessions
         .get(&session_id)
@@ -727,6 +752,17 @@ async fn run_playback(
                 let frame = OpusFrame::packet(index as u64, payload.clone());
                 let _ = sessions.audio_registry().send_frame(&session_id, frame).await;
                 metrics.streamed(payload.len());
+                // M5: encrypt the Opus packet with XSecret (AES-128-CTR keyed
+                // by the voice session token, IV = packet sequence) and forward
+                // it to the Discord voice gateway over UDP. A cipher failure
+                // leaves the packet undelivered; audio keeps playing.
+                if let Some(key) = voice_key.as_ref()
+                    && let Ok(encrypted) = xsecret_crypt(key, index as u32, &payload)
+                    && let (Some(socket), Some(endpoint)) =
+                        (voice_socket.as_ref(), voice_endpoint.as_deref())
+                {
+                    let _ = socket.send_to(&encrypted, endpoint).await;
+                }
                 index += 1;
                 position_ms += 20;
                 let _ = sessions.update_position(&session_id, position_ms).await;
@@ -737,6 +773,8 @@ async fn run_playback(
     update_task.abort();
     sessions.detach_playback(&session_id).await;
     sessions.audio_registry().deregister(&session_id).await;
+    // Dropping `voice_socket` closes the port when playback ends.
+    drop(voice_socket);
 }
 
 async fn pause(

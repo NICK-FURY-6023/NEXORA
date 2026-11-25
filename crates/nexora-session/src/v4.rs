@@ -44,6 +44,12 @@ pub struct V4PlayerRecord {
     pub filters: V4Filters,
     pub voice: V4VoiceState,
     pub user_data: serde_json::Value,
+    /// The Discord voice channel the player is connected to, if any.
+    pub voice_channel_id: Option<String>,
+    /// Whether the player is self-deafened.
+    pub self_deaf: bool,
+    /// Whether the player is self-muted.
+    pub self_mute: bool,
 }
 
 impl V4PlayerRecord {
@@ -58,6 +64,9 @@ impl V4PlayerRecord {
             filters: V4Filters::default(),
             voice: V4VoiceState::default(),
             user_data: serde_json::Value::Object(serde_json::Map::new()),
+            voice_channel_id: None,
+            self_deaf: false,
+            self_mute: false,
         }
     }
 
@@ -370,6 +379,39 @@ mod tests {
         let manager = V4SessionManager::new();
         assert!(manager.players("nope").await.is_none());
         assert!(manager.update_player("nope", "1", |_| {}).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_new_player_has_default_voice_state() {
+        let manager = V4SessionManager::new();
+        let session = manager.create_session().await;
+        let player = manager
+            .update_player(&session, "1234", |player| {
+                player.track = Some(track("Tone"));
+            })
+            .await
+            .expect("player");
+        assert_eq!(player.voice_channel_id, None);
+        assert!(!player.self_deaf);
+        assert!(!player.self_mute);
+    }
+
+    #[tokio::test]
+    async fn a_voice_state_update_changes_the_player_record() {
+        let manager = V4SessionManager::new();
+        let session = manager.create_session().await;
+        manager
+            .update_player(&session, "1234", |player| {
+                player.voice_channel_id = Some("5678".into());
+                player.self_deaf = true;
+                player.self_mute = true;
+            })
+            .await
+            .expect("player");
+        let player = manager.player(&session, "1234").await.expect("player");
+        assert_eq!(player.voice_channel_id.as_deref(), Some("5678"));
+        assert!(player.self_deaf);
+        assert!(player.self_mute);
     }
 
     #[tokio::test]

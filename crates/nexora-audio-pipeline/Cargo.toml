@@ -15,6 +15,9 @@ nexora-protocol = { path = "../nexora-protocol" }
 nexora-audio-types = { path = "../nexora-audio-types" }
 nexora-audio-decode = { path = "../nexora-audio-decode" }
 nexora-audio-codec = { path = "../nexora-audio-codec" }
+aes = "0.9.4"
+cipher = "0.5.2"
+ctr = "0.10.1"
 
 [dev-dependencies]
 criterion = { workspace = true }

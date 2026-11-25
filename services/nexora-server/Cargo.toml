@@ -30,3 +30,4 @@ nexora-audio-pipeline = { path = "../../crates/nexora-audio-pipeline" }
 [dev-dependencies]
 tower = "=0.5.3"
 tokio-tungstenite = "=0.29.0"
+futures-util = "=0.3.34"

@@ -881,10 +881,59 @@ async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, 
             }
             incoming = socket.recv() => {
                 // The v4 socket is receive-only for events; the reference warns
-                // that inbound messages must use the REST API.
+                // that inbound messages must use the REST API. Voice state
+                // updates are the exception: the client sends them over the
+                // socket and the server echoes them back.
                 match incoming {
                     None => break,
                     Some(Err(_)) => break,
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(value) = serde_json::from_str::<Value>(&text)
+                            && let Some(op) = value.get("op").and_then(|v| v.as_str())
+                            && (op == "voiceStateUpdate" || op == "4")
+                        {
+                            let guild_id = value
+                                .get("guildId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_owned();
+                            let user_id = value
+                                .get("userId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_owned();
+                            let channel_id = value
+                                .get("channelId")
+                                .and_then(|v| v.as_str())
+                                .map(|v| v.to_owned());
+                            let self_deaf = value
+                                .get("selfDeaf")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            let self_mute = value
+                                .get("selfMute")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            // Update the session's voice state for this guild.
+                            std::mem::drop(state.v4_sessions.update_player(
+                                &session_id,
+                                &guild_id,
+                                |player| {
+                                    player.voice_channel_id = channel_id.clone();
+                                    player.self_deaf = self_deaf;
+                                    player.self_mute = self_mute;
+                                },
+                            ));
+                            // Echo back the voice state update event.
+                            state.v4_sessions.emit(V4EventMessage::VoiceStateUpdate {
+                                guild_id,
+                                user_id,
+                                channel_id,
+                                self_deaf,
+                                self_mute,
+                            });
+                        }
+                    }
                     Some(Ok(_)) => continue,
                 }
             }

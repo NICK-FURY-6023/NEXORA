@@ -224,6 +224,20 @@ pub enum V4EventMessage {
         #[serde(rename = "guildId")]
         guild_id: String,
     },
+    /// Discord's voice state update: `{guildId, userId, channelId, selfDeaf, selfMute}`.
+    #[serde(rename = "VoiceStateUpdate")]
+    VoiceStateUpdate {
+        #[serde(rename = "guildId")]
+        guild_id: String,
+        #[serde(rename = "userId")]
+        user_id: String,
+        #[serde(rename = "channelId")]
+        channel_id: Option<String>,
+        #[serde(rename = "selfDeaf")]
+        self_deaf: bool,
+        #[serde(rename = "selfMute")]
+        self_mute: bool,
+    },
 }
 
 impl V4EventMessage {
@@ -241,6 +255,7 @@ impl V4EventMessage {
             V4EventMessage::FiltersChanged { .. } => "FiltersChangedEvent",
             V4EventMessage::PlayerCreated { .. } => "PlayerCreatedEvent",
             V4EventMessage::PlayerDestroyed { .. } => "PlayerDestroyedEvent",
+            V4EventMessage::VoiceStateUpdate { .. } => "VoiceStateUpdate",
         }
     }
 
@@ -325,6 +340,39 @@ mod tests {
         assert_eq!(frame["track"]["info"]["title"], "Tone");
         assert!(frame.get("data").is_none());
         assert!(frame.get("event").is_none());
+    }
+
+    #[test]
+    fn a_voice_state_update_frame_matches_the_reference_shape() {
+        let frame = V4EventMessage::VoiceStateUpdate {
+            guild_id: "1234".into(),
+            user_id: "4321".into(),
+            channel_id: Some("5678".into()),
+            self_deaf: true,
+            self_mute: false,
+        }
+        .to_frame();
+        assert_eq!(frame["op"], "event");
+        assert_eq!(frame["type"], "VoiceStateUpdate");
+        assert_eq!(frame["guildId"], "1234");
+        assert_eq!(frame["userId"], "4321");
+        assert_eq!(frame["channelId"], "5678");
+        assert_eq!(frame["selfDeaf"], true);
+        assert_eq!(frame["selfMute"], false);
+        assert!(frame.get("data").is_none());
+    }
+
+    #[test]
+    fn a_voice_state_update_without_a_channel_sends_null_channel_id() {
+        let frame = V4EventMessage::VoiceStateUpdate {
+            guild_id: "1234".into(),
+            user_id: "4321".into(),
+            channel_id: None,
+            self_deaf: false,
+            self_mute: true,
+        }
+        .to_frame();
+        assert_eq!(frame["channelId"], Value::Null);
     }
 
     #[test]

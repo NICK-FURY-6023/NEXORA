@@ -140,7 +140,9 @@ impl Biquad {
 fn eq_band(sample_rate: u32, band: &V4EqualizerBand) -> Biquad {
     let gain_db = band.gain;
     let center_freq = band.band as f32;
-    let q = 1.0; // reference default Q
+    // V4EqualizerBand carries no Q on the wire, so Q is fixed; upgrade when the wire adds Q.
+    // shortcut: fixed Q = 1.0, revisit if the protocol gains a per-band Q field.
+    let q = 1.0;
     Biquad::peaking(sample_rate, gain_db, center_freq, q)
 }
 
@@ -582,5 +584,84 @@ mod tests {
         )
         .unwrap();
         assert!(peak(&samples) > before);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// XSecret — Opus packet encryption for the v4 voice transport
+// ---------------------------------------------------------------------------
+
+// XSecret encrypts each Opus packet with AES-128-CTR before it is sent to
+// the Discord voice gateway. The key is derived from the voice session
+// token the client supplies on `PATCH /v4/sessions/{id}/players/{guildId}`
+// (`V4VoiceState.token`); the counter block is the packet's sequence
+// number as a 4-byte big-endian integer, zero-padded to 16 bytes.
+//
+// NEXORA has no voice gateway handshake yet, so the token is the only key
+// material available. Shortcut: the key is the first 16 bytes of the token,
+// zero-padded; upgrade to a real KDF once the voice gateway carries a
+// shared secret (shortcut: token-as-key material, revisit with the handshake).
+
+use aes::Aes128;
+use cipher::{KeyIvInit, StreamCipher};
+use ctr::Ctr128BE;
+
+use crate::NexoraError;
+
+/// Derives the 16-byte XSecret key from a voice session token.
+pub fn xsecret_key(token: &str) -> [u8; 16] {
+    let mut key = [0u8; 16];
+    let bytes = token.as_bytes();
+    let len = bytes.len().min(16);
+    key[..len].copy_from_slice(&bytes[..len]);
+    key
+}
+
+/// Encrypts (or decrypts — CTR is symmetric) `input` with `key`, keyed by
+/// `sequence` as the 4-byte big-endian IV.
+pub fn xsecret_crypt(key: &[u8; 16], sequence: u32, input: &[u8]) -> NexoraResult<Vec<u8>> {
+    let mut counter = [0u8; 16];
+    counter[..4].copy_from_slice(&sequence.to_be_bytes());
+    let mut cipher = Ctr128BE::<Aes128>::new_from_slices(key, &counter)
+        .map_err(|_| NexoraError::service("xsecret cipher construction failed"))?;
+    let mut output = input.to_vec();
+    cipher.apply_keystream(&mut output);
+    Ok(output)
+}
+
+#[cfg(test)]
+mod xsecret_tests {
+    use super::*;
+
+    #[test]
+    fn xsecret_decrypts_what_it_encrypts_with_the_same_key_and_sequence() {
+        let key = xsecret_key("voice-session-token-alpha");
+        let packet: &[u8] = b"opus-payload-bytes";
+        let encrypted = xsecret_crypt(&key, 7, packet).expect("encryption works");
+        let decrypted = xsecret_crypt(&key, 7, &encrypted).expect("decryption works");
+        assert_eq!(&decrypted, packet);
+        assert_ne!(&encrypted, packet);
+    }
+
+    #[test]
+    fn xsecret_output_changes_with_the_sequence_number() {
+        let key = xsecret_key("token");
+        let packet = b"same-payload";
+        let first = xsecret_crypt(&key, 0, packet).expect("encryption works");
+        let second = xsecret_crypt(&key, 1, packet).expect("encryption works");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn xsecret_key_is_exactly_16_bytes() {
+        assert_eq!(xsecret_key("short").len(), 16);
+        assert_eq!(xsecret_key("a-longer-token-than-sixteen-bytes").len(), 16);
+    }
+
+    #[test]
+    fn xsecret_empty_input_is_empty_output() {
+        let key = xsecret_key("token");
+        let encrypted = xsecret_crypt(&key, 0, &[]).expect("encryption works");
+        assert!(encrypted.is_empty());
     }
 }

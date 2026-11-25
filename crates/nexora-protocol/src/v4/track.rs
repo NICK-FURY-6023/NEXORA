@@ -27,7 +27,7 @@ pub struct V4TrackInfo {
 }
 
 /// A Lavalink v4 track: the encoded handle plus its metadata.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4Track {
     pub encoded: String,
     pub info: V4TrackInfo,

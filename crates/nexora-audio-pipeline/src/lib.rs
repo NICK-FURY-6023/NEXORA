@@ -11,7 +11,7 @@ use nexora_protocol::v4::V4Filters;
 use rubato::{Fft, FixedSync, Resampler};
 use tokio::sync::mpsc;
 
-mod filters;
+pub mod filters;
 
 /// Interleaved sample-rate conversion using Rubato's FFT resampler.
 pub fn resample_interleaved(
