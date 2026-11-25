@@ -121,6 +121,7 @@ event's own fields are siblings, with no `data` wrapper (bytecode evidence on
 | `FiltersChangedEvent` | no | yes | `V4EventMessage::FiltersChanged` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
 | `PlayerCreatedEvent` | no | yes | `V4EventMessage::PlayerCreated` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
 | `PlayerDestroyedEvent` | no | yes | `V4EventMessage::PlayerDestroyed` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `VoiceStateUpdate` | yes | yes | `V4EventMessage::VoiceStateUpdate` echoed on `/v4/websocket` | implemented — `compat_v4_voice_state_update_echoes_back` |
 | `PlayerReconnectingEvent`, `PlayerConnectedEvent`, `ConnectionStatusEvent` | no | yes | — | missing (M5) — they need the voice gateway |
 | `MixStartedEvent`, `MixEndedEvent` | no | yes | — | not-targeted (mixing is not in scope) |
 | `SponsorBlockSegmentsLoadedEvent`, `SponsorBlockSegmentSkippedEvent` | no | yes | — | not-targeted (SponsorBlock is a plugin capability) |

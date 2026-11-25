@@ -112,6 +112,25 @@ Workspace total is now 153 passing Rust tests.
 - `docs/superpowers/specs/2026-11-25-nexora-m3-events-design.md` records the
   design and the bytecode evidence behind every claim.
 
+### Lavalink v4 voice (M5)
+
+- `V4EventMessage::VoiceStateUpdate` carries `{guildId, userId, channelId,
+  selfDeaf, selfMute}` as a flat event frame on `/v4/websocket`; a client's
+  voice state update is echoed back — `compat_v4_voice_state_update_echoes_back`.
+- `V4PlayerRecord` gains `voice_channel_id`, `self_deaf`, `self_mute` (defaulting
+  to `None`, `false`, `false`), applied through `update_player`.
+- `start_playback` binds one UDP socket per session to `0.0.0.0:0` (a bind
+  failure degrades gracefully: audio still plays) and forwards each Opus packet
+  to the voice gateway endpoint over UDP, XSecret-encrypted with AES-128-CTR
+  (key derived from the voice session token, IV = the packet sequence) —
+  `nexora-audio-pipeline` unit tests cover encrypt/decrypt round-trips.
+- DAVE E2EE is not targeted: NEXORA has no voice gateway handshake to exchange
+  key material (the reference's DAVE uses `tink-1.14.1`, bundled in
+  `Lavalink.jar`).
+- Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
+  201 passing tests.
+
 ### Implemented in Phase 4b
 
 - `nexora-grpc` with a versioned `nexora.v1.SessionService` protobuf contract (tonic/prost, vendored protoc).
