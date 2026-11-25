@@ -289,6 +289,7 @@ mod tests {
                 artwork_url: None,
                 isrc: None,
                 source_name: "local".into(),
+                filters: None,
             },
             plugin_info: serde_json::json!({}),
             user_data: serde_json::json!({}),

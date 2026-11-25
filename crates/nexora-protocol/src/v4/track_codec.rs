@@ -134,6 +134,7 @@ pub fn decode_binary_track(encoded: &str) -> Result<V4TrackInfo, NexoraError> {
         isrc,
         source_name,
         identifier,
+        filters: None,
     })
 }
 
@@ -343,6 +344,7 @@ mod tests {
             artwork_url: Some("https://example.com/art.png".into()),
             isrc: Some("ISRC123".into()),
             source_name: "youtube".into(),
+            filters: None,
         }
     }
 
@@ -396,6 +398,7 @@ mod tests {
             artwork_url: Some("https://example.com/a.png".into()),
             isrc: Some("ISRC000".into()),
             source_name: "local-media".into(),
+            filters: None,
         };
         let encoded = encode_binary_track(&info).unwrap();
         let decoded = decode_binary_track(&encoded).unwrap();

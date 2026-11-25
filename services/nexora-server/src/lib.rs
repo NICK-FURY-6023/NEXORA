@@ -18,7 +18,7 @@ use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
 use nexora_protocol::{
     CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, V4ErrorSeverity,
-    V4EventMessage, V4Exception, V4PlayerState, V4PlayerUpdateFrame, V4TrackEndReason,
+    V4EventMessage, V4Exception, V4Filters, V4PlayerState, V4PlayerUpdateFrame, V4TrackEndReason,
 };
 use nexora_session::{
     PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal, SessionManager, V4PlayerRecord,
@@ -388,6 +388,10 @@ pub(crate) async fn start_playback(
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
     let v4_sessions = Arc::clone(&state.v4_sessions);
+    let filters = v4_player_for(&v4_sessions, session_id, track_id)
+        .await
+        .map(|p| p.filters.clone())
+        .unwrap_or_default();
     let handle = tokio::spawn(run_playback(
         session_id.clone(),
         track_id.clone(),
@@ -399,6 +403,7 @@ pub(crate) async fn start_playback(
             metrics,
             sources,
             v4_sessions,
+            filters,
         },
     ));
     // Store the handle so a later replacement can abort this task.
@@ -533,13 +538,17 @@ async fn prepare_packets(
     path: &FsPath,
     format: &AudioFormat,
     volume: u8,
+    filters: &V4Filters,
 ) -> NexoraResult<Vec<Vec<u8>>> {
     let path = path.to_path_buf();
     let sample_rate = format.sample_rate;
     let channels = format.channels;
-    tokio::task::spawn_blocking(move || encode_file_packets(&path, sample_rate, channels, volume))
-        .await
-        .map_err(|_| NexoraError::service("playback task failed"))?
+    let filters = filters.clone();
+    tokio::task::spawn_blocking(move || {
+        encode_file_packets(&path, sample_rate, channels, volume, &filters)
+    })
+    .await
+    .map_err(|_| NexoraError::service("playback task failed"))?
 }
 
 /// The state a playback task shares with the server.
@@ -548,6 +557,7 @@ struct PlaybackContext {
     metrics: Arc<RuntimeMetrics>,
     sources: Arc<SourceRegistry>,
     v4_sessions: Arc<V4SessionManager>,
+    filters: V4Filters,
 }
 
 async fn run_playback(
@@ -563,13 +573,14 @@ async fn run_playback(
         metrics,
         sources,
         v4_sessions,
+        filters,
     } = context;
     let mut volume = sessions
         .get(&session_id)
         .await
         .map(|state| state.volume)
         .unwrap_or(100);
-    let mut packets = match prepare_packets(&path, &format, volume).await {
+    let mut packets = match prepare_packets(&path, &format, volume, &filters).await {
         Ok(packets) => packets,
         Err(_) => {
             let _ = sessions.fail(&session_id, "source decode failed").await;
@@ -644,7 +655,7 @@ async fn run_playback(
                             continue;
                         }
                         volume = next;
-                        if let Ok(reencoded) = prepare_packets(&path, &format, volume).await {
+                        if let Ok(reencoded) = prepare_packets(&path, &format, volume, &filters).await {
                             packets = reencoded;
                             index = (position_ms / 20) as usize;
                         }
@@ -680,7 +691,7 @@ async fn run_playback(
                         .await;
                         break;
                     };
-                    match prepare_packets(&next_path, &format, volume).await {
+                    match prepare_packets(&next_path, &format, volume, &filters).await {
                         Ok(next_packets) => {
                             let _ = sessions
                                 .play(

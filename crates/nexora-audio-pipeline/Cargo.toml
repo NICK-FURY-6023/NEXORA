@@ -11,6 +11,7 @@ audioadapter = { workspace = true }
 audioadapter-buffers = { workspace = true }
 tokio = { workspace = true }
 nexora-error = { path = "../nexora-error" }
+nexora-protocol = { path = "../nexora-protocol" }
 nexora-audio-types = { path = "../nexora-audio-types" }
 nexora-audio-decode = { path = "../nexora-audio-decode" }
 nexora-audio-codec = { path = "../nexora-audio-codec" }

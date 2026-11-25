@@ -7,8 +7,11 @@ use audioadapter_buffers::owned::InterleavedOwned;
 use nexora_audio_codec::{encode_opus_packets, write_ogg_opus, write_wav};
 use nexora_audio_decode::decode_file;
 use nexora_error::{NexoraError, NexoraResult};
+use nexora_protocol::v4::V4Filters;
 use rubato::{Fft, FixedSync, Resampler};
 use tokio::sync::mpsc;
+
+mod filters;
 
 /// Interleaved sample-rate conversion using Rubato's FFT resampler.
 pub fn resample_interleaved(
@@ -150,6 +153,7 @@ pub fn encode_file_packets(
     target_rate: u32,
     channels: u16,
     volume: u8,
+    filters: &V4Filters,
 ) -> NexoraResult<Vec<Vec<u8>>> {
     let mut prepared = prepare_pcm(input, target_rate, channels)?;
     if volume != 100 {
@@ -158,6 +162,12 @@ pub fn encode_file_packets(
             *sample = (*sample * gain).clamp(-1.0, 1.0);
         }
     }
+    filters::apply_filters(
+        &mut prepared.samples,
+        channels as usize,
+        target_rate,
+        filters,
+    )?;
     encode_opus_packets(target_rate, channels, &prepared.samples)
 }
 

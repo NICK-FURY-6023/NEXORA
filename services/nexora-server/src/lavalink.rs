@@ -311,6 +311,7 @@ fn build_track(metadata: &TrackMetadata) -> Result<V4Track, V4ApiError> {
         artwork_url: None,
         isrc: None,
         source_name: metadata.source_id.clone(),
+        filters: None,
     };
     let encoded = encode_track(&info).map_err(|error| {
         V4ApiError::new(

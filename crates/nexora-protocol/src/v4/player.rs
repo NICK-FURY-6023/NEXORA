@@ -82,7 +82,7 @@ impl V4VoiceState {
 }
 
 /// The Lavalink v4 player object.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4Player {
     #[serde(rename = "guildId")]
     pub guild_id: String,
@@ -146,7 +146,7 @@ pub struct V4PlayerUpdate {
 }
 
 /// The `GET /v4/sessions/{sessionId}/players` payload.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4Players {
     pub players: Vec<V4Player>,
 }

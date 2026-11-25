@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::v4::filters::V4Filters;
 use nexora_error::NexoraError;
 
 /// Track metadata of the Lavalink v4 track shape.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct V4TrackInfo {
     pub identifier: String,
     #[serde(rename = "isSeekable")]
@@ -21,6 +22,8 @@ pub struct V4TrackInfo {
     pub isrc: Option<String>,
     #[serde(rename = "sourceName")]
     pub source_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filters: Option<V4Filters>,
 }
 
 /// A Lavalink v4 track: the encoded handle plus its metadata.
@@ -67,6 +70,7 @@ mod tests {
             artwork_url: None,
             isrc: None,
             source_name: "local".into(),
+            filters: None,
         }
     }
 

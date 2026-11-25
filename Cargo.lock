@@ -894,6 +894,7 @@ dependencies = [
  "nexora-audio-decode",
  "nexora-audio-types",
  "nexora-error",
+ "nexora-protocol",
  "rubato",
  "tokio",
 ]

@@ -43,7 +43,7 @@ pub struct V4PlaylistInfo {
 }
 
 /// The `playlist` load result payload.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4Playlist {
     pub info: V4PlaylistInfo,
     #[serde(rename = "pluginInfo")]
@@ -52,7 +52,7 @@ pub struct V4Playlist {
 }
 
 /// The `search` load result payload.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4SearchResult {
     pub tracks: Vec<V4Track>,
 }
@@ -60,7 +60,7 @@ pub struct V4SearchResult {
 /// The `/v4/loadtracks` response body.
 ///
 /// The reference always answers HTTP 200: a failure is reported in the body.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4LoadResult {
     #[serde(rename = "loadType")]
     pub load_type: V4LoadType,

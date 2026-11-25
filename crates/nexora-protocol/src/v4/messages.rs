@@ -94,7 +94,7 @@ impl V4PlayerUpdateFrame {
 }
 
 /// The `stats` frame.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V4StatsFrame {
     #[serde(rename = "frameStats")]
     pub frame_stats: Option<Value>,
@@ -122,7 +122,7 @@ impl V4StatsFrame {
 /// either through the same polymorphic serializer
 /// (bytecode evidence on `Message$Serializer` in `protocol-jvm-4.2.2.jar`).
 /// This enum is that supertype.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum V4Frame {
     /// A `playerUpdate` frame: its own op, not an `event`.
@@ -142,7 +142,7 @@ impl V4Frame {
 }
 
 /// One emitted event, discriminated by its `type` field.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum V4EventMessage {
     #[serde(rename = "TrackStartEvent")]
@@ -281,6 +281,7 @@ mod tests {
                 artwork_url: None,
                 isrc: None,
                 source_name: "local".into(),
+                filters: None,
             },
             plugin_info: json!({}),
             user_data: json!({}),
