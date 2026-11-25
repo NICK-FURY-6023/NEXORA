@@ -174,9 +174,9 @@ the shipped `Lavalink.jar`); NodeLink ships 21 filter classes plus a mixer
 
 | Filter | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `volume`, `equalizer`, `karaoke`, `timescale` | yes | yes | typed, not applied | partial (M4) |
-| `tremolo`, `vibrato`, `distortion`, `rotation` | yes | yes | typed, not applied | partial (M4) |
-| `channelMix`, `lowPass` | yes | yes | typed, not applied | partial (M4) |
+| `volume`, `equalizer`, `karaoke`, `timescale` | yes | yes | applied to PCM before Opus encoding | implemented (M4) |
+| `tremolo`, `vibrato`, `distortion`, `rotation` | yes | yes | applied to PCM before Opus encoding | implemented (M4) |
+| `channelMix`, `lowPass` | yes | yes | applied to PCM before Opus encoding | implemented (M4) |
 | `highpass`, `compressor`, `echo`, `phaser` | no | yes | typed, not applied | partial (M4, NodeLink extra) |
 | `chorus`, `flanger`, `reverb`, `spatial`, `phonograph`, `tesseract` | no | yes | — | not-targeted |
 | JS script filters | yes (Rhino engine bundled) | no | — | missing (M4); needs a JS engine in Rust |
@@ -184,9 +184,11 @@ the shipped `Lavalink.jar`); NodeLink ships 21 filter classes plus a mixer
 
 The filter chain is typed in `crates/nexora-protocol/src/v4/filters.rs` with the
 reference's parameter names and defaults, and `PATCH .../players/{guildId}`
-stores it on the player. No filter is applied to the audio stream yet, so
-`/v4/info` reports an empty `filters` list — the reference advertises only the
-filters it actually applies.
+stores it on the player. `nexora-audio-pipeline::filters::apply_filters`
+applies the configured chain to interleaved PCM between volume gain and Opus
+encoding; filters the player has not configured are skipped, so a fresh
+player's `filters` reports none until configured — the reference advertises
+only the filters it actually applies.
 
 ## Sources
 
@@ -211,7 +213,7 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 12 rows.
 | WebSocket endpoints | 1 | 1 | 0 | 2 |
 | Events | 11 | 1 | 2 | 3 |
 | Track end reasons | 4 | 3 | 0 | 0 |
-| Filters | 0 | 4 | 1 | 2 |
+| Filters | 4 | 0 | 1 | 2 |
 | Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is

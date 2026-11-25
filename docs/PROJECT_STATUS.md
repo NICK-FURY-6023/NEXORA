@@ -112,6 +112,27 @@ Workspace total is now 153 passing Rust tests.
 - `docs/superpowers/specs/2026-11-25-nexora-m3-events-design.md` records the
   design and the bytecode evidence behind every claim.
 
+### Lavalink v4 filters (M4)
+
+- `crates/nexora-audio-pipeline/src/filters.rs` implements the fourteen-filter
+  Lavalink v4 / NodeLink chain — volume, equalizer (per-band RBJ peaking
+  biquads summed), karaoke, timescale (rubato rate conversion), tremolo,
+  vibrato, distortion, rotation, channelMix, lowPass, highpass, compressor,
+  echo, phaser — applied in-place to interleaved f32 PCM in the reference's
+  declaration order; only configured filters run, the rest are skipped.
+- `encode_file_packets` runs the chain between volume gain and Opus encoding,
+  so a PATCHed player's `V4Filters` is audible on the next encoded packet; an
+  empty chain is identity and preserves the sample count.
+- `crates/nexora-protocol/src/v4/filters.rs` keeps the reference's wire names
+  and defaults (`V4Filters`, `V4EqualizerBand`, …) with round-trip JSON tests.
+- Tests: `filter_chain_empty_is_identity`, `filter_applies_gain`,
+  `filter_preserves_sample_count`, `filter_low_pass_attenuates_high_freq`,
+  `filter_equalizer_band_gain`, plus `encode_file_packets` coverage in
+  `crates/nexora-audio-pipeline/tests/pipeline.rs`.
+- Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
+  202 passing tests.
+
 ### Lavalink v4 voice (M5)
 
 - `V4EventMessage::VoiceStateUpdate` carries `{guildId, userId, channelId,
