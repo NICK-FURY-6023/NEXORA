@@ -44,3 +44,23 @@ fn detects_spotify_urls() {
 fn plain_query_has_no_platform() {
     assert_eq!(detect("hello world"), None);
 }
+
+#[test]
+fn every_platform_id_is_reachable_from_detection() {
+    use nexora_source_universal::PLATFORM_IDS;
+
+    let urls = [
+        "https://archive.org/details/x",
+        "https://artist.bandcamp.com/track/x",
+        "https://soundcloud.com/artist/x",
+        "https://www.youtube.com/watch?v=abc",
+        "https://open.spotify.com/track/abc",
+        "https://www.deezer.com/track/123",
+        "https://music.apple.com/us/album/x/123",
+        "https://tidal.com/browse/track/123",
+    ];
+    for url in urls {
+        let id = detect(url).unwrap_or_else(|| panic!("{url} must be detected"));
+        assert!(PLATFORM_IDS.contains(&id), "unknown id {id}");
+    }
+}

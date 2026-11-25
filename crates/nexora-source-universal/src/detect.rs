@@ -12,6 +12,11 @@ const PATTERNS: &[(&str, &str)] = &[
     ("open.spotify.com/track/", "spotify"),
     ("open.spotify.com/album/", "spotify"),
     ("spotify:track:", "spotify"),
+    ("deezer.com/track/", "deezer"),
+    ("deezer.com/album/", "deezer"),
+    ("music.apple.com/", "apple-music"),
+    ("tidal.com/browse/track/", "tidal"),
+    ("tidal.com/browse/album/", "tidal"),
 ];
 
 pub fn detect(input: &str) -> Option<&'static str> {
