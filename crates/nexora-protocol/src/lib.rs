@@ -6,9 +6,15 @@ use nexora_common::{ApiVersion, ApplicationId, ServiceName, SessionId, Timestamp
 pub mod v4;
 
 pub use v4::{
-    LAVALINK_V4_PROTOCOL_VERSION, V4EmittedEvent, V4Error, V4ErrorEnvelope, V4ErrorSeverity,
-    V4EventType, V4Git, V4Info, V4Op, V4Plugin, V4Track, V4TrackInfo, V4Version,
-    check_protocol_version, decode_track, encode_track,
+    DEFAULT_RESUME_TIMEOUT_SECONDS, LAVALINK_V4_PROTOCOL_VERSION, V4ChannelMixFilter,
+    V4CompressorFilter, V4DistortionFilter, V4EchoFilter, V4EqualizerBand, V4ErrorEnvelope,
+    V4ErrorSeverity, V4EventMessage, V4Exception, V4Filters, V4Git, V4HighPassFilter, V4Info,
+    V4KaraokeFilter, V4LoadResult, V4LoadType, V4LowPassFilter, V4Nullable, V4Op, V4PhaserFilter,
+    V4Player, V4PlayerState, V4PlayerUpdate, V4PlayerUpdateFrame, V4PlayerUpdateTrack, V4Players,
+    V4Playlist, V4PlaylistInfo, V4Plugin, V4Plugins, V4Ready, V4RotationFilter, V4SearchResult,
+    V4Session, V4SessionUpdate, V4StatsFrame, V4TimescaleFilter, V4Track, V4TrackEndReason,
+    V4TrackInfo, V4TremoloFilter, V4Version, V4VibratoFilter, V4VoiceState, check_protocol_version,
+    decode_binary_track, decode_track, encode_binary_track, encode_track,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

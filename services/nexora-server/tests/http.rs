@@ -4,7 +4,7 @@ use base64::Engine;
 use nexora_common::SessionId;
 use nexora_protocol::SessionEventType;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::SessionManager;
+use nexora_session::{SessionManager, V4SessionManager};
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use std::collections::HashMap;
 use std::fs;
@@ -16,6 +16,7 @@ use tower::ServiceExt;
 fn test_state() -> AppState {
     AppState {
         sessions: Arc::new(SessionManager::new()),
+        v4_sessions: Arc::new(V4SessionManager::new()),
         sources: Arc::new(SourceRegistry::new()),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -28,11 +29,15 @@ fn test_app() -> axum::Router {
 }
 
 fn temp_media_root() -> PathBuf {
+    // The clock's resolution is coarse on Windows, so two tests can pick the
+    // same timestamp; the counter keeps every root distinct.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!("nexora-media-{unique}"));
+    let sequence = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let root = std::env::temp_dir().join(format!("nexora-media-{unique}-{sequence}"));
     fs::create_dir_all(&root).unwrap();
 
     let frames = 4_410u32;
@@ -81,6 +86,7 @@ async fn nexora_session_create_and_play_contract() {
         .unwrap();
     let state = AppState {
         sessions: Arc::new(SessionManager::new()),
+        v4_sessions: Arc::new(V4SessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -135,6 +141,7 @@ async fn playback_advances_to_the_next_queued_track() {
     let mut events = sessions.subscribe();
     let state = AppState {
         sessions: Arc::clone(&sessions),
+        v4_sessions: Arc::new(V4SessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -310,7 +317,14 @@ async fn lavalink_stats_endpoint() {
         .await
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(value["op"], "stats");
+    // The REST payload is a `StatsData`: only the WebSocket `stats` frame
+    // carries an `op`.
+    assert!(value.get("op").is_none());
+    assert!(value["players"].is_u64());
+    assert!(value["playingPlayers"].is_u64());
+    assert!(value["uptime"].is_u64());
+    assert!(value["memory"].is_object());
+    assert!(value["cpu"].is_object());
 }
 
 #[tokio::test]
@@ -355,6 +369,7 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
         .unwrap();
     let state = AppState {
         sessions: Arc::new(SessionManager::new()),
+        v4_sessions: Arc::new(V4SessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -376,7 +391,8 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(value["loadType"], "search");
-    let track = &value["data"][0];
+    // The reference's `SEARCH_RESULT` payload is `{ "tracks": [...] }`.
+    let track = &value["data"]["tracks"][0];
     let encoded = track["encoded"].as_str().expect("encoded track");
     assert!(
         !base64::engine::general_purpose::STANDARD
@@ -423,7 +439,8 @@ async fn lavalink_info_matches_documented_v4_shape() {
     assert!(value["lavaplayer"].is_string());
     assert!(value["sourceManagers"].is_array());
     assert!(value["filters"].is_array());
-    assert!(value["plugins"].is_array());
+    // The reference nests the plugin list under a `plugins` object.
+    assert!(value["plugins"]["plugins"].is_array());
 }
 
 #[tokio::test]
@@ -472,10 +489,26 @@ async fn lavalink_player_matches_documented_v4_shape() {
     let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let session_id = created["sessionId"].as_str().unwrap();
 
+    // A missing player is a 404 in the reference, so create it with a PATCH
+    // first; the player route is `/v4/sessions/{sessionId}/players/{guildId}`.
+    let created_player = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/v4/sessions/{session_id}/players/1234"))
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"paused":true,"volume":80}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_player.status(), StatusCode::OK);
+
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/v4/sessions/{session_id}/player"))
+                .uri(format!("/v4/sessions/{session_id}/players/1234"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -487,7 +520,9 @@ async fn lavalink_player_matches_documented_v4_shape() {
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(value["guildId"], session_id);
+    assert_eq!(value["guildId"], "1234");
+    assert_eq!(value["volume"], 80);
+    assert_eq!(value["paused"], true);
     assert!(value["volume"].is_u64());
     assert!(value["paused"].is_boolean());
     assert!(value["state"]["time"].is_u64());

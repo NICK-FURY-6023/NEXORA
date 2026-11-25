@@ -1,5 +1,15 @@
 # ADR-001: Playback pipeline architecture
 
+## Status
+
+Superseded by [ADR-022](ADR-022-playback-pipeline-architecture.md), which
+records the same decision with the wording that matches the implementation.
+This file is the earlier draft of that decision and is kept for history.
+
+The number in this filename does not match the ADR index: the index lists
+ADR-001 as "Rust as primary implementation language", an index-only entry with
+no file. The playback-pipeline decision was renumbered to ADR-022.
+
 ## Context
 
 NEXORA needed a real-time local-file playback slice: a client creates a session, plays a local track, and receives Opus audio over a dedicated WebSocket while control commands (pause/resume/seek/volume/stop) flow through the REST API and event WebSocket.

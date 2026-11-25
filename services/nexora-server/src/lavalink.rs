@@ -1,0 +1,969 @@
+//! The Lavalink v4 surface.
+//!
+//! The route list below is the one the shipped `Lavalink.jar` (4.2.2)
+//! actually serves, read from its handler annotations:
+//!
+//! | Method | Path |
+//! | --- | --- |
+//! | GET | `/version` |
+//! | GET | `/v4/info` |
+//! | GET | `/v4/stats` |
+//! | GET | `/v4/routeplanner/status` |
+//! | POST | `/v4/routeplanner/free/address` |
+//! | POST | `/v4/routeplanner/free/all` |
+//! | GET | `/v4/loadtracks` |
+//! | GET | `/v4/decodetrack` |
+//! | POST | `/v4/decodetracks` |
+//! | POST | `/v4/sessions` |
+//! | PATCH | `/v4/sessions/{sessionId}` |
+//! | GET | `/v4/sessions/{sessionId}/players` |
+//! | GET | `/v4/sessions/{sessionId}/players/{guildId}` |
+//! | PATCH | `/v4/sessions/{sessionId}/players/{guildId}` |
+//! | DELETE | `/v4/sessions/{sessionId}/players/{guildId}` |
+//! | WS | `/v4/websocket` |
+//!
+//! Lavalink v4 has **no** queue routes: the queue is not part of its REST
+//! surface, so NEXORA does not invent one.
+//!
+//! The NodeLink extras NEXORA also serves are marked as such below.
+
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use nexora_audio_types::AudioFormat;
+use nexora_common::{SessionId, TrackId};
+use nexora_protocol::{
+    V4ErrorEnvelope, V4EventMessage, V4Filters, V4Git, V4Info, V4LoadResult, V4Player,
+    V4PlayerUpdate, V4PlayerUpdateFrame, V4Players, V4Plugins, V4Ready, V4Session, V4SessionUpdate,
+    V4StatsFrame, V4Track, V4TrackEndReason, V4TrackInfo, V4Version, decode_track, encode_track,
+};
+use nexora_source_api::{ResolvedSource, TrackMetadata, TrackReference};
+use nexora_source_framework::rank_candidates;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use tokio::sync::broadcast::error::RecvError;
+
+use crate::{AppState, internal_auth, start_playback};
+
+/// The reference's default player-update interval, in seconds.
+const PLAYER_UPDATE_INTERVAL_SECONDS: u64 = 5;
+
+/// The reference pushes stats once a minute.
+const STATS_INTERVAL_SECONDS: u64 = 60;
+
+/// An error in the reference's HTTP error shape.
+#[derive(Debug)]
+pub struct V4ApiError {
+    status: StatusCode,
+    message: String,
+    path: String,
+}
+
+impl V4ApiError {
+    fn new(status: StatusCode, message: impl Into<String>, path: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: message.into(),
+            path: path.into(),
+        }
+    }
+
+    fn bad_request(message: impl Into<String>, path: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, message, path)
+    }
+
+    fn not_found(message: impl Into<String>, path: impl Into<String>) -> Self {
+        Self::new(StatusCode::NOT_FOUND, message, path)
+    }
+}
+
+impl IntoResponse for V4ApiError {
+    fn into_response(self) -> Response {
+        let status = self.status;
+        let envelope = V4ErrorEnvelope::new(
+            status.as_u16(),
+            status.canonical_reason().unwrap_or("Error"),
+            self.message,
+            self.path,
+        );
+        (status, Json(envelope)).into_response()
+    }
+}
+
+/// Authorises a v4 request.
+///
+/// The reference compares the `Authorization` header with the configured
+/// password by string equality: a missing header is a 401 and a wrong one is
+/// a 403. NEXORA also accepts the `Bearer ` prefix its own API uses.
+fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), V4ApiError> {
+    let Some(expected) = state.password.as_deref() else {
+        return Ok(());
+    };
+    let supplied = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    match supplied {
+        None => Err(V4ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "authorization required",
+            "/v4",
+        )),
+        Some(value) if value == expected || value.strip_prefix("Bearer ") == Some(expected) => {
+            Ok(())
+        }
+        Some(_) => Err(V4ApiError::new(
+            StatusCode::FORBIDDEN,
+            "authorization failed",
+            "/v4",
+        )),
+    }
+}
+
+/// Authorises the v4 WebSocket handshake.
+///
+/// The reference's handshake interceptor has a single failure status — 401 —
+/// for both a missing and a wrong `Authorization` header, unlike its REST
+/// filter, which answers 401 for a missing header and 403 for a wrong one.
+fn authorize_handshake(headers: &HeaderMap, state: &AppState) -> Result<(), V4ApiError> {
+    let Some(expected) = state.password.as_deref() else {
+        return Ok(());
+    };
+    let supplied = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    match supplied {
+        None => Err(V4ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "authorization required",
+            "/v4/websocket",
+        )),
+        Some(value) if value == expected || value.strip_prefix("Bearer ") == Some(expected) => {
+            Ok(())
+        }
+        Some(_) => Err(V4ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "authorization failed",
+            "/v4/websocket",
+        )),
+    }
+}
+
+/// The Lavalink v4 routes.
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/version", get(version))
+        .route("/v4/info", get(info))
+        .route("/v4/stats", get(stats))
+        .route("/v4/routeplanner/status", get(routeplanner_status))
+        .route(
+            "/v4/routeplanner/free/address",
+            post(routeplanner_free_address),
+        )
+        .route("/v4/routeplanner/free/all", post(routeplanner_free_all))
+        .route("/v4/loadtracks", get(loadtracks))
+        .route("/v4/decodetrack", get(decode_track_route))
+        .route("/v4/decodetracks", post(decode_tracks))
+        .route("/v4/sessions", post(create_session))
+        .route("/v4/sessions/{id}", axum::routing::patch(patch_session))
+        .route("/v4/sessions/{id}/players", get(players))
+        .route(
+            "/v4/sessions/{id}/players/{guild}",
+            get(player).patch(patch_player).delete(delete_player),
+        )
+        .route("/v4/websocket", get(websocket))
+        // NodeLink extras.
+        .route("/v4/connection", get(connection))
+        .route("/v4/loadlyrics", get(load_lyrics))
+        .route("/v4/loadchapters", get(load_chapters))
+        .route("/v4/trackstream/{encoded}", get(trackstream))
+}
+
+/// `GET /version` — the bare version string as plain text.
+async fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+/// `GET /v4/info` — the node's identity and compatibility surface.
+async fn info(State(state): State<AppState>) -> Json<Value> {
+    let build_time = crate::process_start_ms() as i64;
+    let info = V4Info {
+        name: "NEXORA".to_owned(),
+        version: V4Version::nexora(),
+        build_time,
+        git: V4Git {
+            branch: "main".to_owned(),
+            commit: "nexora".to_owned(),
+            commit_time: build_time,
+        },
+        jvm: Some("rust-native".to_owned()),
+        lavaplayer: Some("nexora-audio-engine".to_owned()),
+        source_managers: state
+            .sources
+            .source_ids()
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        filters: V4Filters::default()
+            .enabled_names()
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        plugins: V4Plugins::default(),
+    };
+    Json(serde_json::to_value(info).unwrap_or_else(|_| json!({})))
+}
+
+/// The stats payload the reference serves.
+fn stats_payload(state: &AppState) -> V4StatsFrame {
+    V4StatsFrame {
+        frame_stats: None,
+        players: state.metrics.active_sessions() as i64,
+        playing_players: state.metrics.active_sessions() as i64,
+        uptime: crate::process_uptime_ms() as i64,
+        memory: json!({
+            "free": 0,
+            "used": 0,
+            "allocated": 0,
+            "reservable": 0,
+        }),
+        cpu: json!({
+            "cores": std::thread::available_parallelism()
+                .map(|value| value.get() as i64)
+                .unwrap_or(1),
+            "systemLoad": 0.0,
+            "lavalinkLoad": 0.0,
+        }),
+    }
+}
+
+/// `GET /v4/stats` — the reference's stats block.
+///
+/// The reference's REST payload has no `op` field; only the WebSocket
+/// `stats` event carries one.
+async fn stats(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    Ok(Json(
+        serde_json::to_value(stats_payload(&state)).unwrap_or(Value::Null),
+    ))
+}
+
+/// `GET /v4/routeplanner/status` — 204 when no route planner is configured.
+async fn routeplanner_status(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Response, V4ApiError> {
+    authorize(&headers, &state)?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// `POST /v4/routeplanner/free/address` — 204; NEXORA has no route planner.
+async fn routeplanner_free_address(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Response, V4ApiError> {
+    authorize(&headers, &state)?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// `POST /v4/routeplanner/free/all` — 204; NEXORA has no route planner.
+async fn routeplanner_free_all(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Response, V4ApiError> {
+    authorize(&headers, &state)?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchQuery {
+    identifier: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DecodeQuery {
+    #[serde(rename = "encodedTrack")]
+    encoded_track: Option<String>,
+    track: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EncodedTracks {
+    tracks: Vec<String>,
+}
+
+/// Builds the reference's track object from a source's metadata.
+fn build_track(metadata: &TrackMetadata) -> Result<V4Track, V4ApiError> {
+    let info = V4TrackInfo {
+        identifier: metadata.track_id.as_str().to_owned(),
+        is_seekable: metadata.duration_ms.is_some(),
+        author: metadata
+            .artist
+            .clone()
+            .unwrap_or_else(|| "unknown".to_owned()),
+        length: metadata.duration_ms.unwrap_or(0),
+        is_stream: false,
+        position: 0,
+        title: metadata.title.clone(),
+        uri: None,
+        artwork_url: None,
+        isrc: None,
+        source_name: metadata.source_id.clone(),
+    };
+    let encoded = encode_track(&info).map_err(|error| {
+        V4ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+            "/v4/loadtracks",
+        )
+    })?;
+    Ok(V4Track {
+        encoded,
+        info,
+        plugin_info: json!({}),
+        user_data: json!({}),
+    })
+}
+
+/// `GET /v4/loadtracks` — resolve an identifier into a load result.
+///
+/// The reference always answers HTTP 200: a failure is reported in the body.
+async fn loadtracks(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let results = state
+        .sources
+        .search(&query.identifier, &internal_auth())
+        .await
+        .map_err(|error| {
+            V4ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+                "/v4/loadtracks",
+            )
+        })?;
+    // Rank the candidates before the cut: an exact title match comes first.
+    let mut results = rank_candidates(results, &query.identifier, None);
+    results.truncate(25);
+    if results.is_empty() {
+        return Ok(Json(
+            serde_json::to_value(V4LoadResult::empty()).unwrap_or(Value::Null),
+        ));
+    }
+    let tracks: Vec<V4Track> = results
+        .iter()
+        .map(build_track)
+        .collect::<Result<Vec<V4Track>, V4ApiError>>()?;
+    Ok(Json(
+        serde_json::to_value(V4LoadResult::search(tracks)).unwrap_or(Value::Null),
+    ))
+}
+
+/// `GET /v4/decodetrack` — decode one encoded track.
+///
+/// The reference echoes the input encoded string rather than re-encoding it.
+async fn decode_track_route(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<DecodeQuery>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let encoded = query
+        .encoded_track
+        .or(query.track)
+        .ok_or_else(|| V4ApiError::bad_request("No track to decode provided", "/v4/decodetrack"))?;
+    let info = decode_track(&encoded)
+        .map_err(|error| V4ApiError::bad_request(error.to_string(), "/v4/decodetrack"))?;
+    let track = V4Track {
+        encoded,
+        info,
+        plugin_info: json!({}),
+        user_data: json!({}),
+    };
+    Ok(Json(serde_json::to_value(track).unwrap_or(Value::Null)))
+}
+
+/// `POST /v4/decodetracks` — decode a batch of encoded tracks.
+async fn decode_tracks(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(request): Json<EncodedTracks>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    if request.tracks.is_empty() {
+        return Err(V4ApiError::bad_request(
+            "No tracks to decode provided",
+            "/v4/decodetracks",
+        ));
+    }
+    let mut tracks = Vec::with_capacity(request.tracks.len());
+    for encoded in request.tracks {
+        let info = decode_track(&encoded)
+            .map_err(|error| V4ApiError::bad_request(error.to_string(), "/v4/decodetracks"))?;
+        tracks.push(V4Track {
+            encoded,
+            info,
+            plugin_info: json!({}),
+            user_data: json!({}),
+        });
+    }
+    Ok(Json(json!({ "tracks": tracks })))
+}
+
+/// `POST /v4/sessions` — create a session and return its id.
+async fn create_session(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<Value>), V4ApiError> {
+    authorize(&headers, &state)?;
+    let session_id = state.v4_sessions.create_session().await;
+    let native = SessionId::new(session_id.clone()).map_err(|_| {
+        V4ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "session id is not usable",
+            "/v4/sessions",
+        )
+    })?;
+    state
+        .sessions
+        .create_with_id(
+            native,
+            AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus),
+        )
+        .await
+        .map_err(|error| {
+            V4ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+                "/v4/sessions",
+            )
+        })?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "sessionId": session_id })),
+    ))
+}
+
+/// `PATCH /v4/sessions/{sessionId}` — the session's resume behaviour.
+async fn patch_session(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(update): Json<V4SessionUpdate>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let (resuming, timeout) = state
+        .v4_sessions
+        .set_resuming(&id, update.resuming, update.timeout)
+        .await
+        .ok_or_else(|| V4ApiError::not_found("Session not found", format!("/v4/sessions/{id}")))?;
+    Ok(Json(
+        serde_json::to_value(V4Session { resuming, timeout }).unwrap_or(Value::Null),
+    ))
+}
+
+/// `GET /v4/sessions/{sessionId}/players` — every player of the session.
+async fn players(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let players = state.v4_sessions.players(&id).await.ok_or_else(|| {
+        V4ApiError::not_found("Session not found", format!("/v4/sessions/{id}/players"))
+    })?;
+    let players: Vec<V4Player> = players.iter().map(|player| player.to_player()).collect();
+    Ok(Json(
+        serde_json::to_value(V4Players { players }).unwrap_or(Value::Null),
+    ))
+}
+
+/// `GET /v4/sessions/{sessionId}/players/{guildId}` — one player.
+async fn player(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((id, guild)): Path<(String, String)>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let player = state.v4_sessions.player(&id, &guild).await.ok_or_else(|| {
+        V4ApiError::not_found(
+            "Player not found",
+            format!("/v4/sessions/{id}/players/{guild}"),
+        )
+    })?;
+    Ok(Json(
+        serde_json::to_value(player.to_player()).unwrap_or(Value::Null),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct PlayerQuery {
+    #[serde(default)]
+    noreplace: bool,
+}
+
+/// `DELETE /v4/sessions/{sessionId}/players/{guildId}` — destroy a player.
+async fn delete_player(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((id, guild)): Path<(String, String)>,
+) -> Result<Response, V4ApiError> {
+    authorize(&headers, &state)?;
+    if state.v4_sessions.session(&id).await.is_none() {
+        return Err(V4ApiError::not_found(
+            "Session not found",
+            format!("/v4/sessions/{id}/players/{guild}"),
+        ));
+    }
+    state.v4_sessions.remove_player(&id, &guild).await;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// `PATCH /v4/sessions/{sessionId}/players/{guildId}` — update a player.
+///
+/// The field-application order follows the reference: voice, then paused, user
+/// data, volume, position, end time and filters, and finally a new track.
+async fn patch_player(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((id, guild)): Path<(String, String)>,
+    Query(query): Query<PlayerQuery>,
+    Json(update): Json<V4PlayerUpdate>,
+) -> Result<Json<Value>, V4ApiError> {
+    let path = format!("/v4/sessions/{id}/players/{guild}");
+    authorize(&headers, &state)?;
+    if state.v4_sessions.session(&id).await.is_none() {
+        return Err(V4ApiError::not_found("Session not found", path.clone()));
+    }
+
+    let track_block = update.track.as_ref();
+    let new_track_requested =
+        track_block.is_some() || update.encoded_track.is_some() || update.identifier.is_some();
+    if track_block.is_some() && (update.encoded_track.is_some() || update.identifier.is_some()) {
+        return Err(V4ApiError::bad_request(
+            "Cannot specify both track and encodedTrack/identifier",
+            path.clone(),
+        ));
+    }
+    if let Some(track) = track_block
+        && track.encoded.is_some()
+        && track.identifier.is_some()
+    {
+        return Err(V4ApiError::bad_request(
+            "Cannot specify both encodedTrack and identifier",
+            path.clone(),
+        ));
+    }
+    if let Some(Some(end_time)) = update.end_time
+        && end_time == 0
+    {
+        return Err(V4ApiError::bad_request(
+            "End time must be greater than 0",
+            path.clone(),
+        ));
+    }
+    if let Some(voice) = &update.voice
+        && !voice.is_complete()
+    {
+        return Err(V4ApiError::bad_request(
+            "token, endpoint, sessionId and channelId must be provided in voice state",
+            path.clone(),
+        ));
+    }
+
+    // The identifier the request asks for, if any.
+    let requested_identifier = track_block
+        .and_then(|track| track.identifier.clone())
+        .or_else(|| update.identifier.clone());
+    let requested_encoded = track_block
+        .and_then(|track| track.encoded.clone())
+        .or_else(|| update.encoded_track.clone());
+
+    let current = state.v4_sessions.player(&id, &guild).await;
+    // The reference skips the whole request and returns the current state when
+    // `noreplace` is set and the player is already playing.
+    if query.noreplace
+        && current
+            .as_ref()
+            .is_some_and(|player| player.track.is_some())
+        && let Some(player) = current
+    {
+        return Ok(Json(
+            serde_json::to_value(player.to_player()).unwrap_or(Value::Null),
+        ));
+    }
+
+    // Resolve the new track before touching any state.
+    let mut new_track: Option<V4Track> = None;
+    let mut stop_requested = false;
+    if requested_encoded.is_some() || requested_identifier.is_some() {
+        if let Some(Some(encoded)) = requested_encoded.clone() {
+            let info = decode_track(&encoded)
+                .map_err(|error| V4ApiError::bad_request(error.to_string(), path.clone()))?;
+            new_track = Some(V4Track {
+                encoded,
+                info,
+                plugin_info: json!({}),
+                user_data: json!({}),
+            });
+        } else if let Some(identifier) = requested_identifier.clone() {
+            let results = state
+                .sources
+                .search(&identifier, &internal_auth())
+                .await
+                .map_err(|error| V4ApiError::bad_request(error.to_string(), path.clone()))?;
+            let metadata = results.first().ok_or_else(|| {
+                V4ApiError::bad_request("No matches found for identifier", path.clone())
+            })?;
+            new_track = Some(build_track(metadata)?);
+        } else {
+            // An explicit null track stops the player.
+            stop_requested = true;
+        }
+    }
+
+    let paused = update.paused.unwrap_or(false);
+    let user_data = track_block.and_then(|track| track.user_data.clone());
+
+    let player = state
+        .v4_sessions
+        .update_player(&id, &guild, |player| {
+            if let Some(voice) = &update.voice {
+                player.voice = voice.clone();
+            }
+            if !new_track_requested {
+                if let Some(paused) = update.paused {
+                    player.paused = paused;
+                }
+                if let Some(data) = &user_data {
+                    player.user_data = data.clone();
+                }
+            }
+            if let Some(volume) = update.volume {
+                player.volume = volume;
+            }
+            if !new_track_requested && let Some(position) = update.position {
+                player.position_ms = position;
+            }
+            if !new_track_requested && let Some(Some(end_time)) = update.end_time {
+                player.end_time_ms = Some(end_time);
+            }
+            if let Some(filters) = &update.filters {
+                player.filters = filters.clone();
+            }
+            if let Some(track) = &new_track {
+                player.track = Some(track.clone());
+                player.paused = paused;
+                player.position_ms = update.position.unwrap_or(0);
+            } else if stop_requested {
+                player.track = None;
+                player.paused = false;
+                player.position_ms = 0;
+            }
+        })
+        .await
+        .ok_or_else(|| V4ApiError::not_found("Session not found", path.clone()))?;
+
+    // Drive the actual audio for the player that now has a track.
+    if let Some(track) = &new_track {
+        let native = SessionId::new(id.clone())
+            .map_err(|_| V4ApiError::not_found("Session not found", path.clone()))?;
+        let track_id = TrackId::new(track.info.identifier.clone())
+            .map_err(|_| V4ApiError::bad_request("invalid track identifier", path.clone()))?;
+        start_playback(&state, &native, &track_id)
+            .await
+            .map_err(|error| {
+                V4ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    error.message,
+                    path.clone(),
+                )
+            })?;
+        state.v4_sessions.emit(V4EventMessage::TrackStart {
+            guild_id: guild.clone(),
+            track: track.clone(),
+        });
+    } else if stop_requested {
+        if let Ok(native) = SessionId::new(id.clone()) {
+            let _ = state.sessions.stop(&native).await;
+        }
+        if let Some(track) = &player.track {
+            state.v4_sessions.emit(V4EventMessage::TrackEnd {
+                guild_id: guild.clone(),
+                track: track.clone(),
+                reason: V4TrackEndReason::Stopped,
+            });
+        }
+    }
+
+    Ok(Json(
+        serde_json::to_value(player.to_player()).unwrap_or(Value::Null),
+    ))
+}
+
+/// `WS /v4/websocket` — the session's event stream.
+async fn websocket(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    if let Err(error) = authorize_handshake(&headers, &state) {
+        return error.into_response();
+    }
+    // The reference requires a `User-Id` header that parses as a non-zero long.
+    let user_id = headers
+        .get("User-Id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let parsed = user_id.parse::<i64>();
+    if parsed.is_err() || parsed == Ok(0) {
+        return V4ApiError::bad_request("User-Id header is required", "/v4/websocket")
+            .into_response();
+    }
+
+    // A `Session-Id` header resumes a session when one exists.
+    let requested = headers
+        .get("Session-Id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let existing = match &requested {
+        Some(id) => state.v4_sessions.session(id).await.is_some(),
+        None => false,
+    };
+    let session_id = match requested {
+        Some(id) if state.v4_sessions.session(&id).await.is_some() => id,
+        _ => state.v4_sessions.create_session().await,
+    };
+    let resumed = existing;
+
+    let mut response =
+        upgrade.on_upgrade(move |socket| run_socket(socket, state, session_id, resumed));
+    let resumed_header = if resumed { "true" } else { "false" };
+    if let Ok(value) = resumed_header.parse() {
+        response.headers_mut().insert("Session-Resumed", value);
+    }
+    response
+}
+
+/// The WebSocket's send loop.
+async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, resumed: bool) {
+    let ready = V4Ready {
+        resumed,
+        session_id: session_id.clone(),
+    };
+    if send_frame(&mut socket, &ready.to_frame()).await.is_err() {
+        return;
+    }
+
+    let mut events = state.v4_sessions.subscribe();
+    let mut stats_interval =
+        tokio::time::interval(std::time::Duration::from_secs(STATS_INTERVAL_SECONDS));
+    stats_interval.tick().await;
+    let mut player_interval = tokio::time::interval(std::time::Duration::from_secs(
+        PLAYER_UPDATE_INTERVAL_SECONDS,
+    ));
+    player_interval.tick().await;
+
+    loop {
+        tokio::select! {
+            received = events.recv() => {
+                match received {
+                    Ok(event) => {
+                        if send_frame(&mut socket, &event.to_frame()).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(RecvError::Lagged(_)) => continue,
+                    Err(RecvError::Closed) => break,
+                }
+            }
+            _ = stats_interval.tick() => {
+                if send_frame(&mut socket, &stats_payload(&state).to_frame()).await.is_err() {
+                    break;
+                }
+            }
+            _ = player_interval.tick() => {
+                let Some(players) = state.v4_sessions.players(&session_id).await else {
+                    continue;
+                };
+                for player in players {
+                    let frame = V4PlayerUpdateFrame {
+                        state: player.state(),
+                        guild_id: player.guild_id.clone(),
+                    };
+                    if send_frame(&mut socket, &frame.to_frame()).await.is_err() {
+                        return;
+                    }
+                }
+            }
+            incoming = socket.recv() => {
+                // The v4 socket is receive-only for events; the reference warns
+                // that inbound messages must use the REST API.
+                if incoming.is_none() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Sends one frame as JSON text.
+async fn send_frame(socket: &mut WebSocket, frame: &Value) -> Result<(), ()> {
+    let Ok(text) = serde_json::to_string(frame) else {
+        return Err(());
+    };
+    socket
+        .send(Message::Text(text.into()))
+        .await
+        .map_err(|_| ())
+}
+
+/// `GET /v4/connection` — NodeLink's connection diagnostics.
+///
+/// NEXORA has no voice gateway, so the endpoint reports the reference's
+/// disabled payload.
+async fn connection(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    Ok(Json(json!({
+        "status": "disabled",
+        "metrics": null,
+        "reason": "connection_manager_unavailable_in_this_process",
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct LyricsQuery {
+    #[serde(rename = "encodedTrack")]
+    encoded_track: Option<String>,
+    source: Option<String>,
+}
+
+/// `GET /v4/loadlyrics` — NodeLink's lyrics endpoint.
+///
+/// NEXORA has no lyrics source, so the endpoint answers with an empty
+/// payload rather than pretending it found something.
+async fn load_lyrics(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<LyricsQuery>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let Some(encoded) = query.encoded_track else {
+        return Err(V4ApiError::bad_request(
+            "Missing encodedTrack parameter.",
+            "/v4/loadlyrics",
+        ));
+    };
+    decode_track(&encoded)
+        .map_err(|error| V4ApiError::bad_request(error.to_string(), "/v4/loadlyrics"))?;
+    Ok(Json(json!({
+        "sourceName": query.source.unwrap_or_default(),
+        "type": "none",
+        "data": null,
+    })))
+}
+
+/// `GET /v4/loadchapters` — NodeLink's chapters endpoint.
+async fn load_chapters(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<LyricsQuery>,
+) -> Result<Json<Value>, V4ApiError> {
+    authorize(&headers, &state)?;
+    let Some(encoded) = query.encoded_track else {
+        return Err(V4ApiError::bad_request(
+            "Missing encodedTrack parameter.",
+            "/v4/loadchapters",
+        ));
+    };
+    decode_track(&encoded)
+        .map_err(|error| V4ApiError::bad_request(error.to_string(), "/v4/loadchapters"))?;
+    Ok(Json(json!([])))
+}
+
+/// `GET /v4/trackstream/{encodedTrack}` — NodeLink's track stream.
+async fn trackstream(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(encoded): Path<String>,
+) -> Result<Response, V4ApiError> {
+    authorize(&headers, &state)?;
+    let info = decode_track(&encoded)
+        .map_err(|error| V4ApiError::bad_request(error.to_string(), "/v4/trackstream"))?;
+    let track_id = TrackId::new(info.identifier.clone())
+        .map_err(|_| V4ApiError::bad_request("invalid track identifier", "/v4/trackstream"))?;
+    let resolved = state
+        .sources
+        .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
+        .await
+        .map_err(|error| {
+            V4ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                error.to_string(),
+                "/v4/trackstream",
+            )
+        })?;
+    let ResolvedSource::LocalFile { path } = resolved else {
+        return Err(V4ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "source type cannot be streamed yet",
+            "/v4/trackstream",
+        ));
+    };
+    let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus);
+    let output = std::env::temp_dir().join(format!(
+        "nexora-trackstream-{}.opus",
+        nexora_common::TimestampMs::now().as_millis()
+    ));
+    let input = path.clone();
+    let output_path = output.clone();
+    tokio::task::spawn_blocking(move || {
+        nexora_audio_pipeline::process_file(
+            &input,
+            &output_path,
+            format.sample_rate,
+            format.channels,
+            nexora_audio_pipeline::OutputCodec::Opus,
+        )
+    })
+    .await
+    .map_err(|_| {
+        V4ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "stream task failed",
+            "/v4/trackstream",
+        )
+    })?
+    .map_err(|error| {
+        V4ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+            "/v4/trackstream",
+        )
+    })?;
+    let bytes = tokio::fs::read(&output).await.map_err(|_| {
+        V4ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "stream output is unreadable",
+            "/v4/trackstream",
+        )
+    })?;
+    let _ = tokio::fs::remove_file(&output).await;
+    Ok((
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "audio/ogg")],
+        axum::body::Body::from(bytes),
+    )
+        .into_response())
+}

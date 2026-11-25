@@ -1012,6 +1012,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tonic",
  "tower",
  "tracing",

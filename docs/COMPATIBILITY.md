@@ -35,9 +35,12 @@ proved by `services/nexora-server/tests/compat/`.
 | Piece | Wire contract | Evidence | Proof |
 |---|---|---|---|
 | Op codes | `"ready"`, `"stats"`, `"playerUpdate"`, `"event"` | `Message$Op` in the shipped `protocol-jvm-4.2.2.jar` | `compat_protocol_op_codes_are_the_reference_values` |
-| Event envelope | `{"op":…,"event":…,"data":…}`, `event` omitted when absent | `Message$EmittedEvent` | `nexora-protocol` unit tests |
-| Error envelope | `{"timestamp":…,"error":{"code","message","severity","cause"}}`, severities `COMMON`/`SUSPICIOUS`/`FAULT` | `Exception$Severity` in the shipped protocol jar | `nexora-protocol` unit tests |
-| Track encoding | base64 of `{track_id, source_id, title, duration_ms, artist}`; decodes to the v4 `info` shape | `docs/LAVALINK_DEEP_DIVE.md` §3 (semantic, not byte, compatibility) | `compat_v4_loadtracks_track_shape` |
+| Event envelope | flat: `{"op":…,"type":…,"guildId":…,…}` — `op`, `type` and the event's own fields are siblings, with no `data` wrapper | `Message$EmittedEvent` and its per-event serializers in the shipped protocol jar | `nexora-protocol` unit tests |
+| Event types | `"TrackStartEvent"`, `"TrackEndEvent"`, `"TrackExceptionEvent"`, `"TrackStuckEvent"`, `"WebSocketClosedEvent"` | `Message$EmittedEvent$Type` in the shipped protocol jar | `compat_protocol_op_codes_are_the_reference_values` |
+| Error envelope | `{"timestamp":…,"status":…,"error":…,"trace":…,"message":…,"path":…}`; `timestamp` is epoch milliseconds, not an ISO-8601 string | `Error` and `serialization/TimestampSerializer` in the shipped protocol jar | `nexora-protocol` unit tests |
+| Exception severities | `common`, `suspicious`, `fault` — lower case on the wire, although the enum constants are `COMMON`/`SUSPICIOUS`/`FAULT` | `Exception$Severity` in the shipped protocol jar | `nexora-protocol` unit tests |
+| Track encoding | Lavaplayer's version-3 track-info frame: a 4-byte big-endian header (flags in the top two bits, payload length in the rest) plus the payload, base64-encoded, with no end marker | `spec:` §6; the reference blob in `docs/research/lavalink-source-architecture.md` §6.4 | `compat_v4_loadtracks_track_shape`, `nexora-protocol` unit tests |
+| Load types | `"track"`, `"playlist"`, `"search"`, `"empty"`, `"error"` — lower case on the wire, although the enum constants are `TRACK`/`PLAYLIST`/`SEARCH`/`NONE`/`ERROR` | `ResultStatus` in the shipped protocol jar | `nexora-protocol` unit tests |
 | Version negotiation | `4` and `4.x.y` accepted, other generations rejected | `spec:` §1.4 | `nexora-protocol` unit tests |
 
 ## REST routes — Lavalink v4.2.2
@@ -47,28 +50,38 @@ Reference inventory: `spec:` `docs/research/lavalink-source-architecture.md`
 
 | Route | Method | NEXORA | Status | Notes |
 |---|---|---|---|---|
-| `/v4/loadtracks` | GET | `lavalink_loadtracks` | implemented | returns the v4 track shape |
-| `/v4/decodetrack` | GET | — | missing | M7 |
-| `/v4/decodetracks` | POST | — | missing | M7 |
-| `/v4/sessions/{id}/players` | GET | — | missing | M7; NEXORA exposes `/v4/sessions/{id}/player` (singular) instead |
-| `/v4/sessions/{id}/players/{guildId}` | GET/PATCH/DELETE | — | missing | M7 |
-| `/v4/sessions/{id}` | PATCH | — | missing | M2 |
-| `/v4/info` | GET | `lavalink_info` | implemented | |
-| `/version` | GET | — | missing | M1; NodeLink serves it as `/v4/version` |
-| `/v4/stats` | GET | `lavalink_stats` | implemented | |
-| `/v4/routeplanner/status` | GET | `lavalink_routeplanner_status` | implemented | |
-| `/v4/routeplanner/free/address` | POST | — | missing | M7 |
-| `/v4/routeplanner/free/all` | POST | — | missing | M7 |
+| `/v4/loadtracks` | GET | `loadtracks` | implemented | returns the v4 load result; a search result's `data` is `{ "tracks": [...] }` — `compat_v4_loadtracks_track_shape` |
+| `/v4/decodetrack` | GET | `decode_track_route` | implemented | `encodedTrack` takes precedence over `track` — `compat_v4_decodetrack_returns_the_track` |
+| `/v4/decodetracks` | POST | `decode_tracks` | implemented | an empty `tracks` list is a 400 — `compat_v4_decodetracks_decodes_a_batch` |
+| `/v4/sessions/{id}/players` | GET | `players` | implemented | returns `{ "players": [ Player, ... ] }` — `compat_v4_player_routes` |
+| `/v4/sessions/{id}/players/{guildId}` | GET/PATCH/DELETE | `player`, `patch_player`, `delete_player` | implemented | a missing player is a 404; DELETE answers 204 — `compat_v4_player_routes` |
+| `/v4/sessions/{id}` | PATCH | `patch_session` | implemented | applies `resuming` and `timeout`; returns the session object — `compat_v4_session_patch_applies_resume_settings` |
+| `/v4/info` | GET | `info` | implemented | `plugins` is an object, not a bare array — `compat_v4_info_shape` |
+| `/version` | GET | `version` | implemented | plain text, no JSON quotes — `compat_version_endpoint_returns_the_plain_version` |
+| `/v4/stats` | GET | `stats` | implemented | the REST payload has no `op`; only the WebSocket `stats` frame carries one — `compat_v4_stats_shape` |
+| `/v4/routeplanner/status` | GET | `routeplanner_status` | implemented | 204 when no planner is configured — `compat_v4_routeplanner_status_is_no_content` |
+| `/v4/routeplanner/free/address` | POST | `routeplanner_free_address` | implemented | 204; NEXORA has no route planner |
+| `/v4/routeplanner/free/all` | POST | `routeplanner_free_all` | implemented | 204; NEXORA has no route planner |
 | `/` , `/v3/websocket` | GET | — | not-targeted | Lavalink serves these only to log a deprecation warning |
+
+### NEXORA-only v4 routes
+
+The reference has no route for creating a session: a session is the WebSocket
+connection context. NEXORA adds this so a client can obtain a session id
+without opening the socket.
+
+| Route | Method | NEXORA | Status | Notes |
+|---|---|---|---|---|
+| `/v4/sessions` | POST | `create_session` | implemented | NEXORA extension; returns `{ "sessionId": … }` with 201 |
 
 ## REST routes — NodeLink extras
 
 | Route | Method | NEXORA | Status | Notes |
 |---|---|---|---|---|
-| `/v4/loadlyrics` | GET | — | missing | M8; `&lang=` optional |
-| `/v4/loadchapters` | GET | — | missing | M8 |
-| `/v4/connection` | GET | — | missing | M8; NodeLink-exclusive, carries speed/bytes metrics |
-| `/v4/trackstream` | GET | — | missing | M8; gated by config, returns direct formats |
+| `/v4/loadlyrics` | GET | `load_lyrics` | partial | answers an empty payload; NEXORA has no lyrics source |
+| `/v4/loadchapters` | GET | `load_chapters` | partial | answers `[]`; NEXORA has no chapters source |
+| `/v4/connection` | GET | `connection` | partial | reports the reference's disabled payload; NEXORA has no voice gateway |
+| `/v4/trackstream/{encodedTrack}` | GET | `trackstream` | partial | transcodes a local file to Opus; other source types are a 422 |
 | `/v4/loadstream` | GET | — | missing | M8; raw PCM streaming, gated by config |
 | `/v4/hls/*` | GET | — | not-targeted | HLS serving is a NodeLink feature, not Lavalink's |
 | `/v4/profiler*` | GET | — | not-targeted | NodeLink profiling endpoints |
@@ -80,8 +93,8 @@ Reference inventory: `spec:` `docs/research/lavalink-source-architecture.md`
 
 | Endpoint | NEXORA | Status | Notes |
 |---|---|---|---|
-| `/v4/websocket` | — | missing | M1; Lavalink's single event socket |
-| `/ws/v1/sessions/{id}` | `websocket_events` | partial | NEXORA's own per-session socket; the v4 shape is not served yet |
+| `/v4/websocket` | `websocket` | implemented | Lavalink's single event socket; the `ready` frame is flat and comes first — `compat_v4_websocket_ready_frame`, `compat_v4_websocket_handshake_refuses_a_bad_request`, `compat_v4_websocket_handshake_refuses_a_wrong_password` |
+| `/ws/v1/sessions/{id}` | `websocket_events` | partial | NEXORA's own per-session socket; the v4 shape is not served here |
 | `/v4/websocket/voice` | — | not-targeted | NodeLink voice socket |
 | `/v4/websocket/youtube/live` | — | not-targeted | NodeLink live-metadata socket |
 
@@ -92,12 +105,12 @@ the analysed tree.
 
 | Event | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `TrackStartEvent` | yes | yes | `track_started` (native event, different channel) | partial |
-| `TrackEndEvent` | yes | yes | `track_ended` | partial |
-| `TrackExceptionEvent` | yes | yes | `track_failed` | partial |
-| `playerUpdate` | yes | yes | — | missing (M3) |
-| `WebSocketClosedEvent` | yes | yes | — | missing (M3) |
-| `TrackStuckEvent` | no | yes | — | missing (M3) |
+| `TrackStartEvent` | yes | yes | `V4EventMessage::TrackStart` on `/v4/websocket` | implemented |
+| `TrackEndEvent` | yes | yes | `V4EventMessage::TrackEnd` on `/v4/websocket` | implemented |
+| `TrackExceptionEvent` | yes | yes | `V4EventMessage::TrackException` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
+| `playerUpdate` | yes | yes | `V4PlayerUpdateFrame` on `/v4/websocket` | implemented |
+| `WebSocketClosedEvent` | yes | yes | `V4EventMessage::WebSocketClosed` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
+| `TrackStuckEvent` | no | yes | `V4EventMessage::TrackStuck` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
 | `SeekEvent`, `PauseEvent`, `VolumeChangedEvent`, `FiltersChangedEvent` | no | yes | — | missing (M3) |
 | `PlayerCreatedEvent`, `PlayerDestroyedEvent`, `PlayerReconnectingEvent`, `PlayerConnectedEvent`, `ConnectionStatusEvent` | no | yes | — | missing (M3) |
 | `MixStartedEvent`, `MixEndedEvent` | no | yes | — | not-targeted (mixing is not in scope) |
@@ -111,11 +124,11 @@ Reference: NodeLink `src/constants.ts` `EndReasons`.
 
 | Reason | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `stopped` | yes | yes | `{"reason":"finished"}` only | partial (M3) |
-| `finished` | yes | yes | yes | implemented |
-| `loadFailed` | yes | yes | `{"reason": reason}` | partial |
-| `replaced` | yes | yes | — | missing (M3) |
-| `cleanup` | no | yes | — | not-targeted |
+| `stopped` | yes | yes | `V4TrackEndReason::Stopped` | implemented |
+| `finished` | yes | yes | `V4TrackEndReason::Finished` | implemented |
+| `loadFailed` | yes | yes | `V4TrackEndReason::LoadFailed` | implemented |
+| `replaced` | yes | yes | `V4TrackEndReason::Replaced` | implemented |
+| `cleanup` | no | yes | `V4TrackEndReason::Cleanup` | implemented |
 | `gapless` | no | yes | — | missing (M8) |
 | `crossfading` | no | yes | — | not-targeted (crossfade is not in scope) |
 
@@ -130,13 +143,19 @@ the shipped `Lavalink.jar`); NodeLink ships 21 filter classes plus a mixer
 
 | Filter | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `volume`, `equalizer`, `karaoke`, `timescale` | yes | yes | — | missing (M4) |
-| `tremolo`, `vibrato`, `distortion`, `rotation` | yes | yes | — | missing (M4) |
-| `channelMix`, `lowPass` | yes | yes | — | missing (M4) |
-| `highpass`, `compressor`, `echo`, `phaser` | no | yes | — | missing (M4, NodeLink extra) |
+| `volume`, `equalizer`, `karaoke`, `timescale` | yes | yes | typed, not applied | partial (M4) |
+| `tremolo`, `vibrato`, `distortion`, `rotation` | yes | yes | typed, not applied | partial (M4) |
+| `channelMix`, `lowPass` | yes | yes | typed, not applied | partial (M4) |
+| `highpass`, `compressor`, `echo`, `phaser` | no | yes | typed, not applied | partial (M4, NodeLink extra) |
 | `chorus`, `flanger`, `reverb`, `spatial`, `phonograph`, `tesseract` | no | yes | — | not-targeted |
 | JS script filters | yes (Rhino engine bundled) | no | — | missing (M4); needs a JS engine in Rust |
 | Audio mixer (TTS/SFX layering) | no | yes | — | not-targeted |
+
+The filter chain is typed in `crates/nexora-protocol/src/v4/filters.rs` with the
+reference's parameter names and defaults, and `PATCH .../players/{guildId}`
+stores it on the player. No filter is applied to the audio stream yet, so
+`/v4/info` reports an empty `filters` list — the reference advertises only the
+filters it actually applies.
 
 ## Sources
 
@@ -155,12 +174,13 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 12 rows.
 
 | Surface | implemented | partial | missing | not-targeted |
 |---|---|---|---|---|
-| Lavalink v4 routes | 4 | 0 | 8 | 1 |
-| NodeLink extra routes | 0 | 0 | 6 | 4 |
-| WebSocket endpoints | 0 | 1 | 1 | 2 |
-| Events | 0 | 3 | 6 | 3 |
-| Track end reasons | 1 | 2 | 2 | 2 |
-| Filters | 0 | 0 | 5 | 2 |
+| Lavalink v4 routes | 13 | 0 | 0 | 1 |
+| NEXORA-only v4 routes | 1 | 0 | 0 | 0 |
+| NodeLink extra routes | 0 | 4 | 2 | 4 |
+| WebSocket endpoints | 1 | 1 | 0 | 2 |
+| Events | 3 | 3 | 3 | 3 |
+| Track end reasons | 5 | 0 | 1 | 1 |
+| Filters | 0 | 4 | 1 | 2 |
 | Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is

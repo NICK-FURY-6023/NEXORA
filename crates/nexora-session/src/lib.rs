@@ -12,6 +12,10 @@ use nexora_protocol::{
 use serde_json::json;
 use tokio::sync::{RwLock, broadcast, watch};
 
+pub mod v4;
+
+pub use v4::{V4PlayerRecord, V4SessionContext, V4SessionManager};
+
 /// Signals sent from session state to the single active playback task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackSignal {
@@ -237,6 +241,18 @@ impl SessionManager {
     pub async fn create(&self, output: AudioFormat) -> NexoraResult<CreateSessionResponse> {
         let sequence = self.counter.fetch_add(1, Ordering::SeqCst) + 1;
         let session_id = SessionId::new(format!("nx_session_{sequence}"))?;
+        self.create_with_id(session_id, output).await
+    }
+
+    /// Creates a session under a caller-chosen id.
+    ///
+    /// The Lavalink v4 surface hands out its own sixteen-character session
+    /// ids, and those ids must address the same session on every route.
+    pub async fn create_with_id(
+        &self,
+        session_id: SessionId,
+        output: AudioFormat,
+    ) -> NexoraResult<CreateSessionResponse> {
         let record = SessionRecord {
             status: "created".to_string(),
             current_track: None,

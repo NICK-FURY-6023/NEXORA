@@ -72,6 +72,28 @@ Workspace total is now 83 passing Rust tests.
 - Known compatibility boundary: `encoded` is an opaque NEXORA base64 JSON
   blob, not Lavalink's binary track encoding; `/v4/decodetrack` is absent.
 
+### Lavalink v4 protocol core, WebSocket and session lifecycle
+
+- `crates/nexora-protocol/src/v4/` owns every Lavalink v4 wire type: the op
+  codes, the flat event envelope, the error envelope, the exception severities,
+  the load results, the player and session objects, the filter chain, and the
+  encoded-track codec. Every shape is read from the shipped
+  `protocol-jvm-4.2.2.jar` rather than from the protocol documentation.
+- The encoded-track codec is Lavaplayer's version-3 track-info frame, byte for
+  byte: the reference blob in `docs/research/lavalink-source-architecture.md`
+  §6.4 decodes to the documented fields and re-encodes to the same bytes.
+- `services/nexora-server/src/lavalink.rs` serves the reference's route
+  inventory: `/version`, `/v4/info`, `/v4/stats`, the three route-planner
+  routes, `/v4/loadtracks`, `/v4/decodetrack`, `/v4/decodetracks`,
+  `PATCH /v4/sessions/{id}`, the three player routes, and the
+  `/v4/websocket` event socket. `POST /v4/sessions` is a NEXORA extension.
+- The event socket emits the reference's flat frames: the `ready` frame first,
+  then `playerUpdate`, `stats` and the event types. The reference's handshake
+  rules are enforced before the upgrade — a missing or zero `User-Id` is a
+  400, a wrong `Authorization` is a 401.
+- `docs/COMPATIBILITY.md` records the row-by-row state and names the test that
+  proves each row. The workspace total is now 142 passing Rust tests.
+
 ### Implemented in Phase 4b
 
 - `nexora-grpc` with a versioned `nexora.v1.SessionService` protobuf contract (tonic/prost, vendored protoc).

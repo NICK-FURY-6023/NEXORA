@@ -6,6 +6,10 @@ use nexora_error::NexoraError;
 pub const LAVALINK_V4_PROTOCOL_VERSION: &str = "4.0.0";
 
 /// Version block of the Lavalink v4 `/v4/info` payload.
+///
+/// The reference carries a semver string and its three numeric parts plus an
+/// optional pre-release tag (bytecode evidence on `Version` in
+/// `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct V4Version {
     pub semver: String,
@@ -14,7 +18,6 @@ pub struct V4Version {
     pub patch: u32,
     #[serde(rename = "preRelease")]
     pub pre_release: Option<String>,
-    pub build: Option<String>,
 }
 
 impl V4Version {
@@ -31,7 +34,6 @@ impl V4Version {
             minor,
             patch,
             pre_release: None,
-            build: None,
         }
     }
 }
@@ -53,6 +55,15 @@ pub struct V4Plugin {
     pub version: String,
 }
 
+/// The plugin block of the Lavalink v4 `/v4/info` payload.
+///
+/// The reference nests the plugin list under a `plugins` object, not a bare
+/// array (bytecode evidence on `Plugins` in `protocol-jvm-4.2.2.jar`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct V4Plugins {
+    pub plugins: Vec<V4Plugin>,
+}
+
 /// The Lavalink v4 `/v4/info` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct V4Info {
@@ -66,7 +77,7 @@ pub struct V4Info {
     #[serde(rename = "sourceManagers")]
     pub source_managers: Vec<String>,
     pub filters: Vec<String>,
-    pub plugins: Vec<V4Plugin>,
+    pub plugins: V4Plugins,
 }
 
 /// Accept only the protocol generation NEXORA implements.
@@ -116,7 +127,7 @@ mod tests {
             lavaplayer: Some("nexora-audio-engine".into()),
             source_managers: vec!["local".into()],
             filters: Vec::new(),
-            plugins: Vec::new(),
+            plugins: V4Plugins::default(),
         };
         let value = serde_json::to_value(&info).unwrap();
         assert_eq!(value["name"], "NEXORA");
@@ -124,6 +135,7 @@ mod tests {
         assert!(value["version"]["preRelease"].is_null());
         assert_eq!(value["sourceManagers"][0], "local");
         assert_eq!(value["filters"].as_array().unwrap().len(), 0);
+        assert!(value["plugins"]["plugins"].is_array());
     }
 
     #[test]

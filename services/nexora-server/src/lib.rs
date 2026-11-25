@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -16,17 +16,16 @@ use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
-use nexora_protocol::{
-    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, V4Git, V4Info, V4Track,
-    V4TrackInfo, V4Version, encode_track,
-};
-use nexora_session::{PlaybackSignal, SessionManager};
-use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackMetadata, TrackReference};
+use nexora_protocol::{CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest};
+use nexora_session::{PlaybackSignal, SessionManager, V4SessionManager};
+use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, watch};
+
+pub mod lavalink;
 
 #[derive(Debug, Default)]
 pub struct RuntimeMetrics {
@@ -74,6 +73,7 @@ impl RuntimeMetrics {
 #[derive(Clone)]
 pub struct AppState {
     pub sessions: Arc<SessionManager>,
+    pub v4_sessions: Arc<V4SessionManager>,
     pub sources: Arc<SourceRegistry>,
     pub password: Option<String>,
     pub metrics: Arc<RuntimeMetrics>,
@@ -209,7 +209,7 @@ fn parse_session_id(value: &str) -> Result<SessionId, ApiError> {
     SessionId::new(value).map_err(|_| ApiError::bad_request())
 }
 
-fn internal_auth() -> AuthContext {
+pub(crate) fn internal_auth() -> AuthContext {
     AuthContext::new(
         "nexora-server",
         vec![
@@ -240,16 +240,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/metrics", get(metrics))
         .route("/ws/v1/sessions/{id}", get(websocket_events))
         .route("/ws/v1/sessions/{id}/audio", get(websocket_audio))
-        .route("/v4/info", get(lavalink_info))
-        .route("/v4/stats", get(lavalink_stats))
-        .route("/v4/routeplanner/status", get(lavalink_routeplanner_status))
-        .route("/v4/loadtracks", get(lavalink_loadtracks))
-        .route("/v4/sessions", post(lavalink_create_session))
-        .route(
-            "/v4/sessions/{id}/player",
-            get(lavalink_player).patch(lavalink_patch_player),
-        )
-        .route("/v4/sessions/{id}", get(websocket_events))
+        .merge(lavalink::router())
         .with_state(state)
 }
 
@@ -338,7 +329,19 @@ async fn play(
 ) -> Result<Json<Value>, ApiError> {
     authorize(&headers, &state)?;
     let session_id = parse_session_id(&id)?;
-    let track_id = request.track_id.clone();
+    start_playback(&state, &session_id, &request.track_id).await?;
+    Ok(Json(json!({ "status": "playing" })))
+}
+
+/// Resolves a track and starts the playback task that produces its audio.
+///
+/// Both the native API and the Lavalink v4 player routes start playback the
+/// same way, so the resolution and the pacing task live here.
+pub(crate) async fn start_playback(
+    state: &AppState,
+    session_id: &SessionId,
+    track_id: &TrackId,
+) -> Result<(), ApiError> {
     let resolved = state
         .sources
         .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
@@ -346,28 +349,43 @@ async fn play(
     let ResolvedSource::LocalFile { path } = resolved else {
         return Err(ApiError::unsupported());
     };
-    let format = state.sessions.output_format(&session_id).await?;
+    let format = state.sessions.output_format(session_id).await?;
 
     let (audio_tx, _) = broadcast::channel(64);
     state
         .sessions
         .audio_registry()
-        .register(&session_id, audio_tx.clone())
+        .register(session_id, audio_tx.clone())
         .await;
     let (control_tx, control_rx) = watch::channel(PlaybackSignal::Resume);
     state
         .sessions
-        .attach_playback(&session_id, control_tx, audio_tx)
+        .attach_playback(session_id, control_tx, audio_tx)
         .await?;
-    state.sessions.play(&session_id, request).await?;
+    state
+        .sessions
+        .play(
+            session_id,
+            PlayRequest {
+                track_id: track_id.clone(),
+                start_position_ms: 0,
+            },
+        )
+        .await?;
 
     let sessions = Arc::clone(&state.sessions);
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
     tokio::spawn(run_playback(
-        session_id, path, format, control_rx, sessions, metrics, sources,
+        session_id.clone(),
+        path,
+        format,
+        control_rx,
+        sessions,
+        metrics,
+        sources,
     ));
-    Ok(Json(json!({ "status": "playing" })))
+    Ok(())
 }
 
 async fn prepare_packets(
@@ -729,31 +747,7 @@ async fn forward_audio(mut socket: WebSocket, mut receiver: broadcast::Receiver<
     }
 }
 
-async fn lavalink_stats(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    authorize(&headers, &state)?;
-    Ok(Json(json!({
-        "op": "stats",
-        "players": state.metrics.active_sessions(),
-        "playingPlayers": state.metrics.active_sessions(),
-        "uptime": 0,
-        "memory": { "free": 0, "used": 0, "allocated": 0, "reservable": 0 },
-        "cpu": { "cores": 0, "systemLoad": 0.0, "lavalinkLoad": 0.0 },
-        "frameStats": null
-    })))
-}
-
-async fn lavalink_routeplanner_status(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    authorize(&headers, &state)?;
-    Ok(Json(json!({ "class": null, "details": {} })))
-}
-
-fn process_start_ms() -> u64 {
+pub(crate) fn process_start_ms() -> u64 {
     static START: OnceLock<u64> = OnceLock::new();
     *START.get_or_init(|| {
         SystemTime::now()
@@ -763,164 +757,11 @@ fn process_start_ms() -> u64 {
     })
 }
 
-async fn lavalink_info(State(state): State<AppState>) -> Json<Value> {
-    let build_time = process_start_ms();
-    let info = V4Info {
-        name: "NEXORA".to_owned(),
-        version: V4Version::nexora(),
-        build_time: build_time as i64,
-        git: V4Git {
-            branch: "main".to_owned(),
-            commit: "nexora".to_owned(),
-            commit_time: build_time as i64,
-        },
-        jvm: Some("rust-native".to_owned()),
-        lavaplayer: Some("nexora-audio-engine".to_owned()),
-        source_managers: state
-            .sources
-            .source_ids()
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-        filters: Vec::new(),
-        plugins: Vec::new(),
-    };
-    Json(serde_json::to_value(info).unwrap_or_else(|_| json!({})))
-}
-
-fn lavalink_track(metadata: &TrackMetadata) -> NexoraResult<Value> {
-    let info = V4TrackInfo {
-        identifier: metadata.track_id.as_str().to_owned(),
-        is_seekable: metadata.duration_ms.is_some(),
-        author: metadata
-            .artist
-            .clone()
-            .unwrap_or_else(|| "unknown".to_owned()),
-        length: metadata.duration_ms.unwrap_or(0),
-        is_stream: false,
-        position: 0,
-        title: metadata.title.clone(),
-        uri: None,
-        artwork_url: None,
-        isrc: None,
-        source_name: metadata.source_id.clone(),
-    };
-    let encoded = encode_track(&info, &json!({ "source_id": metadata.source_id }))?;
-    let track = V4Track {
-        encoded,
-        info,
-        plugin_info: json!({}),
-        user_data: json!({}),
-    };
-    Ok(serde_json::to_value(track).unwrap_or(Value::Null))
-}
-
-async fn lavalink_loadtracks(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Query(query): Query<SearchQuery>,
-) -> Result<Json<Value>, ApiError> {
-    authorize(&headers, &state)?;
-    let mut results = state
-        .sources
-        .search(&query.identifier, &internal_auth())
-        .await?;
-    results = rank_candidates(results, &query.identifier, None);
-    results.truncate(25);
-    if results.is_empty() {
-        return Ok(Json(json!({ "loadType": "empty", "data": null })));
-    }
-    let tracks: Vec<Value> = results
-        .iter()
-        .map(lavalink_track)
-        .collect::<NexoraResult<Vec<Value>>>()?;
-    Ok(Json(json!({ "loadType": "search", "data": tracks })))
-}
-
-async fn lavalink_create_session(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
-    authorize(&headers, &state)?;
-    let response = state
-        .sessions
-        .create(AudioFormat::new(
-            48_000,
-            2,
-            nexora_audio_types::AudioCodec::Opus,
-        ))
-        .await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({ "sessionId": response.session_id.as_str() })),
-    ))
-}
-
-async fn lavalink_player(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<Value>, ApiError> {
-    authorize(&headers, &state)?;
-    let session_id = parse_session_id(&id)?;
-    let state = state.sessions.get(&session_id).await?;
+/// Milliseconds since the process started.
+pub(crate) fn process_uptime_ms() -> u64 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-    Ok(Json(json!({
-        "guildId": session_id.as_str(),
-        "track": Value::Null,
-        "volume": state.volume,
-        "paused": state.status == "paused",
-        "state": {
-            "status": state.status,
-            "time": now,
-            "position": state.position_ms,
-            "connected": false,
-            "ping": -1,
-        },
-        "filters": {},
-    })))
-}
-
-#[derive(Debug, Deserialize)]
-struct LavalinkPlayerPatch {
-    paused: Option<bool>,
-    volume: Option<u8>,
-    identifier: Option<String>,
-}
-
-async fn lavalink_patch_player(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(patch): Json<LavalinkPlayerPatch>,
-) -> Result<Json<Value>, ApiError> {
-    authorize(&headers, &state)?;
-    let session_id = parse_session_id(&id)?;
-    if let Some(paused) = patch.paused {
-        if paused {
-            state.sessions.pause(&session_id).await?;
-        } else {
-            state.sessions.resume(&session_id).await?;
-        }
-    }
-    if let Some(volume) = patch.volume {
-        state.sessions.set_volume(&session_id, volume).await?;
-    }
-    if let Some(identifier) = patch.identifier {
-        let track_id = TrackId::new(identifier).map_err(|_| ApiError::bad_request())?;
-        state
-            .sessions
-            .play(
-                &session_id,
-                PlayRequest {
-                    track_id,
-                    start_position_ms: 0,
-                },
-            )
-            .await?;
-    }
-    lavalink_player(headers, State(state), Path(id)).await
+    now.saturating_sub(process_start_ms())
 }
