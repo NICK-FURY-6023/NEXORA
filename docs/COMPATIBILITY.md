@@ -97,6 +97,7 @@ without opening the socket.
 | `/ws/v1/sessions/{id}` | `websocket_events` | partial | NEXORA's own per-session socket; the v4 shape is not served here |
 | `/v4/websocket/voice` | — | not-targeted | NodeLink voice socket |
 | `/v4/websocket/youtube/live` | — | not-targeted | NodeLink live-metadata socket |
+| voice transport | UDP socket per session + XSecret | implemented | One `UdpSocket` bound per session to `0.0.0.0:0`; Opus packets forwarded to the voice gateway endpoint AES-128-CTR encrypted (key from the voice token, IV = packet sequence) — `compat_v4_xsecret_voice_transport_round_trips` |
 
 ## Events
 

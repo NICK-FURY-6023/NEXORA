@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::Body;
 use axum::http::Request;
 use futures_util::SinkExt;
+use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
 use nexora_common::SessionId;
 use nexora_protocol::V4EventMessage;
 use nexora_protocol::V4Op;
@@ -846,6 +847,24 @@ async fn compat_v4_voice_socket_is_keyed_by_session_id() {
     assert!(sockets.lock().await.contains_key(&session_id));
     sockets.lock().await.remove(&session_id);
     assert!(!sockets.lock().await.contains_key(&session_id));
+}
+
+/// Row: XSecret voice transport — Opus packets are encrypted with AES-128-CTR
+/// keyed by the voice session token, the IV being the packet sequence.
+///
+/// The round-trip mirrors `run_playback`: key from the token, sequence as IV.
+#[tokio::test]
+async fn compat_v4_xsecret_voice_transport_round_trips() {
+    let key = xsecret_key("voice-session-token-alpha");
+    let packet: &[u8] = b"opus-payload-bytes";
+    let encrypted = xsecret_crypt(&key, 7, packet).expect("encryption works");
+    assert_ne!(encrypted, packet);
+    let decrypted = xsecret_crypt(&key, 7, &encrypted).expect("decryption works");
+    assert_eq!(decrypted, packet);
+
+    // A different sequence produces different ciphertext.
+    let other = xsecret_crypt(&key, 8, packet).expect("encryption works");
+    assert_ne!(other, encrypted);
 }
 
 /// Row: two guilds in one session — each player gets its own events.
