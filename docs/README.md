@@ -12,6 +12,7 @@ them.
 | Run the server locally | [Quick start](#quick-start) → [Deployment](DEPLOYMENT.md) |
 | Call the API | [API contracts](API.md) → [Wire contract](PROTOCOL.md) |
 | Check Lavalink/NodeLink compatibility | [Compatibility matrix](COMPATIBILITY.md) |
+| Read the documentation site | [mdBook site source](../book.toml) — built from this `docs/` tree; run `mdbook build` to render locally |
 | Migrate from Lavalink | [Lavalink analysis](LAVALINK_ANALYSIS.md) → [v4 surface](API.md) |
 | Understand implemented architecture | [Implemented structure](ARCHITECTURE.md) |
 | Understand the full-parity rebuild plan | [Full-parity design](superpowers/specs/2026-11-24-nexora-full-parity-design.md) → [M3 events design](superpowers/specs/2026-11-25-nexora-m3-events-design.md) |

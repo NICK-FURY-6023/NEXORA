@@ -1282,6 +1282,14 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 > **NEXORA — One Engine. Every Application.**
 
+## Community
+
+- [Security policy](SECURITY.md) — report vulnerabilities privately; do not open public issues for them
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Issue templates](.github/ISSUE_TEMPLATE) and [pull request template](.github/PULL_REQUEST_TEMPLATE.md)
+- Documentation site — built from this `docs/` tree with mdBook (`book.toml`; run `mdbook build` to render locally)
+- The [compatibility matrix](docs/COMPATIBILITY.md) is the project's honest compatibility statement
+
 ---
 
 ## Project Status

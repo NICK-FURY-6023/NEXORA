@@ -4,6 +4,12 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - community and documentation site
+
+- Added `SECURITY.md` (security policy with a private vulnerability reporting path) and `CODE_OF_CONDUCT.md`.
+- Added GitHub issue templates (`.github/ISSUE_TEMPLATE`) and a pull request template (`.github/PULL_REQUEST_TEMPLATE.md`).
+- Added `book.toml` — the documentation site built from `docs/` with mdBook — plus CI `links` (markdown link check) and `site` (mdBook build and artifact upload) jobs. `docs/README.md` is the single reader-facing documentation index.
+
 ### Added - queue auto-advance in the playback task
 
 - The pacing task now advances the queue when a track's packets run out: it
