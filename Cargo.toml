@@ -8,6 +8,7 @@ members = [
     "crates/nexora-audio-pipeline",
     "crates/nexora-source-api",
     "crates/nexora-source-framework",
+    "crates/nexora-source-universal",
     "crates/nexora-session",
     "crates/nexora-grpc",
     "crates/nexora-cluster",
