@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nexora_audio_pipeline::OpusFrame;
@@ -11,10 +12,11 @@ use nexora_protocol::{
 };
 use serde_json::json;
 use tokio::sync::{RwLock, broadcast, watch};
+use tokio::task::JoinHandle;
 
 pub mod v4;
 
-pub use v4::{V4PlayerRecord, V4SessionContext, V4SessionManager};
+pub use v4::{PLAYER_UPDATE_INTERVAL_SECONDS, V4PlayerRecord, V4SessionContext, V4SessionManager};
 
 /// Signals sent from session state to the single active playback task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +93,8 @@ struct SessionRecord {
     output: AudioFormat,
     playback: Option<watch::Sender<PlaybackSignal>>,
     audio_out: Option<broadcast::Sender<OpusFrame>>,
+    /// Handle to the active playback task, so a replacement task can abort it.
+    playback_task: Option<Arc<JoinHandle<()>>>,
 }
 
 #[derive(Debug)]
@@ -149,6 +153,31 @@ impl SessionManager {
         if let Some(record) = sessions.get_mut(session_id) {
             record.playback = None;
             record.audio_out = None;
+            if let Some(handle) = record.playback_task.take() {
+                handle.abort();
+            }
+        }
+    }
+
+    /// Abort the active playback task without touching session state.
+    ///
+    /// Called by `start_playback` before spawning a replacement task for the
+    // same session, so a replaced track never runs two playback tasks at once.
+    pub async fn abort_playback_task(&self, session_id: &SessionId) {
+        let mut sessions = self.sessions.write().await;
+        let abort = sessions
+            .get_mut(session_id)
+            .and_then(|record| record.playback_task.take());
+        if let Some(handle) = abort {
+            handle.abort();
+        }
+    }
+
+    /// Store the playback task handle so a replacement task can abort it.
+    pub async fn store_playback_task(&self, session_id: &SessionId, handle: Arc<JoinHandle<()>>) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(record) = sessions.get_mut(session_id) {
+            record.playback_task = Some(handle);
         }
     }
 
@@ -262,6 +291,7 @@ impl SessionManager {
             output,
             playback: None,
             audio_out: None,
+            playback_task: None,
         };
         self.sessions
             .write()
@@ -354,6 +384,9 @@ impl SessionManager {
             record.status = "stopped".to_string();
             record.current_track = None;
             record.position_ms = 0;
+            if let Some(handle) = record.playback_task.take() {
+                handle.abort();
+            }
         }
         self.signal_playback(session_id, PlaybackSignal::Stop);
         self.emit(session_id, SessionEventType::PlaybackStopped, json!({}));

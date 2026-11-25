@@ -20,7 +20,9 @@ pub use info::{
     check_protocol_version,
 };
 pub use load_result::{V4LoadResult, V4LoadType, V4Playlist, V4PlaylistInfo, V4SearchResult};
-pub use messages::{V4EventMessage, V4PlayerUpdateFrame, V4Ready, V4StatsFrame, V4TrackEndReason};
+pub use messages::{
+    V4EventMessage, V4Frame, V4PlayerUpdateFrame, V4Ready, V4StatsFrame, V4TrackEndReason,
+};
 pub use op::V4Op;
 pub use player::{
     V4Nullable, V4Player, V4PlayerState, V4PlayerUpdate, V4PlayerUpdateTrack, V4Players,

@@ -103,20 +103,49 @@ without opening the socket.
 Reference: NodeLink `src/constants.ts` `GatewayEvents` (28 entries), read from
 the analysed tree.
 
+Every frame is flat: `op`, the `type` discriminator, `guildId` and the
+event's own fields are siblings, with no `data` wrapper (bytecode evidence on
+`Message$EmittedEvent` in the shipped `protocol-jvm-4.2.2.jar`).
+
 | Event | Lavalink | NodeLink | NEXORA | Status |
 |---|---|---|---|---|
-| `TrackStartEvent` | yes | yes | `V4EventMessage::TrackStart` on `/v4/websocket` | implemented |
-| `TrackEndEvent` | yes | yes | `V4EventMessage::TrackEnd` on `/v4/websocket` | implemented |
-| `TrackExceptionEvent` | yes | yes | `V4EventMessage::TrackException` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
-| `playerUpdate` | yes | yes | `V4PlayerUpdateFrame` on `/v4/websocket` | implemented |
-| `WebSocketClosedEvent` | yes | yes | `V4EventMessage::WebSocketClosed` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
-| `TrackStuckEvent` | no | yes | `V4EventMessage::TrackStuck` on `/v4/websocket` | partial | the type and shape are served; nothing raises it yet |
-| `SeekEvent`, `PauseEvent`, `VolumeChangedEvent`, `FiltersChangedEvent` | no | yes | — | missing (M3) |
-| `PlayerCreatedEvent`, `PlayerDestroyedEvent`, `PlayerReconnectingEvent`, `PlayerConnectedEvent`, `ConnectionStatusEvent` | no | yes | — | missing (M3) |
+| `TrackStartEvent` | yes | yes | `V4EventMessage::TrackStart` on `/v4/websocket` | implemented — `compat_v4_track_start_event_carries_the_track` |
+| `TrackEndEvent` | yes | yes | `V4EventMessage::TrackEnd` on `/v4/websocket` | implemented — `compat_v4_track_end_event_carries_the_reason` |
+| `TrackExceptionEvent` | yes | yes | `V4EventMessage::TrackException` on `/v4/websocket` | implemented — `compat_v4_track_exception_carries_the_cause` |
+| `playerUpdate` | yes | yes | `V4PlayerUpdateFrame` on `/v4/websocket` | implemented — `compat_v4_player_update_state_shape` |
+| `WebSocketClosedEvent` | yes | yes | `V4EventMessage::WebSocketClosed` on `/v4/websocket` | implemented |
+| `TrackStuckEvent` | no | yes | `V4EventMessage::TrackStuck` on `/v4/websocket` | partial | the type and shape are served; NEXORA's pipeline is not a live stream, so it cannot stall the way the reference's does |
+| `SeekEvent` | no | yes | `V4EventMessage::Seek` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `PauseEvent` | no | yes | `V4EventMessage::Pause` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `VolumeChangedEvent` | no | yes | `V4EventMessage::VolumeChanged` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `FiltersChangedEvent` | no | yes | `V4EventMessage::FiltersChanged` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `PlayerCreatedEvent` | no | yes | `V4EventMessage::PlayerCreated` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `PlayerDestroyedEvent` | no | yes | `V4EventMessage::PlayerDestroyed` on `/v4/websocket` | implemented — `compat_v4_player_events_report_the_change` |
+| `PlayerReconnectingEvent`, `PlayerConnectedEvent`, `ConnectionStatusEvent` | no | yes | — | missing (M5) — they need the voice gateway |
 | `MixStartedEvent`, `MixEndedEvent` | no | yes | — | not-targeted (mixing is not in scope) |
 | `SponsorBlockSegmentsLoadedEvent`, `SponsorBlockSegmentSkippedEvent` | no | yes | — | not-targeted (SponsorBlock is a plugin capability) |
 | `StreamMetadataEvent`, `SourceHealthSnapshotEvent`, `SourceHealthChangeEvent` | no | yes | — | missing (M8) |
 | `EternalBoxInfoEvent`, `EternalBoxJumpEvent` | no | yes | — | not-targeted (EternalBox specific) |
+
+### Event ordering
+
+The reference emits, for one track: the `TrackStartEvent`, then a
+`playerUpdate` immediately (the update task's initial delay is zero), then a
+`playerUpdate` every five seconds, then the `TrackEndEvent`. The update task
+is cancelled when the track ends, so no `playerUpdate` follows the
+`TrackEndEvent` (bytecode evidence on `LavalinkPlayer.onTrackStart`,
+`onTrackEnd` and `SocketServer$Companion.sendPlayerUpdate` in the shipped
+`Lavalink.jar`).
+
+NEXORA reproduces that order — `compat_v4_event_order_track_start_update_end`
+asserts it — and skips the update entirely while the player is paused, the
+way the reference does —
+`compat_v4_paused_player_sends_no_player_update`.
+
+The v4 protocol has **no** queue surface: the queue lives in the client, and
+the `TrackEndEvent` reason tells it whether to advance. NEXORA keeps its own
+queue in the native session manager and publishes the reason as well, so a
+client that keeps a queue can advance its own.
 
 ## Track end reasons
 
@@ -128,9 +157,9 @@ Reference: NodeLink `src/constants.ts` `EndReasons`.
 | `finished` | yes | yes | `V4TrackEndReason::Finished` | implemented |
 | `loadFailed` | yes | yes | `V4TrackEndReason::LoadFailed` | implemented |
 | `replaced` | yes | yes | `V4TrackEndReason::Replaced` | implemented |
-| `cleanup` | no | yes | `V4TrackEndReason::Cleanup` | implemented |
-| `gapless` | no | yes | — | missing (M8) |
-| `crossfading` | no | yes | — | not-targeted (crossfade is not in scope) |
+| `cleanup` | no | yes | `V4TrackEndReason::Cleanup` | partial | typed, never emitted — it belongs to the player's destruction |
+| `gapless` | no | yes | `V4TrackEndReason::Gapless` | partial | typed, never emitted — gapless is a separate capability |
+| `crossfading` | no | yes | `V4TrackEndReason::Crossfading` | partial | typed, never emitted — crossfade is not in scope |
 
 ## Filters
 
@@ -178,8 +207,8 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 12 rows.
 | NEXORA-only v4 routes | 1 | 0 | 0 | 0 |
 | NodeLink extra routes | 0 | 4 | 2 | 4 |
 | WebSocket endpoints | 1 | 1 | 0 | 2 |
-| Events | 3 | 3 | 3 | 3 |
-| Track end reasons | 5 | 0 | 1 | 1 |
+| Events | 11 | 1 | 2 | 3 |
+| Track end reasons | 4 | 3 | 0 | 0 |
 | Filters | 0 | 4 | 1 | 2 |
 | Sources | 3 | 0 | 0 | 2 |
 

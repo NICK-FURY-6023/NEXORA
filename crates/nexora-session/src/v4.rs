@@ -9,7 +9,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nexora_protocol::{V4EventMessage, V4Filters, V4Player, V4PlayerState, V4Track, V4VoiceState};
+use nexora_protocol::{
+    V4EventMessage, V4Filters, V4Frame, V4Player, V4PlayerState, V4PlayerUpdateFrame, V4Track,
+    V4VoiceState,
+};
 use tokio::sync::{RwLock, broadcast};
 
 /// The alphabet the reference draws session ids from.
@@ -20,6 +23,9 @@ const SESSION_ID_LENGTH: usize = 16;
 
 /// The reference's default resume timeout, in seconds.
 pub const DEFAULT_RESUME_TIMEOUT: u64 = 60;
+
+/// The reference's `playerUpdateInterval` default, in seconds.
+pub const PLAYER_UPDATE_INTERVAL_SECONDS: u64 = 5;
 
 /// One player inside a Lavalink v4 session.
 #[derive(Debug, Clone)]
@@ -92,7 +98,7 @@ pub struct V4SessionContext {
 #[derive(Debug)]
 pub struct V4SessionManager {
     sessions: RwLock<HashMap<String, V4SessionContext>>,
-    events: broadcast::Sender<V4EventMessage>,
+    events: broadcast::Sender<V4Frame>,
     counter: AtomicU64,
 }
 
@@ -112,14 +118,19 @@ impl V4SessionManager {
         }
     }
 
-    /// Subscribes to the session's emitted events.
-    pub fn subscribe(&self) -> broadcast::Receiver<V4EventMessage> {
+    /// Subscribes to the session's emitted frames.
+    pub fn subscribe(&self) -> broadcast::Receiver<V4Frame> {
         self.events.subscribe()
     }
 
     /// Emits one event to every subscriber.
     pub fn emit(&self, event: V4EventMessage) {
-        let _ = self.events.send(event);
+        let _ = self.events.send(V4Frame::Event(Box::new(event)));
+    }
+
+    /// Emits one `playerUpdate` frame to every subscriber.
+    pub fn emit_player_update(&self, frame: V4PlayerUpdateFrame) {
+        let _ = self.events.send(V4Frame::PlayerUpdate(Box::new(frame)));
     }
 
     /// Creates a session and returns its id.
@@ -370,7 +381,31 @@ mod tests {
             reason: "bye".into(),
             by_remote: false,
         });
-        let event = receiver.recv().await.unwrap();
+        let frame = receiver.recv().await.unwrap();
+        let V4Frame::Event(event) = frame else {
+            panic!("an emitted event arrives as an event frame");
+        };
         assert_eq!(event.type_name(), "WebSocketClosedEvent");
+    }
+
+    #[tokio::test]
+    async fn a_player_update_frame_is_its_own_op() {
+        let manager = V4SessionManager::new();
+        let mut receiver = manager.subscribe();
+        manager.emit_player_update(V4PlayerUpdateFrame {
+            state: V4PlayerState {
+                time: 1,
+                position: 2,
+                connected: false,
+                ping: -1,
+            },
+            guild_id: "1234".into(),
+        });
+        let frame = receiver.recv().await.unwrap();
+        let V4Frame::PlayerUpdate(update) = frame else {
+            panic!("a player update arrives as a playerUpdate frame");
+        };
+        assert_eq!(update.guild_id, "1234");
+        assert_eq!(update.state.position, 2);
     }
 }

@@ -16,8 +16,14 @@ use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
-use nexora_protocol::{CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest};
-use nexora_session::{PlaybackSignal, SessionManager, V4SessionManager};
+use nexora_protocol::{
+    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, V4ErrorSeverity,
+    V4EventMessage, V4Exception, V4PlayerState, V4PlayerUpdateFrame, V4TrackEndReason,
+};
+use nexora_session::{
+    PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal, SessionManager, V4PlayerRecord,
+    V4SessionManager,
+};
 use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
 use serde::Deserialize;
@@ -351,6 +357,11 @@ pub(crate) async fn start_playback(
     };
     let format = state.sessions.output_format(session_id).await?;
 
+    // Stop any existing playback task for this session before starting a new
+    // one: a v4 session id is the native session id, so a PATCH replacing the
+    // track would otherwise spawn a second run_playback task.
+    state.sessions.abort_playback_task(session_id).await;
+
     let (audio_tx, _) = broadcast::channel(64);
     state
         .sessions
@@ -376,16 +387,146 @@ pub(crate) async fn start_playback(
     let sessions = Arc::clone(&state.sessions);
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
-    tokio::spawn(run_playback(
+    let v4_sessions = Arc::clone(&state.v4_sessions);
+    let handle = tokio::spawn(run_playback(
         session_id.clone(),
+        track_id.clone(),
         path,
         format,
         control_rx,
-        sessions,
-        metrics,
-        sources,
+        PlaybackContext {
+            sessions,
+            metrics,
+            sources,
+            v4_sessions,
+        },
     ));
+    // Store the handle so a later replacement can abort this task.
+    state.sessions.abort_playback_task(session_id).await;
+    state
+        .sessions
+        .store_playback_task(session_id, Arc::new(handle))
+        .await;
     Ok(())
+}
+
+/// Looks up the v4 player that owns a native session.
+///
+/// The v4 session id and the native session id are the same string, so the
+/// v4 player for a playback task is found by looking the session id up in
+/// the v4 session manager.
+/// Looks up the v4 player that is playing a given track.
+///
+/// The v4 session id and the native session id are the same string, so the
+/// v4 player for a playback task is found by looking the session id up in
+/// the v4 session manager.
+///
+/// A session holds one player per guild, so the player is matched on the
+/// track it is playing rather than taken as the first one: the events carry
+/// that player's guild id, and picking the wrong player would report another
+/// guild's track.
+async fn v4_player_for(
+    v4_sessions: &Arc<V4SessionManager>,
+    session_id: &SessionId,
+    track_id: &TrackId,
+) -> Option<V4PlayerRecord> {
+    let players = v4_sessions.players(session_id.as_str()).await?;
+    players.into_iter().find_map(|player| {
+        player
+            .track
+            .as_ref()
+            .is_some_and(|track| track.info.identifier == track_id.as_str())
+            .then_some(player)
+    })
+}
+
+/// Starts the per-player `playerUpdate` task.
+///
+/// The reference schedules this task when a track starts and cancels it when
+/// the track ends, so a player only produces updates while it has something
+/// to play (bytecode evidence on `LavalinkPlayer.onTrackStart` and
+/// `onTrackEnd` in the shipped `Lavalink.jar`).
+///
+/// The first frame is sent immediately, matching the reference's
+/// `scheduleAtFixedRate(…, 0, interval, SECONDS)` initial delay of zero. The
+/// task is skipped entirely while the player is paused — the reference returns
+/// before it builds the frame.
+fn start_player_updates(
+    sessions: Arc<SessionManager>,
+    v4_sessions: Arc<V4SessionManager>,
+    session_id: SessionId,
+    guild_id: String,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(PLAYER_UPDATE_INTERVAL_SECONDS));
+        loop {
+            // The interval's first tick is immediate, matching the
+            // reference's `scheduleAtFixedRate(…, 0, interval, SECONDS)`
+            // initial delay of zero.
+            ticker.tick().await;
+            let Ok(state) = sessions.get(&session_id).await else {
+                break;
+            };
+            if state.status == "paused" {
+                continue;
+            }
+            v4_sessions.emit_player_update(V4PlayerUpdateFrame {
+                state: V4PlayerState {
+                    time: nexora_common::TimestampMs::now().as_millis() as i64,
+                    position: state.position_ms as i64,
+                    connected: false,
+                    ping: -1,
+                },
+                guild_id: guild_id.clone(),
+            });
+        }
+    })
+}
+
+/// Publishes the `TrackEndEvent` for a session's v4 player.
+async fn emit_track_end(
+    v4_sessions: &Arc<V4SessionManager>,
+    session_id: &SessionId,
+    track_id: &TrackId,
+    reason: V4TrackEndReason,
+) {
+    let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+        return;
+    };
+    let Some(track) = player.track.clone() else {
+        return;
+    };
+    v4_sessions.emit(V4EventMessage::TrackEnd {
+        guild_id: player.guild_id.clone(),
+        track: Box::new(track),
+        reason,
+    });
+}
+
+/// Publishes the `TrackExceptionEvent` for a session's v4 player.
+async fn emit_track_exception(
+    v4_sessions: &Arc<V4SessionManager>,
+    session_id: &SessionId,
+    track_id: &TrackId,
+    message: &str,
+    severity: V4ErrorSeverity,
+) {
+    let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+        return;
+    };
+    let Some(track) = player.track.clone() else {
+        return;
+    };
+    v4_sessions.emit(V4EventMessage::TrackException {
+        guild_id: player.guild_id.clone(),
+        track: Box::new(track),
+        exception: V4Exception {
+            message: message.to_owned(),
+            severity,
+            cause: None,
+            cause_stack_trace: None,
+        },
+    });
 }
 
 async fn prepare_packets(
@@ -401,15 +542,28 @@ async fn prepare_packets(
         .map_err(|_| NexoraError::service("playback task failed"))?
 }
 
-async fn run_playback(
-    session_id: SessionId,
-    mut path: PathBuf,
-    format: AudioFormat,
-    mut control: watch::Receiver<PlaybackSignal>,
+/// The state a playback task shares with the server.
+struct PlaybackContext {
     sessions: Arc<SessionManager>,
     metrics: Arc<RuntimeMetrics>,
     sources: Arc<SourceRegistry>,
+    v4_sessions: Arc<V4SessionManager>,
+}
+
+async fn run_playback(
+    session_id: SessionId,
+    track_id: TrackId,
+    mut path: PathBuf,
+    format: AudioFormat,
+    mut control: watch::Receiver<PlaybackSignal>,
+    context: PlaybackContext,
 ) {
+    let PlaybackContext {
+        sessions,
+        metrics,
+        sources,
+        v4_sessions,
+    } = context;
     let mut volume = sessions
         .get(&session_id)
         .await
@@ -419,6 +573,14 @@ async fn run_playback(
         Ok(packets) => packets,
         Err(_) => {
             let _ = sessions.fail(&session_id, "source decode failed").await;
+            emit_track_exception(
+                &v4_sessions,
+                &session_id,
+                &track_id,
+                "source decode failed",
+                V4ErrorSeverity::Fault,
+            )
+            .await;
             sessions.detach_playback(&session_id).await;
             sessions.audio_registry().deregister(&session_id).await;
             return;
@@ -428,6 +590,38 @@ async fn run_playback(
     let mut position_ms = 0u64;
     let mut paused = false;
     let mut ticker = tokio::time::interval(Duration::from_millis(20));
+
+    /// Emit `TrackStartEvent` for the currently playing track, if any.
+    ///
+    /// The reference emits the event when a track begins (bytecode evidence on
+    /// `player/EventEmitter.onTrackStart` in the shipped `Lavalink.jar`).
+    async fn emit_track_start(
+        v4_sessions: &Arc<V4SessionManager>,
+        session_id: &SessionId,
+        track_id: &TrackId,
+    ) {
+        let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+            return;
+        };
+        let Some(track) = player.track.clone() else {
+            return;
+        };
+        v4_sessions.emit(V4EventMessage::TrackStart {
+            guild_id: player.guild_id.clone(),
+            track: Box::new(track),
+        });
+    }
+
+    emit_track_start(&v4_sessions, &session_id, &track_id).await;
+    let update_task = start_player_updates(
+        Arc::clone(&sessions),
+        Arc::clone(&v4_sessions),
+        session_id.clone(),
+        v4_player_for(&v4_sessions, &session_id, &track_id)
+            .await
+            .map(|player| player.guild_id.clone())
+            .unwrap_or_default(),
+    );
 
     loop {
         tokio::select! {
@@ -466,14 +660,24 @@ async fn run_playback(
                     let Some(next_track) = sessions.pop_next_queued(&session_id).await.ok().flatten()
                     else {
                         let _ = sessions.finish(&session_id).await;
+                        emit_track_end(&v4_sessions, &session_id, &track_id, V4TrackEndReason::Finished).await;
                         break;
                     };
                     let _ = sessions.end_track(&session_id).await;
+                    emit_track_end(&v4_sessions, &session_id, &track_id, V4TrackEndReason::Finished).await;
                     let Ok(ResolvedSource::LocalFile { path: next_path }) = sources
                         .resolve(&TrackReference::new(next_track.as_str()), &internal_auth())
                         .await
                     else {
                         let _ = sessions.fail(&session_id, "source resolve failed").await;
+                        emit_track_exception(
+                            &v4_sessions,
+                            &session_id,
+                            &next_track,
+                            "source resolve failed",
+                            V4ErrorSeverity::Fault,
+                        )
+                        .await;
                         break;
                     };
                     match prepare_packets(&next_path, &format, volume).await {
@@ -482,7 +686,7 @@ async fn run_playback(
                                 .play(
                                     &session_id,
                                     PlayRequest {
-                                        track_id: next_track,
+                                        track_id: next_track.clone(),
                                         start_position_ms: 0,
                                     },
                                 )
@@ -492,9 +696,18 @@ async fn run_playback(
                             index = 0;
                             position_ms = 0;
                             ticker.reset();
+                            emit_track_start(&v4_sessions, &session_id, &next_track).await;
                         }
                         Err(_) => {
                             let _ = sessions.fail(&session_id, "source decode failed").await;
+                            emit_track_exception(
+                                &v4_sessions,
+                                &session_id,
+                                &next_track,
+                                "source decode failed",
+                                V4ErrorSeverity::Fault,
+                            )
+                            .await;
                             break;
                         }
                     }
@@ -510,6 +723,7 @@ async fn run_playback(
         }
     }
 
+    update_task.abort();
     sessions.detach_playback(&session_id).await;
     sessions.audio_registry().deregister(&session_id).await;
 }

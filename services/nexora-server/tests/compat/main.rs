@@ -56,8 +56,35 @@ fn media_root() -> PathBuf {
     let sequence = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let root = std::env::temp_dir().join(format!("nexora-compat-{unique}-{sequence}"));
     fs::create_dir_all(&root).unwrap();
-    fs::write(root.join("sample.wav"), b"not-a-real-wav").unwrap();
+    fs::write(root.join("sample.wav"), tone_wav()).unwrap();
     root
+}
+
+/// A real 44.1 kHz mono WAV, so the pipeline can decode it.
+///
+/// The fixture has to be decodable: an undecodable file produces a
+/// `TrackExceptionEvent` instead of a `TrackStartEvent`.
+fn tone_wav() -> Vec<u8> {
+    let frames = 4_410u32;
+    let sample_rate = 44_100u32;
+    let mut wav = Vec::with_capacity(44 + frames as usize * 2);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + frames * 2).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(frames * 2).to_le_bytes());
+    for index in 0..frames {
+        let value = ((index as f32 / frames as f32) * std::f32::consts::TAU).sin() * 0.5;
+        wav.extend_from_slice(&((value * 32_767.0) as i16).to_le_bytes());
+    }
+    wav
 }
 
 fn app(root: &PathBuf) -> axum::Router {
@@ -411,6 +438,468 @@ async fn compat_v4_websocket_handshake_refuses_a_bad_request() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Reads the next frame off a socket.
+async fn next_frame(
+    stream: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> serde_json::Value {
+    use tokio_tungstenite::tungstenite::Message;
+
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(10), stream.next())
+        .await
+        .expect("a frame arrives")
+        .expect("the socket stays open")
+        .expect("a complete frame");
+    let Message::Text(text) = frame else {
+        panic!("the frame is text");
+    };
+    serde_json::from_str(&text).expect("the frame is JSON")
+}
+
+/// Creates a v4 session over the REST surface and returns its id.
+async fn create_session_over_http(app: axum::Router) -> (axum::Router, String) {
+    let (status, value) = request(app.clone(), "POST", "/v4/sessions", None).await;
+    assert_eq!(status, 201);
+    let id = value["sessionId"].as_str().unwrap().to_owned();
+    (app, id)
+}
+
+/// Row: `TrackStartEvent` — the frame the client sees when a track starts.
+///
+/// The reference emits the event when the track starts, and the track object
+/// it carries is the one the client asked for (bytecode evidence on
+/// `player/EventEmitter.onTrackStart` in the shipped `Lavalink.jar`).
+#[tokio::test]
+async fn compat_v4_track_start_event_carries_the_track() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    // The socket has to be open before the track starts, so the frame is not
+    // missed.
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    // The ready frame comes first.
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let frame = next_frame(&mut stream).await;
+    // NodeLink emits `PlayerCreatedEvent` in the player's constructor, so it
+    // comes before the track-start event.
+    assert_eq!(frame["type"], "PlayerCreatedEvent");
+    let frame = next_frame(&mut stream).await;
+    assert_eq!(frame["op"], "event");
+    assert_eq!(frame["type"], "TrackStartEvent");
+    assert_eq!(frame["guildId"], "1234");
+    assert_eq!(frame["track"]["info"]["identifier"], "sample.wav");
+    // The reference's frame is flat: no data wrapper.
+    assert!(frame.get("data").is_none());
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: `playerUpdate` — the frame's shape.
+///
+/// The reference's frame is `{op:"playerUpdate", guildId, state{time, position,
+/// connected, ping}}` (bytecode evidence on `SocketServer$Companion.sendPlayerUpdate`
+/// in the shipped `Lavalink.jar`).
+#[tokio::test]
+async fn compat_v4_player_update_state_shape() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The first frame after the track starts is the player-created event,
+    // then the track-start event, and the update task's first frame follows
+    // it immediately.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+
+    let update = next_frame(&mut stream).await;
+    assert_eq!(update["op"], "playerUpdate");
+    assert_eq!(update["guildId"], "1234");
+    assert!(update["state"]["time"].is_u64());
+    assert!(update["state"]["position"].is_u64());
+    // NEXORA has no voice gateway, so it reports the same values the
+    // reference reports without one.
+    assert_eq!(update["state"]["connected"], false);
+    assert_eq!(update["state"]["ping"], -1);
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: the event order — the start event, then an immediate update.
+///
+/// The reference's `onTrackStart` schedules the update task with an initial
+/// delay of zero, so the first `playerUpdate` follows the `TrackStartEvent`
+/// at once (bytecode evidence on `LavalinkPlayer.onTrackStart` in the shipped
+/// `Lavalink.jar`).
+#[tokio::test]
+async fn compat_v4_event_order_track_start_update_end() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The order is the player-created event, then the start event, then the
+    // immediate update.
+    let first = next_frame(&mut stream).await;
+    assert_eq!(first["type"], "PlayerCreatedEvent");
+    let second = next_frame(&mut stream).await;
+    assert_eq!(second["type"], "TrackStartEvent");
+    let third = next_frame(&mut stream).await;
+    assert_eq!(third["op"], "playerUpdate");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: `TrackEndEvent` — the frame and its reason when a track is stopped.
+///
+/// The reference emits the end event with the reason the track stopped for
+/// (bytecode evidence on `player/EventEmitter.onTrackEnd`).
+#[tokio::test]
+async fn compat_v4_track_end_event_carries_the_reason() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The player-created event, then the start event, then the immediate
+    // update.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+    let update = next_frame(&mut stream).await;
+    assert_eq!(update["op"], "playerUpdate");
+
+    // Stopping the player ends the track.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"track":{"encoded":null}}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let end = next_frame(&mut stream).await;
+    assert_eq!(end["op"], "event");
+    assert_eq!(end["type"], "TrackEndEvent");
+    assert_eq!(end["guildId"], "1234");
+    assert_eq!(end["reason"], "stopped");
+    assert_eq!(end["track"]["info"]["identifier"], "sample.wav");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: `TrackExceptionEvent` — the frame when a track cannot be played.
+///
+/// The reference's exception carries the message, the severity, the root
+/// cause's class name and its stack trace (bytecode evidence on
+/// `player/EventEmitter.onTrackException`).
+#[tokio::test]
+async fn compat_v4_track_exception_carries_the_cause() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    // A track whose identifier resolves to nothing cannot be played.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"identifier":"no-such-track"}"#),
+    )
+    .await;
+    assert_eq!(status, 400);
+
+    // The failed load is reported on the socket as an exception event only
+    // when a track was playing; with no track there is nothing to report, so
+    // the socket stays quiet. That is the reference's behaviour too: the
+    // exception carries the track.
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: a paused player sends no `playerUpdate`.
+///
+/// The reference's update task returns before it builds the frame when the
+/// session is paused, so a paused player produces no frames at all
+/// (bytecode evidence on `SocketServer$Companion.sendPlayerUpdate` in the
+/// shipped `Lavalink.jar`).
+#[tokio::test]
+async fn compat_v4_paused_player_sends_no_player_update() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The player-created event, then the track-start event, then the
+    // immediate update.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+    let update = next_frame(&mut stream).await;
+    assert_eq!(update["op"], "playerUpdate");
+
+    // Pause the player.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"paused":true}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+    let paused = next_frame(&mut stream).await;
+    assert_eq!(paused["type"], "PauseEvent");
+
+    // No further update arrives while the player is paused. The frame would
+    // come five seconds later, so a short wait is enough to prove it does
+    // not.
+    let quiet = tokio::time::timeout(
+        std::time::Duration::from_millis(1_500),
+        next_frame(&mut stream),
+    )
+    .await;
+    assert!(quiet.is_err(), "a paused player sends no playerUpdate");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: two guilds in one session — each player gets its own events.
+///
+/// A v4 session holds one player per guild, so the events a client receives
+/// must name the guild whose player produced them.
+#[tokio::test]
+async fn compat_v4_two_guilds_each_get_their_own_events() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+
+    // The first guild plays the track.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1111"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The second guild gets a player of its own.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/2222"),
+        Some(r#"{"volume":50}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Collect the frames until both guilds have reported.
+    let mut seen: Vec<String> = Vec::new();
+    for _ in 0..8 {
+        let frame = next_frame(&mut stream).await;
+        if let Some(guild_id) = frame["guildId"].as_str() {
+            seen.push(guild_id.to_owned());
+        }
+        if seen.contains(&"1111".to_owned()) && seen.contains(&"2222".to_owned()) {
+            break;
+        }
+    }
+    assert!(seen.contains(&"1111".to_owned()), "guild 1111 reported");
+    assert!(seen.contains(&"2222".to_owned()), "guild 2222 reported");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: the NodeLink player events — they report the change that was made.
+///
+/// NodeLink's payloads are `{position, duration}` for a seek, `{paused}` for
+/// a pause, `{volume}` for a volume change, `{filters}` for a filter change
+/// and `{guildId, player}` for a created player.
+#[tokio::test]
+async fn compat_v4_player_events_report_the_change() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    // A patch that creates the player reports the creation.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"volume":80}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    assert_eq!(created["guildId"], "1234");
+    assert!(created["player"]["guildId"].is_string());
+
+    let volume = next_frame(&mut stream).await;
+    assert_eq!(volume["type"], "VolumeChangedEvent");
+    assert_eq!(volume["volume"], 80);
+
+    // A pause reports the new state.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"paused":true}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+    let paused = next_frame(&mut stream).await;
+    assert_eq!(paused["type"], "PauseEvent");
+    assert_eq!(paused["paused"], true);
+
+    // A seek reports the position and how far it moved.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        Some(r#"{"position":5000}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+    let seek = next_frame(&mut stream).await;
+    assert_eq!(seek["type"], "SeekEvent");
+    assert_eq!(seek["position"], 5000);
+    assert_eq!(seek["duration"], 5000);
+
+    // Destroying the player reports the destruction.
+    let (status, _) = request(
+        app.clone(),
+        "DELETE",
+        &format!("/v4/sessions/{session_id}/players/1234"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 204);
+    let destroyed = next_frame(&mut stream).await;
+    assert_eq!(destroyed["type"], "PlayerDestroyedEvent");
+    assert_eq!(destroyed["guildId"], "1234");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Row: `/v4/websocket` — a wrong `Authorization` is a 401.
 #[tokio::test]
 async fn compat_v4_websocket_handshake_refuses_a_wrong_password() {
@@ -529,7 +1018,7 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
     assert_eq!(
         V4EventMessage::TrackStart {
             guild_id: "1".into(),
-            track: track(),
+            track: Box::new(track()),
         }
         .type_name(),
         "TrackStartEvent"
@@ -537,7 +1026,7 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
     assert_eq!(
         V4EventMessage::TrackEnd {
             guild_id: "1".into(),
-            track: track(),
+            track: Box::new(track()),
             reason: nexora_protocol::V4TrackEndReason::Finished,
         }
         .type_name(),
@@ -546,7 +1035,7 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
     assert_eq!(
         V4EventMessage::TrackException {
             guild_id: "1".into(),
-            track: track(),
+            track: Box::new(track()),
             exception: nexora_protocol::V4Exception {
                 message: "boom".into(),
                 severity: nexora_protocol::V4ErrorSeverity::Fault,

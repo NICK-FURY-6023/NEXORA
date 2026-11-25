@@ -37,8 +37,8 @@ use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_protocol::{
     V4ErrorEnvelope, V4EventMessage, V4Filters, V4Git, V4Info, V4LoadResult, V4Player,
-    V4PlayerUpdate, V4PlayerUpdateFrame, V4Players, V4Plugins, V4Ready, V4Session, V4SessionUpdate,
-    V4StatsFrame, V4Track, V4TrackEndReason, V4TrackInfo, V4Version, decode_track, encode_track,
+    V4PlayerUpdate, V4Players, V4Plugins, V4Ready, V4Session, V4SessionUpdate, V4StatsFrame,
+    V4Track, V4TrackEndReason, V4TrackInfo, V4Version, decode_track, encode_track,
 };
 use nexora_source_api::{ResolvedSource, TrackMetadata, TrackReference};
 use nexora_source_framework::rank_candidates;
@@ -47,9 +47,6 @@ use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::{AppState, internal_auth, start_playback};
-
-/// The reference's default player-update interval, in seconds.
-const PLAYER_UPDATE_INTERVAL_SECONDS: u64 = 5;
 
 /// The reference pushes stats once a minute.
 const STATS_INTERVAL_SECONDS: u64 = 60;
@@ -524,6 +521,9 @@ async fn delete_player(
         ));
     }
     state.v4_sessions.remove_player(&id, &guild).await;
+    state.v4_sessions.emit(V4EventMessage::PlayerDestroyed {
+        guild_id: guild.to_owned(),
+    });
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -633,6 +633,10 @@ async fn patch_player(
     let paused = update.paused.unwrap_or(false);
     let user_data = track_block.and_then(|track| track.user_data.clone());
 
+    // The player before the change, so the NodeLink events fire only for a
+    // value that actually moved.
+    let before = state.v4_sessions.player(&id, &guild).await;
+
     let player = state
         .v4_sessions
         .update_player(&id, &guild, |player| {
@@ -672,12 +676,98 @@ async fn patch_player(
         .await
         .ok_or_else(|| V4ApiError::not_found("Session not found", path.clone()))?;
 
+    // The NodeLink events report the change the client just made.
+    if before.is_none() {
+        state.v4_sessions.emit(V4EventMessage::PlayerCreated {
+            guild_id: guild.clone(),
+            player: Box::new(player.to_player()),
+        });
+    }
+    if let Some(volume) = update.volume
+        && before
+            .as_ref()
+            .is_none_or(|previous| previous.volume != volume)
+    {
+        // The volume has to reach the native session, or the audio keeps the
+        // old volume while the player reports the new one. The reference
+        // passes the value straight through without a range check, so the
+        // player reports whatever the client asked for.
+        if let Ok(native) = SessionId::new(id.clone())
+            && let Ok(level) = u8::try_from(volume.clamp(0, 150))
+        {
+            let _ = state.sessions.set_volume(&native, level).await;
+        }
+        state.v4_sessions.emit(V4EventMessage::VolumeChanged {
+            guild_id: guild.clone(),
+            volume,
+        });
+    }
+    if let Some(filters) = &update.filters
+        && before
+            .as_ref()
+            .is_none_or(|previous| &previous.filters != filters)
+    {
+        state.v4_sessions.emit(V4EventMessage::FiltersChanged {
+            guild_id: guild.clone(),
+            filters: filters.clone(),
+        });
+    }
+    if let Some(paused) = update.paused
+        && !new_track_requested
+        && before
+            .as_ref()
+            .is_none_or(|previous| previous.paused != paused)
+    {
+        // The pause has to reach the native session, or the audio keeps
+        // playing while the player claims to be paused.
+        if let Ok(native) = SessionId::new(id.clone()) {
+            if paused {
+                let _ = state.sessions.pause(&native).await;
+            } else {
+                let _ = state.sessions.resume(&native).await;
+            }
+        }
+        state.v4_sessions.emit(V4EventMessage::Pause {
+            guild_id: guild.clone(),
+            paused,
+        });
+    }
+    if let Some(position) = update.position
+        && !new_track_requested
+        && before
+            .as_ref()
+            .is_none_or(|previous| previous.position_ms != position)
+    {
+        if let Ok(native) = SessionId::new(id.clone()) {
+            let _ = state.sessions.seek(&native, position).await;
+        }
+        state.v4_sessions.emit(V4EventMessage::Seek {
+            guild_id: guild.clone(),
+            position,
+            duration: position as i64
+                - before
+                    .as_ref()
+                    .map_or(0, |previous| previous.position_ms as i64),
+        });
+    }
+
     // Drive the actual audio for the player that now has a track.
     if let Some(track) = &new_track {
         let native = SessionId::new(id.clone())
             .map_err(|_| V4ApiError::not_found("Session not found", path.clone()))?;
         let track_id = TrackId::new(track.info.identifier.clone())
             .map_err(|_| V4ApiError::bad_request("invalid track identifier", path.clone()))?;
+        // Stop any existing playback task for this session and report the
+        // replaced track, so a PATCH replacing a playing track emits
+        // TrackEndEvent(Replaced) and never runs two playback tasks at once.
+        state.sessions.abort_playback_task(&native).await;
+        if let Some(old_track) = before.as_ref().and_then(|p| p.track.clone()) {
+            state.v4_sessions.emit(V4EventMessage::TrackEnd {
+                guild_id: guild.clone(),
+                track: Box::new(old_track),
+                reason: V4TrackEndReason::Replaced,
+            });
+        }
         start_playback(&state, &native, &track_id)
             .await
             .map_err(|error| {
@@ -687,18 +777,20 @@ async fn patch_player(
                     path.clone(),
                 )
             })?;
-        state.v4_sessions.emit(V4EventMessage::TrackStart {
-            guild_id: guild.clone(),
-            track: track.clone(),
-        });
+        // The `TrackStartEvent` comes from the playback task, which emits it
+        // when the track actually starts — the reference emits it from the
+        // audio player's start callback, not from the request that asked for
+        // the track.
     } else if stop_requested {
         if let Ok(native) = SessionId::new(id.clone()) {
             let _ = state.sessions.stop(&native).await;
         }
-        if let Some(track) = &player.track {
+        // The track that was playing is the one that ended, so it is read
+        // from the state before the stop cleared it.
+        if let Some(track) = before.as_ref().and_then(|player| player.track.clone()) {
             state.v4_sessions.emit(V4EventMessage::TrackEnd {
                 guild_id: guild.clone(),
-                track: track.clone(),
+                track: Box::new(track),
                 reason: V4TrackEndReason::Stopped,
             });
         }
@@ -767,17 +859,13 @@ async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, 
     let mut stats_interval =
         tokio::time::interval(std::time::Duration::from_secs(STATS_INTERVAL_SECONDS));
     stats_interval.tick().await;
-    let mut player_interval = tokio::time::interval(std::time::Duration::from_secs(
-        PLAYER_UPDATE_INTERVAL_SECONDS,
-    ));
-    player_interval.tick().await;
 
     loop {
         tokio::select! {
             received = events.recv() => {
                 match received {
-                    Ok(event) => {
-                        if send_frame(&mut socket, &event.to_frame()).await.is_err() {
+                    Ok(frame) => {
+                        if send_frame(&mut socket, &frame.to_frame()).await.is_err() {
                             break;
                         }
                     }
@@ -790,27 +878,28 @@ async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, 
                     break;
                 }
             }
-            _ = player_interval.tick() => {
-                let Some(players) = state.v4_sessions.players(&session_id).await else {
-                    continue;
-                };
-                for player in players {
-                    let frame = V4PlayerUpdateFrame {
-                        state: player.state(),
-                        guild_id: player.guild_id.clone(),
-                    };
-                    if send_frame(&mut socket, &frame.to_frame()).await.is_err() {
-                        return;
-                    }
-                }
-            }
             incoming = socket.recv() => {
                 // The v4 socket is receive-only for events; the reference warns
                 // that inbound messages must use the REST API.
-                if incoming.is_none() {
-                    break;
+                match incoming {
+                    None => break,
+                    Some(Err(_)) => break,
+                    Some(Ok(_)) => continue,
                 }
             }
+        }
+    }
+
+    // The socket is gone: report it to the session's players, the way the
+    // reference's `WebSocketClosedEvent` does.
+    if let Some(players) = state.v4_sessions.players(&session_id).await {
+        for player in players {
+            state.v4_sessions.emit(V4EventMessage::WebSocketClosed {
+                guild_id: player.guild_id.clone(),
+                code: 1000,
+                reason: "socket closed".to_owned(),
+                by_remote: false,
+            });
         }
     }
 }

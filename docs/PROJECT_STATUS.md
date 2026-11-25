@@ -56,7 +56,7 @@ Status: **implemented and verified** on 2026-11-23.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
 - ADR-015..020 and example monitoring configs.
 
-Workspace total is now 83 passing Rust tests.
+Workspace total is now 153 passing Rust tests.
 
 ### Lavalink v4 parity (after the Phase 5-7 foundations)
 
@@ -92,7 +92,25 @@ Workspace total is now 83 passing Rust tests.
   rules are enforced before the upgrade — a missing or zero `User-Id` is a
   400, a wrong `Authorization` is a 401.
 - `docs/COMPATIBILITY.md` records the row-by-row state and names the test that
-  proves each row. The workspace total is now 142 passing Rust tests.
+  proves each row. The workspace total is now 153 passing Rust tests.
+
+### Lavalink v4 events (M3)
+
+- Every frame on `/v4/websocket` is flat: `op`, the `type` discriminator,
+  `guildId` and the event's own fields are siblings, with no `data` wrapper.
+- The reference's order for one track is reproduced exactly: the
+  `TrackStartEvent`, then a `playerUpdate` immediately, then one every five
+  seconds, then the `TrackEndEvent`. The update task is cancelled when the
+  track ends, and it is skipped entirely while the player is paused.
+- `TrackEndEvent` carries the reason the track stopped: `finished`,
+  `loadFailed`, `stopped` or `replaced`.
+- `TrackExceptionEvent` carries the exception's message, severity and root
+  cause when a track cannot be decoded or resolved.
+- The six NodeLink player events are served with NodeLink's payloads:
+  `SeekEvent`, `PauseEvent`, `VolumeChangedEvent`, `FiltersChangedEvent`,
+  `PlayerCreatedEvent` and `PlayerDestroyedEvent`.
+- `docs/superpowers/specs/2026-11-25-nexora-m3-events-design.md` records the
+  design and the bytecode evidence behind every claim.
 
 ### Implemented in Phase 4b
 
