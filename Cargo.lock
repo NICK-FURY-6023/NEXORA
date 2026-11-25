@@ -1062,6 +1062,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexora-source-universal"
+version = "0.1.0"
+dependencies = [
+ "nexora-common",
+ "nexora-source-api",
+ "serde_json",
+]
+
+[[package]]
 name = "nexora-telemetry"
 version = "0.1.0"
 dependencies = [
