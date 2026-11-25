@@ -1,0 +1,14 @@
+[package]
+name = "nexora-source-universal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+nexora-source-api = { path = "../nexora-source-api" }
+nexora-common = { path = "../nexora-common" }
+base64 = { workspace = true }
+sha2 = "=0.10.9"
+rand = "=0.9.5"
