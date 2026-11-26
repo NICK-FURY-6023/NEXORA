@@ -886,6 +886,52 @@ async fn compat_nexora_voice_state_update_echoes_back() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Row: voice state change via PATCH /players — the stored voice state
+/// reflects the new token, endpoint, session id and channel id.
+#[tokio::test]
+async fn compat_nexora_voice_state_change_is_stored() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+
+    // Create the player with a track.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Update the voice state on the player.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(
+            r#"{"voice":{"token":"voice-token","endpoint":"wss://voice.example.com","sessionId":"voice-session","channelId":"voice-channel"}}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Fetch the player and verify the voice state is stored.
+    let body = get_json(app.clone(), &format!("/nexora/sessions/{session_id}/players/1234")).await;
+    assert_eq!(body["voice"]["token"], "voice-token");
+    assert_eq!(body["voice"]["endpoint"], "wss://voice.example.com");
+    assert_eq!(body["voice"]["sessionId"], "voice-session");
+    assert_eq!(body["voice"]["channelId"], "voice-channel");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Row: voice socket — one UDP socket is bound per session and keyed by session id.
 #[tokio::test]
 async fn compat_nexora_voice_socket_is_keyed_by_session_id() {
