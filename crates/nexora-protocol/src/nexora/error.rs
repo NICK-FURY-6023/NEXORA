@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-/// Severity of a Lavalink v4 exception.
+/// Severity of a Nexora nexora exception.
 ///
 /// The shipped reference names the three levels `COMMON`, `SUSPICIOUS` and
 /// `FAULT` as the enum constants, but serialises them in lower case:
@@ -10,43 +10,43 @@ use serde::{Deserialize, Serialize};
 /// (bytecode evidence on `Exception$Severity` in `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum V4ErrorSeverity {
+pub enum NexoraErrorSeverity {
     Common,
     Suspicious,
     Fault,
 }
 
-impl V4ErrorSeverity {
+impl NexoraErrorSeverity {
     /// The value the reference puts on the wire.
     pub fn as_str(&self) -> &'static str {
         match self {
-            V4ErrorSeverity::Common => "common",
-            V4ErrorSeverity::Suspicious => "suspicious",
-            V4ErrorSeverity::Fault => "fault",
+            NexoraErrorSeverity::Common => "common",
+            NexoraErrorSeverity::Suspicious => "suspicious",
+            NexoraErrorSeverity::Fault => "fault",
         }
     }
 }
 
-/// The exception payload of the Lavalink v4 protocol.
+/// The exception payload of the Nexora nexora protocol.
 ///
 /// The reference carries a message, a severity, the root cause's class name
 /// and the root cause's stack trace (bytecode evidence on `Exception` in
 /// `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Exception {
+pub struct NexoraException {
     pub message: String,
-    pub severity: V4ErrorSeverity,
+    pub severity: NexoraErrorSeverity,
     pub cause: Option<String>,
     #[serde(rename = "causeStackTrace")]
     pub cause_stack_trace: Option<String>,
 }
 
-impl V4Exception {
+impl NexoraException {
     /// A `fault`-severity exception with no root cause.
     pub fn fault(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
-            severity: V4ErrorSeverity::Fault,
+            severity: NexoraErrorSeverity::Fault,
             cause: None,
             cause_stack_trace: None,
         }
@@ -60,7 +60,7 @@ impl V4Exception {
     }
 }
 
-/// The whole body Lavalink v4 returns for a failed request.
+/// The whole body Nexora nexora returns for a failed request.
 ///
 /// The reference uses the server's own error shape: a timestamp, the HTTP
 /// status, the status text, a trace, a message and the request path
@@ -71,7 +71,7 @@ impl V4Exception {
 /// `Instant.toEpochMilliseconds()` through `encodeLong` (bytecode evidence on
 /// `serialization/TimestampSerializer` in `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4ErrorEnvelope {
+pub struct NexoraErrorEnvelope {
     pub timestamp: u64,
     pub status: u16,
     pub error: String,
@@ -80,7 +80,7 @@ pub struct V4ErrorEnvelope {
     pub path: String,
 }
 
-impl V4ErrorEnvelope {
+impl NexoraErrorEnvelope {
     /// Build an envelope for a failed request.
     pub fn new(
         status: u16,
@@ -115,18 +115,18 @@ mod tests {
 
     #[test]
     fn severities_serialise_in_lower_case() {
-        assert_eq!(V4ErrorSeverity::Common.as_str(), "common");
-        assert_eq!(V4ErrorSeverity::Suspicious.as_str(), "suspicious");
-        assert_eq!(V4ErrorSeverity::Fault.as_str(), "fault");
+        assert_eq!(NexoraErrorSeverity::Common.as_str(), "common");
+        assert_eq!(NexoraErrorSeverity::Suspicious.as_str(), "suspicious");
+        assert_eq!(NexoraErrorSeverity::Fault.as_str(), "fault");
 
-        let value = serde_json::to_value(V4ErrorSeverity::Fault).unwrap();
+        let value = serde_json::to_value(NexoraErrorSeverity::Fault).unwrap();
         assert_eq!(value, "fault");
     }
 
     #[test]
     fn the_exception_payload_uses_the_reference_field_names() {
         let exception =
-            V4Exception::fault("boom").with_cause("java.lang.Error", Some("at x".into()));
+            NexoraException::fault("boom").with_cause("java.lang.Error", Some("at x".into()));
         let value = serde_json::to_value(&exception).unwrap();
         assert_eq!(value["message"], "boom");
         assert_eq!(value["severity"], "fault");
@@ -136,12 +136,12 @@ mod tests {
 
     #[test]
     fn the_error_envelope_uses_the_reference_field_names() {
-        let envelope = V4ErrorEnvelope::new(400, "Bad Request", "invalid", "/v4/loadtracks");
+        let envelope = NexoraErrorEnvelope::new(400, "Bad Request", "invalid", "/nexora/loadtracks");
         let value = serde_json::to_value(&envelope).unwrap();
         assert_eq!(value["status"], 400);
         assert_eq!(value["error"], "Bad Request");
         assert_eq!(value["message"], "invalid");
-        assert_eq!(value["path"], "/v4/loadtracks");
+        assert_eq!(value["path"], "/nexora/loadtracks");
         // The reference serialises the timestamp as epoch milliseconds.
         assert!(value["timestamp"].as_u64().unwrap() > 0);
     }

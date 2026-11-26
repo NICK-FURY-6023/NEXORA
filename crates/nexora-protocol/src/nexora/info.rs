@@ -2,16 +2,16 @@ use serde::{Deserialize, Serialize};
 
 use nexora_error::NexoraError;
 
-/// The Lavalink protocol generation NEXORA implements.
-pub const LAVALINK_V4_PROTOCOL_VERSION: &str = "4.0.0";
+/// The Nexora protocol generation NEXORA implements.
+pub const NEXORA_PROTOCOL_VERSION: &str = "4.0.0";
 
-/// Version block of the Lavalink v4 `/v4/info` payload.
+/// Version block of the Nexora nexora `/nexora/info` payload.
 ///
 /// The reference carries a semver string and its three numeric parts plus an
 /// optional pre-release tag (bytecode evidence on `Version` in
 /// `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Version {
+pub struct NexoraVersion {
     pub semver: String,
     pub major: u32,
     pub minor: u32,
@@ -20,7 +20,7 @@ pub struct V4Version {
     pub pre_release: Option<String>,
 }
 
-impl V4Version {
+impl NexoraVersion {
     /// NEXORA's own version, shaped like the reference's version block.
     pub fn nexora() -> Self {
         let semver = env!("CARGO_PKG_VERSION").to_owned();
@@ -38,46 +38,46 @@ impl V4Version {
     }
 }
 
-/// Git block of the Lavalink v4 `/v4/info` payload.
+/// Git block of the Nexora nexora `/nexora/info` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Git {
+pub struct NexoraGit {
     pub branch: String,
     pub commit: String,
     #[serde(rename = "commitTime")]
     pub commit_time: i64,
 }
 
-/// One plugin entry of the Lavalink v4 `/v4/info` payload.
+/// One plugin entry of the Nexora nexora `/nexora/info` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Plugin {
+pub struct NexoraPlugin {
     pub name: String,
     pub path: String,
     pub version: String,
 }
 
-/// The plugin block of the Lavalink v4 `/v4/info` payload.
+/// The plugin block of the Nexora nexora `/nexora/info` payload.
 ///
 /// The reference nests the plugin list under a `plugins` object, not a bare
 /// array (bytecode evidence on `Plugins` in `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Plugins {
-    pub plugins: Vec<V4Plugin>,
+pub struct NexoraPlugins {
+    pub plugins: Vec<NexoraPlugin>,
 }
 
-/// The Lavalink v4 `/v4/info` payload.
+/// The Nexora nexora `/nexora/info` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Info {
+pub struct NexoraInfo {
     pub name: String,
-    pub version: V4Version,
+    pub version: NexoraVersion,
     #[serde(rename = "buildTime")]
     pub build_time: i64,
-    pub git: V4Git,
+    pub git: NexoraGit,
     pub jvm: Option<String>,
     pub lavaplayer: Option<String>,
     #[serde(rename = "sourceManagers")]
     pub source_managers: Vec<String>,
     pub filters: Vec<String>,
-    pub plugins: V4Plugins,
+    pub plugins: NexoraPlugins,
 }
 
 /// Accept only the protocol generation NEXORA implements.
@@ -90,13 +90,13 @@ pub fn check_protocol_version(requested: &str) -> Result<(), NexoraError> {
         .next()
         .and_then(parse_number)
         .ok_or_else(|| {
-            NexoraError::invalid_input("unsupported Lavalink protocol version".to_owned())
+            NexoraError::invalid_input("unsupported Nexora protocol version".to_owned())
         })?;
     if major == 4 {
         Ok(())
     } else {
         Err(NexoraError::invalid_input(
-            "unsupported Lavalink protocol version".to_owned(),
+            "unsupported Nexora protocol version".to_owned(),
         ))
     }
 }
@@ -113,12 +113,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn info_serialises_the_v4_shape() {
-        let info = V4Info {
+    fn info_serialises_the_nexora_shape() {
+        let info = NexoraInfo {
             name: "NEXORA".into(),
-            version: V4Version::nexora(),
+            version: NexoraVersion::nexora(),
             build_time: 1,
-            git: V4Git {
+            git: NexoraGit {
                 branch: "main".into(),
                 commit: "abc".into(),
                 commit_time: 1,
@@ -127,7 +127,7 @@ mod tests {
             lavaplayer: Some("nexora-audio-engine".into()),
             source_managers: vec!["local".into()],
             filters: Vec::new(),
-            plugins: V4Plugins::default(),
+            plugins: NexoraPlugins::default(),
         };
         let value = serde_json::to_value(&info).unwrap();
         assert_eq!(value["name"], "NEXORA");
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn version_negotiation_accepts_v4_and_rejects_others() {
+    fn version_negotiation_accepts_nexora_and_rejects_others() {
         assert!(check_protocol_version("4").is_ok());
         assert!(check_protocol_version("4.0.0").is_ok());
         assert!(check_protocol_version("4.9.9").is_ok());

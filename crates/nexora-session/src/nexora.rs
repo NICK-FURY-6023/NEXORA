@@ -1,8 +1,8 @@
-//! The Lavalink v4 session context: one session, many guild players.
+//! The Nexora nexora session context: one session, many guild players.
 //!
-//! A Lavalink v4 session is the WebSocket connection context. Inside it every
+//! A Nexora nexora session is the WebSocket connection context. Inside it every
 //! Discord guild has its own player. NEXORA keeps the queue in the native
-//! session manager and models here what the v4 surface exposes: the players
+//! session manager and models here what the nexora surface exposes: the players
 //! and their state.
 
 use std::collections::HashMap;
@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nexora_protocol::{
-    V4EventMessage, V4Filters, V4Frame, V4Player, V4PlayerState, V4PlayerUpdateFrame, V4Track,
-    V4VoiceState,
+    NexoraEventMessage, NexoraFilters, NexoraFrame, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrack,
+    NexoraVoiceState,
 };
 use tokio::sync::{RwLock, broadcast};
 
@@ -27,11 +27,11 @@ pub const DEFAULT_RESUME_TIMEOUT: u64 = 60;
 /// The reference's `playerUpdateInterval` default, in seconds.
 pub const PLAYER_UPDATE_INTERVAL_SECONDS: u64 = 5;
 
-/// One player inside a Lavalink v4 session.
+/// One player inside a Nexora nexora session.
 #[derive(Debug, Clone)]
-pub struct V4PlayerRecord {
+pub struct NexoraPlayerRecord {
     pub guild_id: String,
-    pub track: Option<V4Track>,
+    pub track: Option<NexoraTrack>,
     pub volume: i64,
     pub paused: bool,
     pub position_ms: u64,
@@ -41,8 +41,8 @@ pub struct V4PlayerRecord {
     /// track's playback but is not part of the player object the endpoints
     /// return, so it is stored here and never serialised.
     pub end_time_ms: Option<u64>,
-    pub filters: V4Filters,
-    pub voice: V4VoiceState,
+    pub filters: NexoraFilters,
+    pub voice: NexoraVoiceState,
     pub user_data: serde_json::Value,
     /// The Discord voice channel the player is connected to, if any.
     pub voice_channel_id: Option<String>,
@@ -52,7 +52,7 @@ pub struct V4PlayerRecord {
     pub self_mute: bool,
 }
 
-impl V4PlayerRecord {
+impl NexoraPlayerRecord {
     fn new(guild_id: impl Into<String>) -> Self {
         Self {
             guild_id: guild_id.into(),
@@ -61,8 +61,8 @@ impl V4PlayerRecord {
             paused: false,
             position_ms: 0,
             end_time_ms: None,
-            filters: V4Filters::default(),
-            voice: V4VoiceState::default(),
+            filters: NexoraFilters::default(),
+            voice: NexoraVoiceState::default(),
             user_data: serde_json::Value::Object(serde_json::Map::new()),
             voice_channel_id: None,
             self_deaf: false,
@@ -71,8 +71,8 @@ impl V4PlayerRecord {
     }
 
     /// The state block the reference sends in a `playerUpdate` frame.
-    pub fn state(&self) -> V4PlayerState {
-        V4PlayerState {
+    pub fn state(&self) -> NexoraPlayerState {
+        NexoraPlayerState {
             time: now_ms(),
             position: self.position_ms as i64,
             connected: self.voice.is_complete(),
@@ -81,8 +81,8 @@ impl V4PlayerRecord {
     }
 
     /// The player object the reference returns from the player endpoints.
-    pub fn to_player(&self) -> V4Player {
-        V4Player {
+    pub fn to_player(&self) -> NexoraPlayer {
+        NexoraPlayer {
             guild_id: self.guild_id.clone(),
             track: self.track.clone(),
             volume: self.volume,
@@ -94,30 +94,30 @@ impl V4PlayerRecord {
     }
 }
 
-/// A Lavalink v4 session context.
+/// A Nexora nexora session context.
 #[derive(Debug, Clone)]
-pub struct V4SessionContext {
+pub struct NexoraSessionContext {
     pub session_id: String,
-    pub players: HashMap<String, V4PlayerRecord>,
+    pub players: HashMap<String, NexoraPlayerRecord>,
     pub resuming: bool,
     pub resume_timeout: u64,
 }
 
-/// Holds the Lavalink v4 sessions and their players.
+/// Holds the Nexora nexora sessions and their players.
 #[derive(Debug)]
-pub struct V4SessionManager {
-    sessions: RwLock<HashMap<String, V4SessionContext>>,
-    events: broadcast::Sender<V4Frame>,
+pub struct NexoraSessionManager {
+    sessions: RwLock<HashMap<String, NexoraSessionContext>>,
+    events: broadcast::Sender<NexoraFrame>,
     counter: AtomicU64,
 }
 
-impl Default for V4SessionManager {
+impl Default for NexoraSessionManager {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl V4SessionManager {
+impl NexoraSessionManager {
     pub fn new() -> Self {
         let (events, _receiver) = broadcast::channel(256);
         Self {
@@ -128,18 +128,18 @@ impl V4SessionManager {
     }
 
     /// Subscribes to the session's emitted frames.
-    pub fn subscribe(&self) -> broadcast::Receiver<V4Frame> {
+    pub fn subscribe(&self) -> broadcast::Receiver<NexoraFrame> {
         self.events.subscribe()
     }
 
     /// Emits one event to every subscriber.
-    pub fn emit(&self, event: V4EventMessage) {
-        let _ = self.events.send(V4Frame::Event(Box::new(event)));
+    pub fn emit(&self, event: NexoraEventMessage) {
+        let _ = self.events.send(NexoraFrame::Event(Box::new(event)));
     }
 
     /// Emits one `playerUpdate` frame to every subscriber.
-    pub fn emit_player_update(&self, frame: V4PlayerUpdateFrame) {
-        let _ = self.events.send(V4Frame::PlayerUpdate(Box::new(frame)));
+    pub fn emit_player_update(&self, frame: NexoraPlayerUpdateFrame) {
+        let _ = self.events.send(NexoraFrame::PlayerUpdate(Box::new(frame)));
     }
 
     /// Creates a session and returns its id.
@@ -154,7 +154,7 @@ impl V4SessionManager {
             if !sessions.contains_key(&id) {
                 sessions.insert(
                     id.clone(),
-                    V4SessionContext {
+                    NexoraSessionContext {
                         session_id: id.clone(),
                         players: HashMap::new(),
                         resuming: false,
@@ -167,21 +167,21 @@ impl V4SessionManager {
     }
 
     /// Returns the session, or `None` when it does not exist.
-    pub async fn session(&self, session_id: &str) -> Option<V4SessionContext> {
+    pub async fn session(&self, session_id: &str) -> Option<NexoraSessionContext> {
         self.sessions.read().await.get(session_id).cloned()
     }
 
     /// Returns the session's players, or `None` when the session does not exist.
-    pub async fn players(&self, session_id: &str) -> Option<Vec<V4PlayerRecord>> {
+    pub async fn players(&self, session_id: &str) -> Option<Vec<NexoraPlayerRecord>> {
         let sessions = self.sessions.read().await;
         let session = sessions.get(session_id)?;
-        let mut players: Vec<V4PlayerRecord> = session.players.values().cloned().collect();
+        let mut players: Vec<NexoraPlayerRecord> = session.players.values().cloned().collect();
         players.sort_by(|left, right| left.guild_id.cmp(&right.guild_id));
         Some(players)
     }
 
     /// Returns one player, or `None` when the session or the player is absent.
-    pub async fn player(&self, session_id: &str, guild_id: &str) -> Option<V4PlayerRecord> {
+    pub async fn player(&self, session_id: &str, guild_id: &str) -> Option<NexoraPlayerRecord> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id)?.players.get(guild_id).cloned()
     }
@@ -195,16 +195,16 @@ impl V4SessionManager {
         session_id: &str,
         guild_id: &str,
         apply: F,
-    ) -> Option<V4PlayerRecord>
+    ) -> Option<NexoraPlayerRecord>
     where
-        F: FnOnce(&mut V4PlayerRecord),
+        F: FnOnce(&mut NexoraPlayerRecord),
     {
         let mut sessions = self.sessions.write().await;
         let session = sessions.get_mut(session_id)?;
         let player = session
             .players
             .entry(guild_id.to_owned())
-            .or_insert_with(|| V4PlayerRecord::new(guild_id));
+            .or_insert_with(|| NexoraPlayerRecord::new(guild_id));
         apply(player);
         Some(player.clone())
     }
@@ -281,12 +281,12 @@ fn random_session_id(counter: u64, seed: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nexora_protocol::{V4Track, V4TrackInfo};
+    use nexora_protocol::{NexoraTrack, NexoraTrackInfo};
 
-    fn track(title: &str) -> V4Track {
-        V4Track {
+    fn track(title: &str) -> NexoraTrack {
+        NexoraTrack {
             encoded: "abc".into(),
-            info: V4TrackInfo {
+            info: NexoraTrackInfo {
                 identifier: "tone.wav".into(),
                 is_seekable: true,
                 author: "artist".into(),
@@ -307,7 +307,7 @@ mod tests {
 
     #[tokio::test]
     async fn session_ids_are_sixteen_lowercase_alphanumerics() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let id = manager.create_session().await;
         assert_eq!(id.len(), 16);
         assert!(
@@ -320,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_player_is_created_on_first_update() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         assert!(manager.player(&session, "1234").await.is_none());
 
@@ -339,7 +339,7 @@ mod tests {
 
     #[tokio::test]
     async fn players_are_listed_in_guild_id_order() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         manager.update_player(&session, "9999", |_| {}).await;
         manager.update_player(&session, "1111", |_| {}).await;
@@ -350,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn removing_a_player_removes_only_that_player() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         manager.update_player(&session, "1111", |_| {}).await;
         manager.update_player(&session, "2222", |_| {}).await;
@@ -361,7 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn resuming_and_timeout_are_kept_per_session() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         let (resuming, timeout) = manager
             .set_resuming(&session, Some(true), Some(120))
@@ -376,14 +376,14 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_session_has_no_players() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         assert!(manager.players("nope").await.is_none());
         assert!(manager.update_player("nope", "1", |_| {}).await.is_none());
     }
 
     #[tokio::test]
     async fn a_new_player_has_default_voice_state() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         let player = manager
             .update_player(&session, "1234", |player| {
@@ -398,7 +398,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_voice_state_update_changes_the_player_record() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let session = manager.create_session().await;
         manager
             .update_player(&session, "1234", |player| {
@@ -416,16 +416,16 @@ mod tests {
 
     #[tokio::test]
     async fn events_reach_subscribers() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let mut receiver = manager.subscribe();
-        manager.emit(V4EventMessage::WebSocketClosed {
+        manager.emit(NexoraEventMessage::WebSocketClosed {
             guild_id: "1234".into(),
             code: 1000,
             reason: "bye".into(),
             by_remote: false,
         });
         let frame = receiver.recv().await.unwrap();
-        let V4Frame::Event(event) = frame else {
+        let NexoraFrame::Event(event) = frame else {
             panic!("an emitted event arrives as an event frame");
         };
         assert_eq!(event.type_name(), "WebSocketClosedEvent");
@@ -433,10 +433,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_player_update_frame_is_its_own_op() {
-        let manager = V4SessionManager::new();
+        let manager = NexoraSessionManager::new();
         let mut receiver = manager.subscribe();
-        manager.emit_player_update(V4PlayerUpdateFrame {
-            state: V4PlayerState {
+        manager.emit_player_update(NexoraPlayerUpdateFrame {
+            state: NexoraPlayerState {
                 time: 1,
                 position: 2,
                 connected: false,
@@ -445,7 +445,7 @@ mod tests {
             guild_id: "1234".into(),
         });
         let frame = receiver.recv().await.unwrap();
-        let V4Frame::PlayerUpdate(update) = frame else {
+        let NexoraFrame::PlayerUpdate(update) = frame else {
             panic!("a player update arrives as a playerUpdate frame");
         };
         assert_eq!(update.guild_id, "1234");

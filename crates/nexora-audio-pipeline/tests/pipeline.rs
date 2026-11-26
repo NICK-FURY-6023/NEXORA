@@ -1,7 +1,7 @@
 use nexora_audio_pipeline::{
     BoundedAudioQueue, detect_clipping, encode_file_packets, resample_interleaved,
 };
-use nexora_protocol::v4::{V4Filters, V4LowPassFilter};
+use nexora_protocol::nexora::{NexoraFilters, NexoraLowPassFilter};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -65,7 +65,7 @@ async fn bounded_queue_enforces_capacity() {
 #[test]
 fn encode_file_packets_produces_20ms_opus_packets() {
     let path = temp_wav("packets", 44_100, 8_820);
-    let packets = encode_file_packets(&path, 48_000, 2, 100, &V4Filters::default()).unwrap();
+    let packets = encode_file_packets(&path, 48_000, 2, 100, &NexoraFilters::default()).unwrap();
     let _ = fs::remove_file(&path);
 
     assert!((9..=11).contains(&packets.len()));
@@ -75,8 +75,8 @@ fn encode_file_packets_produces_20ms_opus_packets() {
 #[test]
 fn encode_file_packets_applies_volume_gain() {
     let path = temp_wav("volume", 44_100, 4_410);
-    let loud = encode_file_packets(&path, 48_000, 2, 100, &V4Filters::default()).unwrap();
-    let silent = encode_file_packets(&path, 48_000, 2, 0, &V4Filters::default()).unwrap();
+    let loud = encode_file_packets(&path, 48_000, 2, 100, &NexoraFilters::default()).unwrap();
+    let silent = encode_file_packets(&path, 48_000, 2, 0, &NexoraFilters::default()).unwrap();
     let _ = fs::remove_file(&path);
 
     assert_eq!(loud.len(), silent.len());
@@ -86,14 +86,14 @@ fn encode_file_packets_applies_volume_gain() {
 #[test]
 fn encode_file_packets_applies_filters() {
     let path = temp_wav("filters", 44_100, 4_410);
-    let unfiltered = encode_file_packets(&path, 48_000, 2, 100, &V4Filters::default()).unwrap();
+    let unfiltered = encode_file_packets(&path, 48_000, 2, 100, &NexoraFilters::default()).unwrap();
     let filtered = encode_file_packets(
         &path,
         48_000,
         2,
         100,
-        &V4Filters {
-            low_pass: Some(V4LowPassFilter { smoothing: 1.0 }),
+        &NexoraFilters {
+            low_pass: Some(NexoraLowPassFilter { smoothing: 1.0 }),
             ..Default::default()
         },
     )

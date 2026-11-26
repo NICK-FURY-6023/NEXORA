@@ -1,4 +1,4 @@
-//! The Lavalink v4 WebSocket frames.
+//! The Nexora nexora WebSocket frames.
 //!
 //! The reference emits every event **flat**: the `op`, the `type`
 //! discriminator, the `guildId` and the event's own fields are siblings in one
@@ -8,14 +8,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::error::V4Exception;
-use super::op::V4Op;
-use super::player::V4PlayerState;
-use super::track::V4Track;
+use super::error::NexoraException;
+use super::op::NexoraOp;
+use super::player::NexoraPlayerState;
+use super::track::NexoraTrack;
 
 /// Why a track stopped playing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum V4TrackEndReason {
+pub enum NexoraTrackEndReason {
     #[serde(rename = "finished")]
     Finished,
     #[serde(rename = "loadFailed")]
@@ -26,24 +26,24 @@ pub enum V4TrackEndReason {
     Replaced,
     #[serde(rename = "cleanup")]
     Cleanup,
-    /// NodeLink's gapless transition: the next track starts without a gap.
+    /// Nexora's gapless transition: the next track starts without a gap.
     #[serde(rename = "gapless")]
     Gapless,
-    /// NodeLink's crossfade transition.
+    /// Nexora's crossfade transition.
     #[serde(rename = "crossfading")]
     Crossfading,
 }
 
-impl V4TrackEndReason {
+impl NexoraTrackEndReason {
     pub fn as_str(&self) -> &'static str {
         match self {
-            V4TrackEndReason::Finished => "finished",
-            V4TrackEndReason::LoadFailed => "loadFailed",
-            V4TrackEndReason::Stopped => "stopped",
-            V4TrackEndReason::Replaced => "replaced",
-            V4TrackEndReason::Cleanup => "cleanup",
-            V4TrackEndReason::Gapless => "gapless",
-            V4TrackEndReason::Crossfading => "crossfading",
+            NexoraTrackEndReason::Finished => "finished",
+            NexoraTrackEndReason::LoadFailed => "loadFailed",
+            NexoraTrackEndReason::Stopped => "stopped",
+            NexoraTrackEndReason::Replaced => "replaced",
+            NexoraTrackEndReason::Cleanup => "cleanup",
+            NexoraTrackEndReason::Gapless => "gapless",
+            NexoraTrackEndReason::Crossfading => "crossfading",
         }
     }
 
@@ -51,51 +51,51 @@ impl V4TrackEndReason {
     pub fn may_start_next(&self) -> bool {
         matches!(
             self,
-            V4TrackEndReason::Finished
-                | V4TrackEndReason::LoadFailed
-                | V4TrackEndReason::Gapless
-                | V4TrackEndReason::Crossfading
+            NexoraTrackEndReason::Finished
+                | NexoraTrackEndReason::LoadFailed
+                | NexoraTrackEndReason::Gapless
+                | NexoraTrackEndReason::Crossfading
         )
     }
 }
 
 /// The `ready` frame: `{"op":"ready","resumed":…,"sessionId":"…"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Ready {
+pub struct NexoraReady {
     pub resumed: bool,
     #[serde(rename = "sessionId")]
     pub session_id: String,
 }
 
-impl V4Ready {
+impl NexoraReady {
     /// The frame as the reference sends it.
     pub fn to_frame(&self) -> Value {
         let mut frame = serde_json::to_value(self).unwrap_or(Value::Null);
-        insert_op(&mut frame, V4Op::Ready);
+        insert_op(&mut frame, NexoraOp::Ready);
         frame
     }
 }
 
 /// The `playerUpdate` frame: `{"op":"playerUpdate","state":…,"guildId":"…"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4PlayerUpdateFrame {
-    pub state: V4PlayerState,
+pub struct NexoraPlayerUpdateFrame {
+    pub state: NexoraPlayerState,
     #[serde(rename = "guildId")]
     pub guild_id: String,
 }
 
-impl V4PlayerUpdateFrame {
+impl NexoraPlayerUpdateFrame {
     /// The frame as the reference sends it.
     pub fn to_frame(&self) -> Value {
         let mut frame = serde_json::to_value(self).unwrap_or(Value::Null);
-        insert_op(&mut frame, V4Op::PlayerUpdate);
+        insert_op(&mut frame, NexoraOp::PlayerUpdate);
         frame
     }
 }
 
 /// The `stats` frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4StatsFrame {
+pub struct NexoraStatsFrame {
     #[serde(rename = "frameStats")]
     pub frame_stats: Option<Value>,
     pub players: i64,
@@ -106,16 +106,16 @@ pub struct V4StatsFrame {
     pub cpu: Value,
 }
 
-impl V4StatsFrame {
+impl NexoraStatsFrame {
     /// The frame as the reference sends it.
     pub fn to_frame(&self) -> Value {
         let mut frame = serde_json::to_value(self).unwrap_or(Value::Null);
-        insert_op(&mut frame, V4Op::Stats);
+        insert_op(&mut frame, NexoraOp::Stats);
         frame
     }
 }
 
-/// One frame the v4 socket can send.
+/// One frame the nexora socket can send.
 ///
 /// The reference's `Message` interface is the supertype of both the
 /// `playerUpdate` frame and the emitted events, and the socket serialises
@@ -124,19 +124,19 @@ impl V4StatsFrame {
 /// This enum is that supertype.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum V4Frame {
+pub enum NexoraFrame {
     /// A `playerUpdate` frame: its own op, not an `event`.
-    PlayerUpdate(Box<V4PlayerUpdateFrame>),
+    PlayerUpdate(Box<NexoraPlayerUpdateFrame>),
     /// An emitted event: `op:"event"` with a `type` discriminator.
-    Event(Box<V4EventMessage>),
+    Event(Box<NexoraEventMessage>),
 }
 
-impl V4Frame {
+impl NexoraFrame {
     /// The frame as the reference sends it.
     pub fn to_frame(&self) -> Value {
         match self {
-            V4Frame::PlayerUpdate(frame) => frame.to_frame(),
-            V4Frame::Event(event) => event.to_frame(),
+            NexoraFrame::PlayerUpdate(frame) => frame.to_frame(),
+            NexoraFrame::Event(event) => event.to_frame(),
         }
     }
 }
@@ -144,32 +144,32 @@ impl V4Frame {
 /// One emitted event, discriminated by its `type` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub enum V4EventMessage {
+pub enum NexoraEventMessage {
     #[serde(rename = "TrackStartEvent")]
     TrackStart {
         #[serde(rename = "guildId")]
         guild_id: String,
-        track: Box<V4Track>,
+        track: Box<NexoraTrack>,
     },
     #[serde(rename = "TrackEndEvent")]
     TrackEnd {
         #[serde(rename = "guildId")]
         guild_id: String,
-        track: Box<V4Track>,
-        reason: V4TrackEndReason,
+        track: Box<NexoraTrack>,
+        reason: NexoraTrackEndReason,
     },
     #[serde(rename = "TrackExceptionEvent")]
     TrackException {
         #[serde(rename = "guildId")]
         guild_id: String,
-        track: Box<V4Track>,
-        exception: V4Exception,
+        track: Box<NexoraTrack>,
+        exception: NexoraException,
     },
     #[serde(rename = "TrackStuckEvent")]
     TrackStuck {
         #[serde(rename = "guildId")]
         guild_id: String,
-        track: Box<V4Track>,
+        track: Box<NexoraTrack>,
         #[serde(rename = "thresholdMs")]
         threshold_ms: u64,
     },
@@ -182,7 +182,7 @@ pub enum V4EventMessage {
         #[serde(rename = "byRemote")]
         by_remote: bool,
     },
-    /// NodeLink's seek event: `{position, duration}`.
+    /// Nexora's seek event: `{position, duration}`.
     #[serde(rename = "SeekEvent")]
     Seek {
         #[serde(rename = "guildId")]
@@ -190,35 +190,35 @@ pub enum V4EventMessage {
         position: u64,
         duration: i64,
     },
-    /// NodeLink's pause event: `{paused}`.
+    /// Nexora's pause event: `{paused}`.
     #[serde(rename = "PauseEvent")]
     Pause {
         #[serde(rename = "guildId")]
         guild_id: String,
         paused: bool,
     },
-    /// NodeLink's volume event: `{volume}`.
+    /// Nexora's volume event: `{volume}`.
     #[serde(rename = "VolumeChangedEvent")]
     VolumeChanged {
         #[serde(rename = "guildId")]
         guild_id: String,
         volume: i64,
     },
-    /// NodeLink's filter event: `{filters}`.
+    /// Nexora's filter event: `{filters}`.
     #[serde(rename = "FiltersChangedEvent")]
     FiltersChanged {
         #[serde(rename = "guildId")]
         guild_id: String,
-        filters: super::filters::V4Filters,
+        filters: super::filters::NexoraFilters,
     },
-    /// NodeLink's player-created event: `{guildId, player}`.
+    /// Nexora's player-created event: `{guildId, player}`.
     #[serde(rename = "PlayerCreatedEvent")]
     PlayerCreated {
         #[serde(rename = "guildId")]
         guild_id: String,
-        player: Box<super::player::V4Player>,
+        player: Box<super::player::NexoraPlayer>,
     },
-    /// NodeLink's player-destroyed event: `{guildId}`.
+    /// Nexora's player-destroyed event: `{guildId}`.
     #[serde(rename = "PlayerDestroyedEvent")]
     PlayerDestroyed {
         #[serde(rename = "guildId")]
@@ -240,22 +240,22 @@ pub enum V4EventMessage {
     },
 }
 
-impl V4EventMessage {
+impl NexoraEventMessage {
     /// The `type` discriminator of this event.
     pub fn type_name(&self) -> &'static str {
         match self {
-            V4EventMessage::TrackStart { .. } => "TrackStartEvent",
-            V4EventMessage::TrackEnd { .. } => "TrackEndEvent",
-            V4EventMessage::TrackException { .. } => "TrackExceptionEvent",
-            V4EventMessage::TrackStuck { .. } => "TrackStuckEvent",
-            V4EventMessage::WebSocketClosed { .. } => "WebSocketClosedEvent",
-            V4EventMessage::Seek { .. } => "SeekEvent",
-            V4EventMessage::Pause { .. } => "PauseEvent",
-            V4EventMessage::VolumeChanged { .. } => "VolumeChangedEvent",
-            V4EventMessage::FiltersChanged { .. } => "FiltersChangedEvent",
-            V4EventMessage::PlayerCreated { .. } => "PlayerCreatedEvent",
-            V4EventMessage::PlayerDestroyed { .. } => "PlayerDestroyedEvent",
-            V4EventMessage::VoiceStateUpdate { .. } => "VoiceStateUpdate",
+            NexoraEventMessage::TrackStart { .. } => "TrackStartEvent",
+            NexoraEventMessage::TrackEnd { .. } => "TrackEndEvent",
+            NexoraEventMessage::TrackException { .. } => "TrackExceptionEvent",
+            NexoraEventMessage::TrackStuck { .. } => "TrackStuckEvent",
+            NexoraEventMessage::WebSocketClosed { .. } => "WebSocketClosedEvent",
+            NexoraEventMessage::Seek { .. } => "SeekEvent",
+            NexoraEventMessage::Pause { .. } => "PauseEvent",
+            NexoraEventMessage::VolumeChanged { .. } => "VolumeChangedEvent",
+            NexoraEventMessage::FiltersChanged { .. } => "FiltersChangedEvent",
+            NexoraEventMessage::PlayerCreated { .. } => "PlayerCreatedEvent",
+            NexoraEventMessage::PlayerDestroyed { .. } => "PlayerDestroyedEvent",
+            NexoraEventMessage::VoiceStateUpdate { .. } => "VoiceStateUpdate",
         }
     }
 
@@ -263,13 +263,13 @@ impl V4EventMessage {
     /// fields are siblings.
     pub fn to_frame(&self) -> Value {
         let mut frame = serde_json::to_value(self).unwrap_or(Value::Null);
-        insert_op(&mut frame, V4Op::Event);
+        insert_op(&mut frame, NexoraOp::Event);
         frame
     }
 }
 
 /// Inserts the `op` field into an already-serialised frame.
-fn insert_op(frame: &mut Value, op: V4Op) {
+fn insert_op(frame: &mut Value, op: NexoraOp) {
     if let Some(target) = frame.as_object_mut() {
         target.insert("op".to_owned(), json!(op.as_str()));
     }
@@ -278,13 +278,13 @@ fn insert_op(frame: &mut Value, op: V4Op) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::v4::error::V4ErrorSeverity;
-    use crate::v4::track::V4TrackInfo;
+    use crate::nexora::error::NexoraErrorSeverity;
+    use crate::nexora::track::NexoraTrackInfo;
 
-    fn sample_track() -> V4Track {
-        V4Track {
+    fn sample_track() -> NexoraTrack {
+        NexoraTrack {
             encoded: "abc".into(),
-            info: V4TrackInfo {
+            info: NexoraTrackInfo {
                 identifier: "tone.wav".into(),
                 is_seekable: true,
                 author: "artist".into(),
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn the_ready_frame_matches_the_reference_shape() {
-        let frame = V4Ready {
+        let frame = NexoraReady {
             resumed: false,
             session_id: "abc".into(),
         }
@@ -317,8 +317,8 @@ mod tests {
 
     #[test]
     fn the_player_update_frame_matches_the_reference_shape() {
-        let frame = V4PlayerUpdateFrame {
-            state: V4PlayerState::default(),
+        let frame = NexoraPlayerUpdateFrame {
+            state: NexoraPlayerState::default(),
             guild_id: "1234".into(),
         }
         .to_frame();
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn an_event_frame_is_flat_with_no_data_wrapper() {
-        let frame = V4EventMessage::TrackStart {
+        let frame = NexoraEventMessage::TrackStart {
             guild_id: "1234".into(),
             track: Box::new(sample_track()),
         }
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn a_voice_state_update_frame_matches_the_reference_shape() {
-        let frame = V4EventMessage::VoiceStateUpdate {
+        let frame = NexoraEventMessage::VoiceStateUpdate {
             guild_id: "1234".into(),
             user_id: "4321".into(),
             channel_id: Some("5678".into()),
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn a_voice_state_update_without_a_channel_sends_null_channel_id() {
-        let frame = V4EventMessage::VoiceStateUpdate {
+        let frame = NexoraEventMessage::VoiceStateUpdate {
             guild_id: "1234".into(),
             user_id: "4321".into(),
             channel_id: None,
@@ -377,10 +377,10 @@ mod tests {
 
     #[test]
     fn a_track_end_frame_carries_the_reason() {
-        let frame = V4EventMessage::TrackEnd {
+        let frame = NexoraEventMessage::TrackEnd {
             guild_id: "1234".into(),
             track: Box::new(sample_track()),
-            reason: V4TrackEndReason::Replaced,
+            reason: NexoraTrackEndReason::Replaced,
         }
         .to_frame();
         assert_eq!(frame["type"], "TrackEndEvent");
@@ -389,12 +389,12 @@ mod tests {
 
     #[test]
     fn an_exception_frame_carries_the_exception() {
-        let frame = V4EventMessage::TrackException {
+        let frame = NexoraEventMessage::TrackException {
             guild_id: "1234".into(),
             track: Box::new(sample_track()),
-            exception: V4Exception {
+            exception: NexoraException {
                 message: "boom".into(),
-                severity: V4ErrorSeverity::Suspicious,
+                severity: NexoraErrorSeverity::Suspicious,
                 cause: None,
                 cause_stack_trace: None,
             },
@@ -406,27 +406,27 @@ mod tests {
 
     #[test]
     fn end_reasons_use_the_reference_names() {
-        assert_eq!(V4TrackEndReason::Finished.as_str(), "finished");
-        assert_eq!(V4TrackEndReason::LoadFailed.as_str(), "loadFailed");
-        assert_eq!(V4TrackEndReason::Stopped.as_str(), "stopped");
-        assert_eq!(V4TrackEndReason::Replaced.as_str(), "replaced");
-        assert_eq!(V4TrackEndReason::Cleanup.as_str(), "cleanup");
-        assert!(V4TrackEndReason::Finished.may_start_next());
-        assert!(!V4TrackEndReason::Stopped.may_start_next());
+        assert_eq!(NexoraTrackEndReason::Finished.as_str(), "finished");
+        assert_eq!(NexoraTrackEndReason::LoadFailed.as_str(), "loadFailed");
+        assert_eq!(NexoraTrackEndReason::Stopped.as_str(), "stopped");
+        assert_eq!(NexoraTrackEndReason::Replaced.as_str(), "replaced");
+        assert_eq!(NexoraTrackEndReason::Cleanup.as_str(), "cleanup");
+        assert!(NexoraTrackEndReason::Finished.may_start_next());
+        assert!(!NexoraTrackEndReason::Stopped.may_start_next());
     }
 
     #[test]
     fn the_nodelink_reasons_use_their_own_names() {
-        assert_eq!(V4TrackEndReason::Gapless.as_str(), "gapless");
-        assert_eq!(V4TrackEndReason::Crossfading.as_str(), "crossfading");
+        assert_eq!(NexoraTrackEndReason::Gapless.as_str(), "gapless");
+        assert_eq!(NexoraTrackEndReason::Crossfading.as_str(), "crossfading");
         // A transition to the next track is a reason to advance the queue.
-        assert!(V4TrackEndReason::Gapless.may_start_next());
-        assert!(V4TrackEndReason::Crossfading.may_start_next());
+        assert!(NexoraTrackEndReason::Gapless.may_start_next());
+        assert!(NexoraTrackEndReason::Crossfading.may_start_next());
     }
 
     #[test]
     fn the_nodelink_events_carry_their_payloads() {
-        let frame = V4EventMessage::Seek {
+        let frame = NexoraEventMessage::Seek {
             guild_id: "1234".into(),
             position: 5_000,
             duration: -1_000,
@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(frame["position"], 5_000);
         assert_eq!(frame["duration"], -1_000);
 
-        let frame = V4EventMessage::Pause {
+        let frame = NexoraEventMessage::Pause {
             guild_id: "1234".into(),
             paused: true,
         }
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(frame["type"], "PauseEvent");
         assert_eq!(frame["paused"], true);
 
-        let frame = V4EventMessage::VolumeChanged {
+        let frame = NexoraEventMessage::VolumeChanged {
             guild_id: "1234".into(),
             volume: 80,
         }
@@ -454,15 +454,15 @@ mod tests {
         assert_eq!(frame["type"], "VolumeChangedEvent");
         assert_eq!(frame["volume"], 80);
 
-        let frame = V4EventMessage::FiltersChanged {
+        let frame = NexoraEventMessage::FiltersChanged {
             guild_id: "1234".into(),
-            filters: crate::v4::filters::V4Filters::default(),
+            filters: crate::nexora::filters::NexoraFilters::default(),
         }
         .to_frame();
         assert_eq!(frame["type"], "FiltersChangedEvent");
         assert!(frame["filters"].is_object());
 
-        let frame = V4EventMessage::PlayerDestroyed {
+        let frame = NexoraEventMessage::PlayerDestroyed {
             guild_id: "1234".into(),
         }
         .to_frame();

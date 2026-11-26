@@ -18,12 +18,12 @@ use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
 use nexora_protocol::{
-    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, V4ErrorSeverity,
-    V4EventMessage, V4Exception, V4Filters, V4PlayerState, V4PlayerUpdateFrame, V4TrackEndReason,
+    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, NexoraErrorSeverity,
+    NexoraEventMessage, NexoraException, NexoraFilters, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrackEndReason,
 };
 use nexora_session::{
-    PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal, SessionManager, V4PlayerRecord,
-    V4SessionManager,
+    PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal, SessionManager, NexoraPlayerRecord,
+    NexoraSessionManager,
 };
 use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};
@@ -32,7 +32,7 @@ use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, watch};
 
-pub mod lavalink;
+pub mod nexora;
 
 #[derive(Debug, Default)]
 pub struct RuntimeMetrics {
@@ -80,7 +80,7 @@ impl RuntimeMetrics {
 #[derive(Clone)]
 pub struct AppState {
     pub sessions: Arc<SessionManager>,
-    pub v4_sessions: Arc<V4SessionManager>,
+    pub nexora_sessions: Arc<NexoraSessionManager>,
     pub sources: Arc<SourceRegistry>,
     pub password: Option<String>,
     pub metrics: Arc<RuntimeMetrics>,
@@ -247,7 +247,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/metrics", get(metrics))
         .route("/ws/v1/sessions/{id}", get(websocket_events))
         .route("/ws/v1/sessions/{id}/audio", get(websocket_audio))
-        .merge(lavalink::router())
+        .merge(nexora::router())
         .with_state(state)
 }
 
@@ -263,7 +263,7 @@ async fn info() -> Json<Value> {
     Json(json!({
         "engine": "nexora",
         "api_version": "v1",
-        "lavalink_compatible": true,
+        "nexora_compatible": true,
         "features": ["rest", "websocket", "sessions", "source-resolution", "opus-output"]
     }))
 }
@@ -342,7 +342,7 @@ async fn play(
 
 /// Resolves a track and starts the playback task that produces its audio.
 ///
-/// Both the native API and the Lavalink v4 player routes start playback the
+/// Both the native API and the Nexora nexora player routes start playback the
 /// same way, so the resolution and the pacing task live here.
 pub(crate) async fn start_playback(
     state: &AppState,
@@ -359,7 +359,7 @@ pub(crate) async fn start_playback(
     let format = state.sessions.output_format(session_id).await?;
 
     // Stop any existing playback task for this session before starting a new
-    // one: a v4 session id is the native session id, so a PATCH replacing the
+    // one: a nexora session id is the native session id, so a PATCH replacing the
     // track would otherwise spawn a second run_playback task.
     state.sessions.abort_playback_task(session_id).await;
 
@@ -388,12 +388,12 @@ pub(crate) async fn start_playback(
     let sessions = Arc::clone(&state.sessions);
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
-    let v4_sessions = Arc::clone(&state.v4_sessions);
+    let nexora_sessions = Arc::clone(&state.nexora_sessions);
     // M5: one UDP voice socket per session, bound to an ephemeral port.
     // M5: one UDP voice socket per session, bound to an ephemeral port.
     // If the bind fails, voice transport is unavailable but audio still plays.
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok();
-    let player = v4_player_for(&v4_sessions, session_id, track_id).await;
+    let player = nexora_player_for(&nexora_sessions, session_id, track_id).await;
     let filters = player
         .as_ref()
         .map(|p| p.filters.clone())
@@ -413,7 +413,7 @@ pub(crate) async fn start_playback(
             sessions,
             metrics,
             sources,
-            v4_sessions,
+            nexora_sessions,
             filters,
             voice_socket: socket,
             voice_endpoint,
@@ -429,27 +429,27 @@ pub(crate) async fn start_playback(
     Ok(())
 }
 
-/// Looks up the v4 player that owns a native session.
+/// Looks up the nexora player that owns a native session.
 ///
-/// The v4 session id and the native session id are the same string, so the
-/// v4 player for a playback task is found by looking the session id up in
-/// the v4 session manager.
-/// Looks up the v4 player that is playing a given track.
+/// The nexora session id and the native session id are the same string, so the
+/// nexora player for a playback task is found by looking the session id up in
+/// the nexora session manager.
+/// Looks up the nexora player that is playing a given track.
 ///
-/// The v4 session id and the native session id are the same string, so the
-/// v4 player for a playback task is found by looking the session id up in
-/// the v4 session manager.
+/// The nexora session id and the native session id are the same string, so the
+/// nexora player for a playback task is found by looking the session id up in
+/// the nexora session manager.
 ///
 /// A session holds one player per guild, so the player is matched on the
 /// track it is playing rather than taken as the first one: the events carry
 /// that player's guild id, and picking the wrong player would report another
 /// guild's track.
-async fn v4_player_for(
-    v4_sessions: &Arc<V4SessionManager>,
+async fn nexora_player_for(
+    nexora_sessions: &Arc<NexoraSessionManager>,
     session_id: &SessionId,
     track_id: &TrackId,
-) -> Option<V4PlayerRecord> {
-    let players = v4_sessions.players(session_id.as_str()).await?;
+) -> Option<NexoraPlayerRecord> {
+    let players = nexora_sessions.players(session_id.as_str()).await?;
     players.into_iter().find_map(|player| {
         player
             .track
@@ -463,8 +463,8 @@ async fn v4_player_for(
 ///
 /// The reference schedules this task when a track starts and cancels it when
 /// the track ends, so a player only produces updates while it has something
-/// to play (bytecode evidence on `LavalinkPlayer.onTrackStart` and
-/// `onTrackEnd` in the shipped `Lavalink.jar`).
+/// to play (bytecode evidence on `NexoraPlayer.onTrackStart` and
+/// `onTrackEnd` in the shipped `Nexora.jar`).
 ///
 /// The first frame is sent immediately, matching the reference's
 /// `scheduleAtFixedRate(…, 0, interval, SECONDS)` initial delay of zero. The
@@ -472,7 +472,7 @@ async fn v4_player_for(
 /// before it builds the frame.
 fn start_player_updates(
     sessions: Arc<SessionManager>,
-    v4_sessions: Arc<V4SessionManager>,
+    nexora_sessions: Arc<NexoraSessionManager>,
     session_id: SessionId,
     guild_id: String,
 ) -> tokio::task::JoinHandle<()> {
@@ -489,8 +489,8 @@ fn start_player_updates(
             if state.status == "paused" {
                 continue;
             }
-            v4_sessions.emit_player_update(V4PlayerUpdateFrame {
-                state: V4PlayerState {
+            nexora_sessions.emit_player_update(NexoraPlayerUpdateFrame {
+                state: NexoraPlayerState {
                     time: nexora_common::TimestampMs::now().as_millis() as i64,
                     position: state.position_ms as i64,
                     connected: false,
@@ -502,44 +502,44 @@ fn start_player_updates(
     })
 }
 
-/// Publishes the `TrackEndEvent` for a session's v4 player.
+/// Publishes the `TrackEndEvent` for a session's nexora player.
 async fn emit_track_end(
-    v4_sessions: &Arc<V4SessionManager>,
+    nexora_sessions: &Arc<NexoraSessionManager>,
     session_id: &SessionId,
     track_id: &TrackId,
-    reason: V4TrackEndReason,
+    reason: NexoraTrackEndReason,
 ) {
-    let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+    let Some(player) = nexora_player_for(nexora_sessions, session_id, track_id).await else {
         return;
     };
     let Some(track) = player.track.clone() else {
         return;
     };
-    v4_sessions.emit(V4EventMessage::TrackEnd {
+    nexora_sessions.emit(NexoraEventMessage::TrackEnd {
         guild_id: player.guild_id.clone(),
         track: Box::new(track),
         reason,
     });
 }
 
-/// Publishes the `TrackExceptionEvent` for a session's v4 player.
+/// Publishes the `TrackExceptionEvent` for a session's nexora player.
 async fn emit_track_exception(
-    v4_sessions: &Arc<V4SessionManager>,
+    nexora_sessions: &Arc<NexoraSessionManager>,
     session_id: &SessionId,
     track_id: &TrackId,
     message: &str,
-    severity: V4ErrorSeverity,
+    severity: NexoraErrorSeverity,
 ) {
-    let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+    let Some(player) = nexora_player_for(nexora_sessions, session_id, track_id).await else {
         return;
     };
     let Some(track) = player.track.clone() else {
         return;
     };
-    v4_sessions.emit(V4EventMessage::TrackException {
+    nexora_sessions.emit(NexoraEventMessage::TrackException {
         guild_id: player.guild_id.clone(),
         track: Box::new(track),
-        exception: V4Exception {
+        exception: NexoraException {
             message: message.to_owned(),
             severity,
             cause: None,
@@ -552,7 +552,7 @@ async fn prepare_packets(
     path: &FsPath,
     format: &AudioFormat,
     volume: u8,
-    filters: &V4Filters,
+    filters: &NexoraFilters,
 ) -> NexoraResult<Vec<Vec<u8>>> {
     let path = path.to_path_buf();
     let sample_rate = format.sample_rate;
@@ -570,8 +570,8 @@ struct PlaybackContext {
     sessions: Arc<SessionManager>,
     metrics: Arc<RuntimeMetrics>,
     sources: Arc<SourceRegistry>,
-    v4_sessions: Arc<V4SessionManager>,
-    filters: V4Filters,
+    nexora_sessions: Arc<NexoraSessionManager>,
+    filters: NexoraFilters,
     /// The session's UDP voice socket, if one could be bound.
     ///
     /// The socket is dropped when the playback task ends, closing the port.
@@ -594,7 +594,7 @@ async fn run_playback(
         sessions,
         metrics,
         sources,
-        v4_sessions,
+        nexora_sessions,
         filters,
         voice_socket,
         voice_endpoint,
@@ -610,11 +610,11 @@ async fn run_playback(
         Err(_) => {
             let _ = sessions.fail(&session_id, "source decode failed").await;
             emit_track_exception(
-                &v4_sessions,
+                &nexora_sessions,
                 &session_id,
                 &track_id,
                 "source decode failed",
-                V4ErrorSeverity::Fault,
+                NexoraErrorSeverity::Fault,
             )
             .await;
             sessions.detach_playback(&session_id).await;
@@ -630,30 +630,30 @@ async fn run_playback(
     /// Emit `TrackStartEvent` for the currently playing track, if any.
     ///
     /// The reference emits the event when a track begins (bytecode evidence on
-    /// `player/EventEmitter.onTrackStart` in the shipped `Lavalink.jar`).
+    /// `player/EventEmitter.onTrackStart` in the shipped `Nexora.jar`).
     async fn emit_track_start(
-        v4_sessions: &Arc<V4SessionManager>,
+        nexora_sessions: &Arc<NexoraSessionManager>,
         session_id: &SessionId,
         track_id: &TrackId,
     ) {
-        let Some(player) = v4_player_for(v4_sessions, session_id, track_id).await else {
+        let Some(player) = nexora_player_for(nexora_sessions, session_id, track_id).await else {
             return;
         };
         let Some(track) = player.track.clone() else {
             return;
         };
-        v4_sessions.emit(V4EventMessage::TrackStart {
+        nexora_sessions.emit(NexoraEventMessage::TrackStart {
             guild_id: player.guild_id.clone(),
             track: Box::new(track),
         });
     }
 
-    emit_track_start(&v4_sessions, &session_id, &track_id).await;
+    emit_track_start(&nexora_sessions, &session_id, &track_id).await;
     let update_task = start_player_updates(
         Arc::clone(&sessions),
-        Arc::clone(&v4_sessions),
+        Arc::clone(&nexora_sessions),
         session_id.clone(),
-        v4_player_for(&v4_sessions, &session_id, &track_id)
+        nexora_player_for(&nexora_sessions, &session_id, &track_id)
             .await
             .map(|player| player.guild_id.clone())
             .unwrap_or_default(),
@@ -696,22 +696,22 @@ async fn run_playback(
                     let Some(next_track) = sessions.pop_next_queued(&session_id).await.ok().flatten()
                     else {
                         let _ = sessions.finish(&session_id).await;
-                        emit_track_end(&v4_sessions, &session_id, &track_id, V4TrackEndReason::Finished).await;
+                        emit_track_end(&nexora_sessions, &session_id, &track_id, NexoraTrackEndReason::Finished).await;
                         break;
                     };
                     let _ = sessions.end_track(&session_id).await;
-                    emit_track_end(&v4_sessions, &session_id, &track_id, V4TrackEndReason::Finished).await;
+                    emit_track_end(&nexora_sessions, &session_id, &track_id, NexoraTrackEndReason::Finished).await;
                     let Ok(ResolvedSource::LocalFile { path: next_path }) = sources
                         .resolve(&TrackReference::new(next_track.as_str()), &internal_auth())
                         .await
                     else {
                         let _ = sessions.fail(&session_id, "source resolve failed").await;
                         emit_track_exception(
-                            &v4_sessions,
+                            &nexora_sessions,
                             &session_id,
                             &next_track,
                             "source resolve failed",
-                            V4ErrorSeverity::Fault,
+                            NexoraErrorSeverity::Fault,
                         )
                         .await;
                         break;
@@ -732,16 +732,16 @@ async fn run_playback(
                             index = 0;
                             position_ms = 0;
                             ticker.reset();
-                            emit_track_start(&v4_sessions, &session_id, &next_track).await;
+                            emit_track_start(&nexora_sessions, &session_id, &next_track).await;
                         }
                         Err(_) => {
                             let _ = sessions.fail(&session_id, "source decode failed").await;
                             emit_track_exception(
-                                &v4_sessions,
+                                &nexora_sessions,
                                 &session_id,
                                 &next_track,
                                 "source decode failed",
-                                V4ErrorSeverity::Fault,
+                                NexoraErrorSeverity::Fault,
                             )
                             .await;
                             break;

@@ -1,4 +1,4 @@
-//! Compatibility harness for the Lavalink v4 surface.
+//! Compatibility harness for the Nexora nexora surface.
 //!
 //! Test names mirror the row ids in `docs/COMPATIBILITY.md`, so a matrix row
 //! and its proof can be found from each other. A row only counts as
@@ -15,22 +15,22 @@ use axum::http::Request;
 use futures_util::SinkExt;
 use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
 use nexora_common::SessionId;
-use nexora_protocol::V4EventMessage;
-use nexora_protocol::V4Op;
-use nexora_protocol::V4Track;
-use nexora_protocol::V4TrackInfo;
+use nexora_protocol::NexoraEventMessage;
+use nexora_protocol::NexoraOp;
+use nexora_protocol::NexoraTrack;
+use nexora_protocol::NexoraTrackInfo;
 use nexora_protocol::decode_track;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::{SessionManager, V4SessionManager};
+use nexora_session::{SessionManager, NexoraSessionManager};
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use tokio_stream::StreamExt;
 use tower::ServiceExt;
 
 /// A track used only to build the event frames the op-code test asserts on.
-fn track() -> V4Track {
-    V4Track {
+fn track() -> NexoraTrack {
+    NexoraTrack {
         encoded: "abc".into(),
-        info: V4TrackInfo {
+        info: NexoraTrackInfo {
             identifier: "tone.wav".into(),
             is_seekable: true,
             author: "artist".into(),
@@ -98,7 +98,7 @@ fn app(root: &PathBuf) -> axum::Router {
         .unwrap();
     build_router(AppState {
         sessions: Arc::new(SessionManager::new()),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -146,9 +146,9 @@ async fn request(
     (status, value)
 }
 
-/// Creates a v4 session and returns its id.
+/// Creates a nexora session and returns its id.
 async fn create_session(app: axum::Router) -> (axum::Router, String) {
-    let (status, value) = request(app.clone(), "POST", "/v4/sessions", None).await;
+    let (status, value) = request(app.clone(), "POST", "/nexora/sessions", None).await;
     assert_eq!(status, 201);
     let id = value["sessionId"].as_str().unwrap().to_owned();
     (app, id)
@@ -177,11 +177,11 @@ async fn compat_version_endpoint_returns_the_plain_version() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/stats` — the REST stats payload carries no `op`.
+/// Row: `/nexora/stats` — the REST stats payload carries no `op`.
 #[tokio::test]
-async fn compat_v4_stats_shape() {
+async fn compat_nexora_stats_shape() {
     let root = media_root();
-    let value = get_json(app(&root), "/v4/stats").await;
+    let value = get_json(app(&root), "/nexora/stats").await;
 
     assert!(value.get("op").is_none());
     assert!(value["players"].is_u64());
@@ -193,16 +193,16 @@ async fn compat_v4_stats_shape() {
     assert!(value["memory"]["reservable"].is_u64());
     assert!(value["cpu"]["cores"].is_u64());
     assert!(value["cpu"]["systemLoad"].is_number());
-    assert!(value["cpu"]["lavalinkLoad"].is_number());
+    assert!(value["cpu"]["nexoraLoad"].is_number());
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/decodetrack` — an encoded track round-trips back to its info.
+/// Row: `/nexora/decodetrack` — an encoded track round-trips back to its info.
 #[tokio::test]
-async fn compat_v4_decodetrack_returns_the_track() {
+async fn compat_nexora_decodetrack_returns_the_track() {
     let root = media_root();
     let app = app(&root);
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -210,7 +210,7 @@ async fn compat_v4_decodetrack_returns_the_track() {
 
     let value = get_json(
         app.clone(),
-        &format!("/v4/decodetrack?encodedTrack={encoded}"),
+        &format!("/nexora/decodetrack?encodedTrack={encoded}"),
     )
     .await;
     assert_eq!(value["encoded"], encoded);
@@ -221,12 +221,12 @@ async fn compat_v4_decodetrack_returns_the_track() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/decodetracks` — a batch decodes, an empty batch is a 400.
+/// Row: `/nexora/decodetracks` — a batch decodes, an empty batch is a 400.
 #[tokio::test]
-async fn compat_v4_decodetracks_decodes_a_batch() {
+async fn compat_nexora_decodetracks_decodes_a_batch() {
     let root = media_root();
     let app = app(&root);
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -235,7 +235,7 @@ async fn compat_v4_decodetracks_decodes_a_batch() {
     let (status, value) = request(
         app.clone(),
         "POST",
-        "/v4/decodetracks",
+        "/nexora/decodetracks",
         Some(&format!(r#"{{"tracks":["{encoded}"]}}"#)),
     )
     .await;
@@ -245,7 +245,7 @@ async fn compat_v4_decodetracks_decodes_a_batch() {
     let (status, _) = request(
         app.clone(),
         "POST",
-        "/v4/decodetracks",
+        "/nexora/decodetracks",
         Some(r#"{"tracks":[]}"#),
     )
     .await;
@@ -253,16 +253,16 @@ async fn compat_v4_decodetracks_decodes_a_batch() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `PATCH /v4/sessions/{id}` — the resume settings round-trip.
+/// Row: `PATCH /nexora/sessions/{id}` — the resume settings round-trip.
 #[tokio::test]
-async fn compat_v4_session_patch_applies_resume_settings() {
+async fn compat_nexora_session_patch_applies_resume_settings() {
     let root = media_root();
     let (app, session_id) = create_session(app(&root)).await;
 
     let (status, value) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}"),
+        &format!("/nexora/sessions/{session_id}"),
         Some(r#"{"resuming":true,"timeout":120}"#),
     )
     .await;
@@ -274,7 +274,7 @@ async fn compat_v4_session_patch_applies_resume_settings() {
     let (status, value) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}"),
+        &format!("/nexora/sessions/{session_id}"),
         Some("{}"),
     )
     .await;
@@ -286,7 +286,7 @@ async fn compat_v4_session_patch_applies_resume_settings() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        "/v4/sessions/nosuchsession",
+        "/nexora/sessions/nosuchsession",
         Some(r#"{"resuming":true}"#),
     )
     .await;
@@ -294,9 +294,56 @@ async fn compat_v4_session_patch_applies_resume_settings() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/sessions/{id}/players` — the players list and one player.
+/// Row: `GET /nexora/sessions/{id}` — the session object.
 #[tokio::test]
-async fn compat_v4_player_routes() {
+async fn compat_nexora_session_get_returns_the_session_object() {
+    let root = media_root();
+    let (app, session_id) = create_session(app(&root)).await;
+
+    // A fresh session is not resumable with the default 60-second timeout.
+    let (status, value) = request(
+        app.clone(),
+        "GET",
+        &format!("/nexora/sessions/{session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(value["resuming"], false);
+    assert_eq!(value["timeout"], 60);
+
+    // PATCH changes what GET reports.
+    let (status, value) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}"),
+        Some(r#"{"resuming":true,"timeout":120}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(value["resuming"], true);
+    assert_eq!(value["timeout"], 120);
+
+    let (status, value) = request(
+        app.clone(),
+        "GET",
+        &format!("/nexora/sessions/{session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(value["resuming"], true);
+    assert_eq!(value["timeout"], 120);
+
+    // A session that does not exist is a 404.
+    let (status, _) = request(app.clone(), "GET", "/nexora/sessions/nosuchsession", None).await;
+    assert_eq!(status, 404);
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: `/nexora/sessions/{id}/players` — the players list and one player.
+#[tokio::test]
+async fn compat_nexora_player_routes() {
     let root = media_root();
     let (app, session_id) = create_session(app(&root)).await;
 
@@ -304,7 +351,7 @@ async fn compat_v4_player_routes() {
     let (status, _) = request(
         app.clone(),
         "GET",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         None,
     )
     .await;
@@ -314,7 +361,7 @@ async fn compat_v4_player_routes() {
     let (status, value) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"paused":true,"volume":80}"#),
     )
     .await;
@@ -324,7 +371,7 @@ async fn compat_v4_player_routes() {
     assert_eq!(value["paused"], true);
 
     // The list carries it.
-    let value = get_json(app.clone(), &format!("/v4/sessions/{session_id}/players")).await;
+    let value = get_json(app.clone(), &format!("/nexora/sessions/{session_id}/players")).await;
     assert_eq!(value["players"].as_array().unwrap().len(), 1);
     assert_eq!(value["players"][0]["guildId"], "1234");
 
@@ -332,7 +379,7 @@ async fn compat_v4_player_routes() {
     let (status, _) = request(
         app.clone(),
         "DELETE",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         None,
     )
     .await;
@@ -340,7 +387,7 @@ async fn compat_v4_player_routes() {
     let (status, _) = request(
         app.clone(),
         "GET",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         None,
     )
     .await;
@@ -348,14 +395,14 @@ async fn compat_v4_player_routes() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/routeplanner/status` — 204 when no planner is configured.
+/// Row: `/nexora/routeplanner/status` — 204 when no planner is configured.
 #[tokio::test]
-async fn compat_v4_routeplanner_status_is_no_content() {
+async fn compat_nexora_routeplanner_status_is_no_content() {
     let root = media_root();
     let response = app(&root)
         .oneshot(
             Request::builder()
-                .uri("/v4/routeplanner/status")
+                .uri("/nexora/routeplanner/status")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -380,7 +427,7 @@ async fn serve(app: axum::Router) -> String {
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    format!("ws://{address}/v4/websocket")
+    format!("ws://{address}/nexora/websocket")
 }
 
 /// Opens a WebSocket with the given handshake headers.
@@ -418,12 +465,12 @@ async fn handshake(
     }
 }
 
-/// Row: `/v4/websocket` — the handshake rules, checked before the upgrade.
+/// Row: `/nexora/websocket` — the handshake rules, checked before the upgrade.
 ///
 /// The reference refuses a missing, empty, unparseable or zero `User-Id`
 /// with a 400, and refuses a wrong `Authorization` with a 401.
 #[tokio::test]
-async fn compat_v4_websocket_handshake_refuses_a_bad_request() {
+async fn compat_nexora_websocket_handshake_refuses_a_bad_request() {
     let root = media_root();
     let address = serve(app(&root)).await;
 
@@ -461,9 +508,9 @@ async fn next_frame(
     serde_json::from_str(&text).expect("the frame is JSON")
 }
 
-/// Creates a v4 session over the REST surface and returns its id.
+/// Creates a nexora session over the REST surface and returns its id.
 async fn create_session_over_http(app: axum::Router) -> (axum::Router, String) {
-    let (status, value) = request(app.clone(), "POST", "/v4/sessions", None).await;
+    let (status, value) = request(app.clone(), "POST", "/nexora/sessions", None).await;
     assert_eq!(status, 201);
     let id = value["sessionId"].as_str().unwrap().to_owned();
     (app, id)
@@ -473,9 +520,9 @@ async fn create_session_over_http(app: axum::Router) -> (axum::Router, String) {
 ///
 /// The reference emits the event when the track starts, and the track object
 /// it carries is the one the client asked for (bytecode evidence on
-/// `player/EventEmitter.onTrackStart` in the shipped `Lavalink.jar`).
+/// `player/EventEmitter.onTrackStart` in the shipped `Nexora.jar`).
 #[tokio::test]
-async fn compat_v4_track_start_event_carries_the_track() {
+async fn compat_nexora_track_start_event_carries_the_track() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -488,7 +535,7 @@ async fn compat_v4_track_start_event_carries_the_track() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -497,14 +544,14 @@ async fn compat_v4_track_start_event_carries_the_track() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
     assert_eq!(status, 200);
 
     let frame = next_frame(&mut stream).await;
-    // NodeLink emits `PlayerCreatedEvent` in the player's constructor, so it
+    // Nexora emits `PlayerCreatedEvent` in the player's constructor, so it
     // comes before the track-start event.
     assert_eq!(frame["type"], "PlayerCreatedEvent");
     let frame = next_frame(&mut stream).await;
@@ -522,9 +569,9 @@ async fn compat_v4_track_start_event_carries_the_track() {
 ///
 /// The reference's frame is `{op:"playerUpdate", guildId, state{time, position,
 /// connected, ping}}` (bytecode evidence on `SocketServer$Companion.sendPlayerUpdate`
-/// in the shipped `Lavalink.jar`).
+/// in the shipped `Nexora.jar`).
 #[tokio::test]
-async fn compat_v4_player_update_state_shape() {
+async fn compat_nexora_player_update_state_shape() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -534,7 +581,7 @@ async fn compat_v4_player_update_state_shape() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -542,7 +589,7 @@ async fn compat_v4_player_update_state_shape() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -573,10 +620,10 @@ async fn compat_v4_player_update_state_shape() {
 ///
 /// The reference's `onTrackStart` schedules the update task with an initial
 /// delay of zero, so the first `playerUpdate` follows the `TrackStartEvent`
-/// at once (bytecode evidence on `LavalinkPlayer.onTrackStart` in the shipped
-/// `Lavalink.jar`).
+/// at once (bytecode evidence on `NexoraPlayer.onTrackStart` in the shipped
+/// `Nexora.jar`).
 #[tokio::test]
-async fn compat_v4_event_order_track_start_update_end() {
+async fn compat_nexora_event_order_track_start_update_end() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -586,7 +633,7 @@ async fn compat_v4_event_order_track_start_update_end() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -594,7 +641,7 @@ async fn compat_v4_event_order_track_start_update_end() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -617,7 +664,7 @@ async fn compat_v4_event_order_track_start_update_end() {
 /// The reference emits the end event with the reason the track stopped for
 /// (bytecode evidence on `player/EventEmitter.onTrackEnd`).
 #[tokio::test]
-async fn compat_v4_track_end_event_carries_the_reason() {
+async fn compat_nexora_track_end_event_carries_the_reason() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -627,7 +674,7 @@ async fn compat_v4_track_end_event_carries_the_reason() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -635,7 +682,7 @@ async fn compat_v4_track_end_event_carries_the_reason() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -654,7 +701,7 @@ async fn compat_v4_track_end_event_carries_the_reason() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"track":{"encoded":null}}"#),
     )
     .await;
@@ -676,7 +723,7 @@ async fn compat_v4_track_end_event_carries_the_reason() {
 /// cause's class name and its stack trace (bytecode evidence on
 /// `player/EventEmitter.onTrackException`).
 #[tokio::test]
-async fn compat_v4_track_exception_carries_the_cause() {
+async fn compat_nexora_track_exception_carries_the_cause() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -690,7 +737,7 @@ async fn compat_v4_track_exception_carries_the_cause() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"identifier":"no-such-track"}"#),
     )
     .await;
@@ -708,9 +755,9 @@ async fn compat_v4_track_exception_carries_the_cause() {
 /// The reference's update task returns before it builds the frame when the
 /// session is paused, so a paused player produces no frames at all
 /// (bytecode evidence on `SocketServer$Companion.sendPlayerUpdate` in the
-/// shipped `Lavalink.jar`).
+/// shipped `Nexora.jar`).
 #[tokio::test]
-async fn compat_v4_paused_player_sends_no_player_update() {
+async fn compat_nexora_paused_player_sends_no_player_update() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -720,7 +767,7 @@ async fn compat_v4_paused_player_sends_no_player_update() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -728,7 +775,7 @@ async fn compat_v4_paused_player_sends_no_player_update() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -747,7 +794,7 @@ async fn compat_v4_paused_player_sends_no_player_update() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"paused":true}"#),
     )
     .await;
@@ -770,11 +817,11 @@ async fn compat_v4_paused_player_sends_no_player_update() {
 
 /// Row: voice state update — client sends voice state, server echoes it back.
 ///
-/// The reference's v4 socket receives `{"op":4,"d":{"guildId",...}}` and
+/// The reference's nexora socket receives `{"op":4,"d":{"guildId",...}}` and
 /// echoes it back as a `VoiceStateUpdate` event (bytecode evidence on
 /// `player/EventEmitter.onVoiceStateUpdate` in `protocol-jvm-4.2.2.jar`).
 #[tokio::test]
-async fn compat_v4_voice_state_update_echoes_back() {
+async fn compat_nexora_voice_state_update_echoes_back() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -784,7 +831,7 @@ async fn compat_v4_voice_state_update_echoes_back() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -792,7 +839,7 @@ async fn compat_v4_voice_state_update_echoes_back() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -837,7 +884,7 @@ async fn compat_v4_voice_state_update_echoes_back() {
 
 /// Row: voice socket — one UDP socket is bound per session and keyed by session id.
 #[tokio::test]
-async fn compat_v4_voice_socket_is_keyed_by_session_id() {
+async fn compat_nexora_voice_socket_is_keyed_by_session_id() {
     let session_id = SessionId::new("abcdef0123456789").unwrap();
     let sockets: Arc<tokio::sync::Mutex<HashMap<SessionId, tokio::net::UdpSocket>>> =
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
@@ -854,7 +901,7 @@ async fn compat_v4_voice_socket_is_keyed_by_session_id() {
 ///
 /// The round-trip mirrors `run_playback`: key from the token, sequence as IV.
 #[tokio::test]
-async fn compat_v4_xsecret_voice_transport_round_trips() {
+async fn compat_nexora_xsecret_voice_transport_round_trips() {
     let key = xsecret_key("voice-session-token-alpha");
     let packet: &[u8] = b"opus-payload-bytes";
     let encrypted = xsecret_crypt(&key, 7, packet).expect("encryption works");
@@ -869,10 +916,10 @@ async fn compat_v4_xsecret_voice_transport_round_trips() {
 
 /// Row: two guilds in one session — each player gets its own events.
 ///
-/// A v4 session holds one player per guild, so the events a client receives
+/// A nexora session holds one player per guild, so the events a client receives
 /// must name the guild whose player produced them.
 #[tokio::test]
-async fn compat_v4_two_guilds_each_get_their_own_events() {
+async fn compat_nexora_two_guilds_each_get_their_own_events() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -882,7 +929,7 @@ async fn compat_v4_two_guilds_each_get_their_own_events() {
     let ready = next_frame(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
-    let loaded = get_json(app.clone(), "/v4/loadtracks?identifier=sample.wav").await;
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
     let encoded = loaded["data"]["tracks"][0]["encoded"]
         .as_str()
         .expect("encoded track")
@@ -892,7 +939,7 @@ async fn compat_v4_two_guilds_each_get_their_own_events() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1111"),
+        &format!("/nexora/sessions/{session_id}/players/1111"),
         Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
     )
     .await;
@@ -902,7 +949,7 @@ async fn compat_v4_two_guilds_each_get_their_own_events() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/2222"),
+        &format!("/nexora/sessions/{session_id}/players/2222"),
         Some(r#"{"volume":50}"#),
     )
     .await;
@@ -925,13 +972,13 @@ async fn compat_v4_two_guilds_each_get_their_own_events() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: the NodeLink player events — they report the change that was made.
+/// Row: the Nexora player events — they report the change that was made.
 ///
-/// NodeLink's payloads are `{position, duration}` for a seek, `{paused}` for
+/// Nexora's payloads are `{position, duration}` for a seek, `{paused}` for
 /// a pause, `{volume}` for a volume change, `{filters}` for a filter change
 /// and `{guildId, player}` for a created player.
 #[tokio::test]
-async fn compat_v4_player_events_report_the_change() {
+async fn compat_nexora_player_events_report_the_change() {
     let root = media_root();
     let app = app(&root);
     let (app, session_id) = create_session_over_http(app).await;
@@ -945,7 +992,7 @@ async fn compat_v4_player_events_report_the_change() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"volume":80}"#),
     )
     .await;
@@ -964,7 +1011,7 @@ async fn compat_v4_player_events_report_the_change() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"paused":true}"#),
     )
     .await;
@@ -977,7 +1024,7 @@ async fn compat_v4_player_events_report_the_change() {
     let (status, _) = request(
         app.clone(),
         "PATCH",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         Some(r#"{"position":5000}"#),
     )
     .await;
@@ -991,7 +1038,7 @@ async fn compat_v4_player_events_report_the_change() {
     let (status, _) = request(
         app.clone(),
         "DELETE",
-        &format!("/v4/sessions/{session_id}/players/1234"),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
         None,
     )
     .await;
@@ -1003,9 +1050,9 @@ async fn compat_v4_player_events_report_the_change() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/websocket` — a wrong `Authorization` is a 401.
+/// Row: `/nexora/websocket` — a wrong `Authorization` is a 401.
 #[tokio::test]
-async fn compat_v4_websocket_handshake_refuses_a_wrong_password() {
+async fn compat_nexora_websocket_handshake_refuses_a_wrong_password() {
     let root = media_root();
     let sources = SourceRegistry::new();
     sources
@@ -1013,7 +1060,7 @@ async fn compat_v4_websocket_handshake_refuses_a_wrong_password() {
         .unwrap();
     let address = serve(build_router(AppState {
         sessions: Arc::new(SessionManager::new()),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(sources),
         password: Some("secret".to_owned()),
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -1037,9 +1084,9 @@ async fn compat_v4_websocket_handshake_refuses_a_wrong_password() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/websocket` — the `ready` frame is flat and comes first.
+/// Row: `/nexora/websocket` — the `ready` frame is flat and comes first.
 #[tokio::test]
-async fn compat_v4_websocket_ready_frame() {
+async fn compat_nexora_websocket_ready_frame() {
     use tokio_tungstenite::tungstenite::Message;
 
     let root = media_root();
@@ -1066,11 +1113,11 @@ async fn compat_v4_websocket_ready_frame() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/info` — Lavalink v4 info shape.
+/// Row: `/nexora/info` — Nexora nexora info shape.
 #[tokio::test]
-async fn compat_v4_info_shape() {
+async fn compat_nexora_info_shape() {
     let root = media_root();
-    let value = get_json(app(&root), "/v4/info").await;
+    let value = get_json(app(&root), "/nexora/info").await;
 
     assert!(value["version"]["semver"].is_string());
     assert!(value["version"]["major"].is_number());
@@ -1089,11 +1136,11 @@ async fn compat_v4_info_shape() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: `/v4/loadtracks` — track shape and a decodable encoded handle.
+/// Row: `/nexora/loadtracks` — track shape and a decodable encoded handle.
 #[tokio::test]
-async fn compat_v4_loadtracks_track_shape() {
+async fn compat_nexora_loadtracks_track_shape() {
     let root = media_root();
-    let value = get_json(app(&root), "/v4/loadtracks?identifier=sample.wav").await;
+    let value = get_json(app(&root), "/nexora/loadtracks?identifier=sample.wav").await;
 
     assert_eq!(value["loadType"], "search");
     // The reference's `SEARCH_RESULT` payload is `{ "tracks": [...] }`.
@@ -1114,12 +1161,12 @@ async fn compat_v4_loadtracks_track_shape() {
 /// Row: op codes — the wire values the shipped reference uses.
 #[tokio::test]
 async fn compat_protocol_op_codes_are_the_reference_values() {
-    assert_eq!(V4Op::Ready.as_str(), "ready");
-    assert_eq!(V4Op::Stats.as_str(), "stats");
-    assert_eq!(V4Op::PlayerUpdate.as_str(), "playerUpdate");
-    assert_eq!(V4Op::Event.as_str(), "event");
+    assert_eq!(NexoraOp::Ready.as_str(), "ready");
+    assert_eq!(NexoraOp::Stats.as_str(), "stats");
+    assert_eq!(NexoraOp::PlayerUpdate.as_str(), "playerUpdate");
+    assert_eq!(NexoraOp::Event.as_str(), "event");
     assert_eq!(
-        V4EventMessage::TrackStart {
+        NexoraEventMessage::TrackStart {
             guild_id: "1".into(),
             track: Box::new(track()),
         }
@@ -1127,21 +1174,21 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
         "TrackStartEvent"
     );
     assert_eq!(
-        V4EventMessage::TrackEnd {
+        NexoraEventMessage::TrackEnd {
             guild_id: "1".into(),
             track: Box::new(track()),
-            reason: nexora_protocol::V4TrackEndReason::Finished,
+            reason: nexora_protocol::NexoraTrackEndReason::Finished,
         }
         .type_name(),
         "TrackEndEvent"
     );
     assert_eq!(
-        V4EventMessage::TrackException {
+        NexoraEventMessage::TrackException {
             guild_id: "1".into(),
             track: Box::new(track()),
-            exception: nexora_protocol::V4Exception {
+            exception: nexora_protocol::NexoraException {
                 message: "boom".into(),
-                severity: nexora_protocol::V4ErrorSeverity::Fault,
+                severity: nexora_protocol::NexoraErrorSeverity::Fault,
                 cause: None,
                 cause_stack_trace: None,
             },
@@ -1150,7 +1197,7 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
         "TrackExceptionEvent"
     );
     assert_eq!(
-        V4EventMessage::WebSocketClosed {
+        NexoraEventMessage::WebSocketClosed {
             guild_id: "1".into(),
             code: 1000,
             reason: "bye".into(),

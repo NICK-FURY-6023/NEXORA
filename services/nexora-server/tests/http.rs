@@ -4,7 +4,7 @@ use base64::Engine;
 use nexora_common::SessionId;
 use nexora_protocol::SessionEventType;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::{SessionManager, V4SessionManager};
+use nexora_session::{SessionManager, NexoraSessionManager};
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use std::collections::HashMap;
 use std::fs;
@@ -16,7 +16,7 @@ use tower::ServiceExt;
 fn test_state() -> AppState {
     AppState {
         sessions: Arc::new(SessionManager::new()),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(SourceRegistry::new()),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -86,7 +86,7 @@ async fn nexora_session_create_and_play_contract() {
         .unwrap();
     let state = AppState {
         sessions: Arc::new(SessionManager::new()),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -141,7 +141,7 @@ async fn playback_advances_to_the_next_queued_track() {
     let mut events = sessions.subscribe();
     let state = AppState {
         sessions: Arc::clone(&sessions),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -231,11 +231,11 @@ async fn playback_advances_to_the_next_queued_track() {
 }
 
 #[tokio::test]
-async fn lavalink_compatible_info_endpoint() {
+async fn nexora_compatible_info_endpoint() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/info")
+                .uri("/nexora/info")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -284,11 +284,11 @@ async fn runtime_metrics_reflect_real_requests() {
 }
 
 #[tokio::test]
-async fn lavalink_stats_uses_v4_cpu_field_names() {
+async fn nexora_stats_uses_nexora_cpu_field_names() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/stats")
+                .uri("/nexora/stats")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -298,15 +298,15 @@ async fn lavalink_stats_uses_v4_cpu_field_names() {
         .await
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert!(value["cpu"]["lavalinkLoad"].is_number());
+    assert!(value["cpu"]["nexoraLoad"].is_number());
 }
 
 #[tokio::test]
-async fn lavalink_stats_endpoint() {
+async fn nexora_stats_endpoint() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/stats")
+                .uri("/nexora/stats")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -328,11 +328,11 @@ async fn lavalink_stats_endpoint() {
 }
 
 #[tokio::test]
-async fn lavalink_loadtracks_uses_v4_load_types() {
+async fn nexora_loadtracks_uses_nexora_load_types() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/loadtracks?identifier=definitely-not-a-track")
+                .uri("/nexora/loadtracks?identifier=definitely-not-a-track")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -354,7 +354,7 @@ async fn lavalink_loadtracks_uses_v4_load_types() {
 }
 
 #[tokio::test]
-async fn lavalink_loadtracks_returns_v4_track_shape() {
+async fn nexora_loadtracks_returns_nexora_track_shape() {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -369,7 +369,7 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
         .unwrap();
     let state = AppState {
         sessions: Arc::new(SessionManager::new()),
-        v4_sessions: Arc::new(V4SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::new(sources),
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
@@ -378,7 +378,7 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
     let response = build_router(state)
         .oneshot(
             Request::builder()
-                .uri("/v4/loadtracks?identifier=sample.wav")
+                .uri("/nexora/loadtracks?identifier=sample.wav")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -411,11 +411,11 @@ async fn lavalink_loadtracks_returns_v4_track_shape() {
 }
 
 #[tokio::test]
-async fn lavalink_info_matches_documented_v4_shape() {
+async fn nexora_info_matches_documented_nexora_shape() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/info")
+                .uri("/nexora/info")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -444,11 +444,11 @@ async fn lavalink_info_matches_documented_v4_shape() {
 }
 
 #[tokio::test]
-async fn lavalink_info_reports_the_typed_v4_shape() {
+async fn nexora_info_reports_the_typed_nexora_shape() {
     let response = test_app()
         .oneshot(
             Request::builder()
-                .uri("/v4/info")
+                .uri("/nexora/info")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -469,14 +469,14 @@ async fn lavalink_info_reports_the_typed_v4_shape() {
 }
 
 #[tokio::test]
-async fn lavalink_player_matches_documented_v4_shape() {
+async fn nexora_player_matches_documented_nexora_shape() {
     let app = test_app();
     let created = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/v4/sessions")
+                .uri("/nexora/sessions")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -490,13 +490,13 @@ async fn lavalink_player_matches_documented_v4_shape() {
     let session_id = created["sessionId"].as_str().unwrap();
 
     // A missing player is a 404 in the reference, so create it with a PATCH
-    // first; the player route is `/v4/sessions/{sessionId}/players/{guildId}`.
+    // first; the player route is `/nexora/sessions/{sessionId}/players/{guildId}`.
     let created_player = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(format!("/v4/sessions/{session_id}/players/1234"))
+                .uri(format!("/nexora/sessions/{session_id}/players/1234"))
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"paused":true,"volume":80}"#))
                 .unwrap(),
@@ -508,7 +508,7 @@ async fn lavalink_player_matches_documented_v4_shape() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/v4/sessions/{session_id}/players/1234"))
+                .uri(format!("/nexora/sessions/{session_id}/players/1234"))
                 .body(Body::empty())
                 .unwrap(),
         )

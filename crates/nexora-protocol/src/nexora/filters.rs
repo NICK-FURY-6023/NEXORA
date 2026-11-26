@@ -1,23 +1,23 @@
-//! The Lavalink v4 filter chain.
+//! The Nexora nexora filter chain.
 //!
-//! Lavalink ships ten built-in filters; NodeLink adds more. Every parameter
+//! Nexora ships ten built-in filters; Nexora adds more. Every parameter
 //! name and default below is read from the shipped reference:
-//! `filterConfigs.kt` for Lavalink, `src/typings/playback/filters.types.ts`
-//! for the NodeLink extras.
+//! `filterConfigs.kt` for Nexora, `src/typings/playback/filters.types.ts`
+//! for the Nexora extras.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// One equalizer band.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4EqualizerBand {
+pub struct NexoraEqualizerBand {
     pub band: i64,
     pub gain: f32,
 }
 
 /// The `karaoke` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4KaraokeFilter {
+pub struct NexoraKaraokeFilter {
     #[serde(default = "one")]
     pub level: f32,
     #[serde(default = "one", rename = "monoLevel")]
@@ -30,7 +30,7 @@ pub struct V4KaraokeFilter {
 
 /// The `timescale` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4TimescaleFilter {
+pub struct NexoraTimescaleFilter {
     #[serde(default = "one")]
     pub speed: f32,
     #[serde(default = "one")]
@@ -41,7 +41,7 @@ pub struct V4TimescaleFilter {
 
 /// The `tremolo` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4TremoloFilter {
+pub struct NexoraTremoloFilter {
     #[serde(default = "tremolo_frequency")]
     pub frequency: f32,
     #[serde(default = "half")]
@@ -50,7 +50,7 @@ pub struct V4TremoloFilter {
 
 /// The `vibrato` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4VibratoFilter {
+pub struct NexoraVibratoFilter {
     #[serde(default = "vibrato_frequency")]
     pub frequency: f32,
     #[serde(default = "half")]
@@ -59,7 +59,7 @@ pub struct V4VibratoFilter {
 
 /// The `distortion` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4DistortionFilter {
+pub struct NexoraDistortionFilter {
     #[serde(default)]
     pub sin_offset: f32,
     #[serde(default = "one")]
@@ -80,14 +80,14 @@ pub struct V4DistortionFilter {
 
 /// The `rotation` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4RotationFilter {
+pub struct NexoraRotationFilter {
     #[serde(default, rename = "rotationHz")]
     pub rotation_hz: f32,
 }
 
 /// The `channelMix` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4ChannelMixFilter {
+pub struct NexoraChannelMixFilter {
     #[serde(default = "one", rename = "leftToLeft")]
     pub left_to_left: f32,
     #[serde(default, rename = "leftToRight")]
@@ -100,21 +100,21 @@ pub struct V4ChannelMixFilter {
 
 /// The `lowPass` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4LowPassFilter {
+pub struct NexoraLowPassFilter {
     #[serde(default = "low_pass_smoothing")]
     pub smoothing: f32,
 }
 
-/// The NodeLink `highpass` filter.
+/// The Nexora `highpass` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4HighPassFilter {
+pub struct NexoraHighPassFilter {
     #[serde(default = "low_pass_smoothing")]
     pub smoothing: f32,
 }
 
-/// The NodeLink `compressor` filter.
+/// The Nexora `compressor` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4CompressorFilter {
+pub struct NexoraCompressorFilter {
     #[serde(default)]
     pub threshold: f32,
     #[serde(default = "one")]
@@ -129,9 +129,9 @@ pub struct V4CompressorFilter {
     pub makeup_gain: f32,
 }
 
-/// The NodeLink `echo` filter.
+/// The Nexora `echo` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4EchoFilter {
+pub struct NexoraEchoFilter {
     #[serde(default)]
     pub delay: f32,
     #[serde(default)]
@@ -140,9 +140,9 @@ pub struct V4EchoFilter {
     pub mix: f32,
 }
 
-/// The NodeLink `phaser` filter.
+/// The Nexora `phaser` filter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct V4PhaserFilter {
+pub struct NexoraPhaserFilter {
     #[serde(default)]
     pub rate: f32,
     #[serde(default)]
@@ -163,49 +163,49 @@ pub struct V4PhaserFilter {
 
 /// The whole filter chain of a player.
 ///
-/// The ten Lavalink built-ins come first in the reference's declaration order;
-/// the four NodeLink extras follow. `pluginFilters` carries the reference's
+/// The ten Nexora built-ins come first in the reference's declaration order;
+/// the four Nexora extras follow. `pluginFilters` carries the reference's
 /// plugin-extension map, which NEXORA leaves empty.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct V4Filters {
+pub struct NexoraFilters {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub volume: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub equalizer: Option<Vec<V4EqualizerBand>>,
+    pub equalizer: Option<Vec<NexoraEqualizerBand>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub karaoke: Option<V4KaraokeFilter>,
+    pub karaoke: Option<NexoraKaraokeFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timescale: Option<V4TimescaleFilter>,
+    pub timescale: Option<NexoraTimescaleFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tremolo: Option<V4TremoloFilter>,
+    pub tremolo: Option<NexoraTremoloFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vibrato: Option<V4VibratoFilter>,
+    pub vibrato: Option<NexoraVibratoFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub distortion: Option<V4DistortionFilter>,
+    pub distortion: Option<NexoraDistortionFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rotation: Option<V4RotationFilter>,
+    pub rotation: Option<NexoraRotationFilter>,
     #[serde(
         default,
         rename = "channelMix",
         alias = "channelmix",
         skip_serializing_if = "Option::is_none"
     )]
-    pub channel_mix: Option<V4ChannelMixFilter>,
+    pub channel_mix: Option<NexoraChannelMixFilter>,
     #[serde(
         default,
         rename = "lowPass",
         alias = "lowpass",
         skip_serializing_if = "Option::is_none"
     )]
-    pub low_pass: Option<V4LowPassFilter>,
+    pub low_pass: Option<NexoraLowPassFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub highpass: Option<V4HighPassFilter>,
+    pub highpass: Option<NexoraHighPassFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compressor: Option<V4CompressorFilter>,
+    pub compressor: Option<NexoraCompressorFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub echo: Option<V4EchoFilter>,
+    pub echo: Option<NexoraEchoFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub phaser: Option<V4PhaserFilter>,
+    pub phaser: Option<NexoraPhaserFilter>,
     #[serde(
         default,
         rename = "pluginFilters",
@@ -214,7 +214,7 @@ pub struct V4Filters {
     pub plugin_filters: Option<Value>,
 }
 
-impl V4Filters {
+impl NexoraFilters {
     /// The reference's names of the filters this chain carries.
     pub fn enabled_names(&self) -> Vec<&'static str> {
         let mut names = Vec::new();
@@ -311,21 +311,21 @@ mod tests {
 
     #[test]
     fn filter_json_uses_the_reference_parameter_names() {
-        let filters = V4Filters {
-            karaoke: Some(V4KaraokeFilter {
+        let filters = NexoraFilters {
+            karaoke: Some(NexoraKaraokeFilter {
                 level: 1.0,
                 mono_level: 1.0,
                 filter_band: 220.0,
                 filter_width: 100.0,
             }),
-            channel_mix: Some(V4ChannelMixFilter {
+            channel_mix: Some(NexoraChannelMixFilter {
                 left_to_left: 1.0,
                 left_to_right: 0.0,
                 right_to_left: 0.0,
                 right_to_right: 1.0,
             }),
-            low_pass: Some(V4LowPassFilter { smoothing: 20.0 }),
-            ..V4Filters::default()
+            low_pass: Some(NexoraLowPassFilter { smoothing: 20.0 }),
+            ..NexoraFilters::default()
         };
         let value = serde_json::to_value(&filters).unwrap();
         assert_eq!(value["karaoke"]["monoLevel"], 1.0);
@@ -339,14 +339,14 @@ mod tests {
 
     #[test]
     fn node_link_lowercase_lowpass_is_accepted() {
-        let filters: V4Filters =
+        let filters: NexoraFilters =
             serde_json::from_value(json!({ "lowpass": { "smoothing": 30.0 } })).unwrap();
         assert_eq!(filters.low_pass.unwrap().smoothing, 30.0);
     }
 
     #[test]
     fn missing_parameters_fall_back_to_the_reference_defaults() {
-        let filters: V4Filters = serde_json::from_value(json!({ "karaoke": {} })).unwrap();
+        let filters: NexoraFilters = serde_json::from_value(json!({ "karaoke": {} })).unwrap();
         let karaoke = filters.karaoke.unwrap();
         assert_eq!(karaoke.level, 1.0);
         assert_eq!(karaoke.mono_level, 1.0);
@@ -356,15 +356,15 @@ mod tests {
 
     #[test]
     fn enabled_names_lists_the_chain_in_reference_order() {
-        let filters = V4Filters {
+        let filters = NexoraFilters {
             volume: Some(0.5),
-            equalizer: Some(vec![V4EqualizerBand { band: 1, gain: 0.5 }]),
-            timescale: Some(V4TimescaleFilter {
+            equalizer: Some(vec![NexoraEqualizerBand { band: 1, gain: 0.5 }]),
+            timescale: Some(NexoraTimescaleFilter {
                 speed: 2.0,
                 pitch: 1.0,
                 rate: 1.0,
             }),
-            ..V4Filters::default()
+            ..NexoraFilters::default()
         };
         assert_eq!(
             filters.enabled_names(),

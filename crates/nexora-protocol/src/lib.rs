@@ -3,18 +3,18 @@ use serde::{Deserialize, Serialize};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{ApiVersion, ApplicationId, ServiceName, SessionId, TimestampMs, TrackId};
 
-pub mod v4;
+pub mod nexora;
 
-pub use v4::{
-    DEFAULT_RESUME_TIMEOUT_SECONDS, LAVALINK_V4_PROTOCOL_VERSION, V4ChannelMixFilter,
-    V4CompressorFilter, V4DistortionFilter, V4EchoFilter, V4EqualizerBand, V4ErrorEnvelope,
-    V4ErrorSeverity, V4EventMessage, V4Exception, V4Filters, V4Frame, V4Git, V4HighPassFilter,
-    V4Info, V4KaraokeFilter, V4LoadResult, V4LoadType, V4LowPassFilter, V4Nullable, V4Op,
-    V4PhaserFilter, V4Player, V4PlayerState, V4PlayerUpdate, V4PlayerUpdateFrame,
-    V4PlayerUpdateTrack, V4Players, V4Playlist, V4PlaylistInfo, V4Plugin, V4Plugins, V4Ready,
-    V4RotationFilter, V4SearchResult, V4Session, V4SessionUpdate, V4StatsFrame, V4TimescaleFilter,
-    V4Track, V4TrackEndReason, V4TrackInfo, V4TremoloFilter, V4Version, V4VibratoFilter,
-    V4VoiceState, check_protocol_version, decode_binary_track, decode_track, encode_binary_track,
+pub use nexora::{
+    DEFAULT_RESUME_TIMEOUT_SECONDS, NEXORA_PROTOCOL_VERSION, NexoraChannelMixFilter,
+    NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter, NexoraEqualizerBand, NexoraErrorEnvelope,
+    NexoraErrorSeverity, NexoraEventMessage, NexoraException, NexoraFilters, NexoraFrame, NexoraGit, NexoraHighPassFilter,
+    NexoraInfo, NexoraKaraokeFilter, NexoraLoadResult, NexoraLoadType, NexoraLowPassFilter, NexoraNullable, NexoraOp,
+    NexoraPhaserFilter, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdate, NexoraPlayerUpdateFrame,
+    NexoraPlayerUpdateTrack, NexoraPlayers, NexoraPlaylist, NexoraPlaylistInfo, NexoraPlugin, NexoraPlugins, NexoraReady,
+    NexoraRotationFilter, NexoraSearchResult, NexoraSession, NexoraSessionUpdate, NexoraStatsFrame, NexoraTimescaleFilter,
+    NexoraTrack, NexoraTrackEndReason, NexoraTrackInfo, NexoraTremoloFilter, NexoraVersion, NexoraVibratoFilter,
+    NexoraVoiceState, check_protocol_version, decode_binary_track, decode_track, encode_binary_track,
     encode_track,
 };
 

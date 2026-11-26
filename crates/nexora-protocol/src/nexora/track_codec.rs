@@ -11,14 +11,14 @@
 //! record. There is **no** end marker: `MessageOutput.finish()` writes a
 //! separate zero-length header that is not part of the encoded track.
 //!
-//! Ground truth: `docs/research/lavalink-source-architecture.md` §6.
+//! Ground truth: `docs/research/nexora-source-architecture.md` §6.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 
 use nexora_error::NexoraError;
 
-use super::track::V4TrackInfo;
+use super::track::NexoraTrackInfo;
 
 /// The frame flag marking the payload as versioned.
 const TRACK_INFO_VERSIONED: u32 = 1;
@@ -32,8 +32,8 @@ const MAX_UTF_BYTES: usize = u16::MAX as usize;
 /// The source names whose payloads carry a trailing probe descriptor.
 const PROBING_SOURCES: [&str; 2] = ["local", "http"];
 
-/// Encode a track into Lavalink's binary encoded-track string.
-pub fn encode_binary_track(info: &V4TrackInfo) -> Result<String, NexoraError> {
+/// Encode a track into Nexora's binary encoded-track string.
+pub fn encode_binary_track(info: &NexoraTrackInfo) -> Result<String, NexoraError> {
     let mut payload = Vec::new();
     payload.push(TRACK_INFO_VERSION);
     write_utf(&mut payload, &info.title)?;
@@ -59,8 +59,8 @@ pub fn encode_binary_track(info: &V4TrackInfo) -> Result<String, NexoraError> {
 /// Decode an encoded-track string back into track metadata.
 ///
 /// The decoder accepts payload versions 1, 2 and 3, so tracks encoded by older
-/// Lavalink releases still decode.
-pub fn decode_binary_track(encoded: &str) -> Result<V4TrackInfo, NexoraError> {
+/// Nexora releases still decode.
+pub fn decode_binary_track(encoded: &str) -> Result<NexoraTrackInfo, NexoraError> {
     let bytes = STANDARD
         .decode(encoded)
         .map_err(|error| NexoraError::invalid_input(format!("invalid encoded track: {error}")))?;
@@ -111,7 +111,7 @@ pub fn decode_binary_track(encoded: &str) -> Result<V4TrackInfo, NexoraError> {
     };
     let source_name = cursor.utf()?;
 
-    // Lavalink's probing sources append a probe descriptor before the position;
+    // Nexora's probing sources append a probe descriptor before the position;
     // NEXORA's own sources write nothing there.
     let position = if cursor.remaining() == 8 {
         cursor.i64()?
@@ -122,7 +122,7 @@ pub fn decode_binary_track(encoded: &str) -> Result<V4TrackInfo, NexoraError> {
         cursor.i64()?
     };
 
-    Ok(V4TrackInfo {
+    Ok(NexoraTrackInfo {
         is_seekable: !is_stream,
         author,
         length: length.max(0) as u64,
@@ -324,15 +324,15 @@ mod tests {
     use super::*;
 
     /// A track encoded by Lavaplayer's own encoder, taken from the reference
-    /// blob in `docs/research/lavalink-source-architecture.md` §6.4.
+    /// blob in `docs/research/nexora-source-architecture.md` §6.4.
     ///
     /// Decoding it yields: title `TITLE`, author `AUTHOR`, length `212000`,
     /// identifier `dQw4w9WgXcQ`, uri `https://example.com/watch`, artwork
     /// `https://example.com/art.png`, isrc `ISRC123`, source `youtube`.
     const CANONICAL: &str = "QAAAewMABVRJVExFAAZBVVRIT1IAAAAAAAM8IAALZFF3NHc5V2dYY1EAAQAZaHR0cHM6Ly9leGFtcGxlLmNvbS93YXRjaAEAG2h0dHBzOi8vZXhhbXBsZS5jb20vYXJ0LnBuZwEAB0lTUkMxMjMAB3lvdXR1YmUAAAAAAAAAAA==";
 
-    fn canonical_info() -> V4TrackInfo {
-        V4TrackInfo {
+    fn canonical_info() -> NexoraTrackInfo {
+        NexoraTrackInfo {
             identifier: "dQw4w9WgXcQ".into(),
             is_seekable: true,
             author: "AUTHOR".into(),
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn round_trips_every_field() {
-        let info = V4TrackInfo {
+        let info = NexoraTrackInfo {
             identifier: "tone.wav".into(),
             is_seekable: true,
             author: "artist".into(),
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn nul_is_encoded_as_modified_utf8() {
-        let info = V4TrackInfo {
+        let info = NexoraTrackInfo {
             title: "a\u{0000}b".into(),
             ..canonical_info()
         };

@@ -7,7 +7,7 @@ use audioadapter_buffers::owned::InterleavedOwned;
 use nexora_audio_codec::{encode_opus_packets, write_ogg_opus, write_wav};
 use nexora_audio_decode::decode_file;
 use nexora_error::{NexoraError, NexoraResult};
-use nexora_protocol::v4::V4Filters;
+use nexora_protocol::nexora::NexoraFilters;
 use rubato::{Fft, FixedSync, Resampler};
 use tokio::sync::mpsc;
 
@@ -153,7 +153,7 @@ pub fn encode_file_packets(
     target_rate: u32,
     channels: u16,
     volume: u8,
-    filters: &V4Filters,
+    filters: &NexoraFilters,
 ) -> NexoraResult<Vec<Vec<u8>>> {
     let mut prepared = prepare_pcm(input, target_rate, channels)?;
     if volume != 100 {

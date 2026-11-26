@@ -14,9 +14,9 @@ use serde_json::json;
 use tokio::sync::{RwLock, broadcast, watch};
 use tokio::task::JoinHandle;
 
-pub mod v4;
+pub mod nexora;
 
-pub use v4::{PLAYER_UPDATE_INTERVAL_SECONDS, V4PlayerRecord, V4SessionContext, V4SessionManager};
+pub use nexora::{PLAYER_UPDATE_INTERVAL_SECONDS, NexoraPlayerRecord, NexoraSessionContext, NexoraSessionManager};
 
 /// Signals sent from session state to the single active playback task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,7 +275,7 @@ impl SessionManager {
 
     /// Creates a session under a caller-chosen id.
     ///
-    /// The Lavalink v4 surface hands out its own sixteen-character session
+    /// The Nexora nexora surface hands out its own sixteen-character session
     /// ids, and those ids must address the same session on every route.
     pub async fn create_with_id(
         &self,

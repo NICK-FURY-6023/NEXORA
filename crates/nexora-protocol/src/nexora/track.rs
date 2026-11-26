@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::v4::filters::V4Filters;
+use crate::nexora::filters::NexoraFilters;
 use nexora_error::NexoraError;
 
-/// Track metadata of the Lavalink v4 track shape.
+/// Track metadata of the Nexora nexora track shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct V4TrackInfo {
+pub struct NexoraTrackInfo {
     pub identifier: String,
     #[serde(rename = "isSeekable")]
     pub is_seekable: bool,
@@ -23,31 +23,31 @@ pub struct V4TrackInfo {
     #[serde(rename = "sourceName")]
     pub source_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub filters: Option<V4Filters>,
+    pub filters: Option<NexoraFilters>,
 }
 
-/// A Lavalink v4 track: the encoded handle plus its metadata.
+/// A Nexora nexora track: the encoded handle plus its metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4Track {
+pub struct NexoraTrack {
     pub encoded: String,
-    pub info: V4TrackInfo,
+    pub info: NexoraTrackInfo,
     #[serde(rename = "pluginInfo")]
     pub plugin_info: Value,
     #[serde(rename = "userData")]
     pub user_data: Value,
 }
 
-/// Encode a track into Lavalink's binary encoded-track string.
+/// Encode a track into Nexora's binary encoded-track string.
 ///
 /// The format is Lavaplayer's version-3 track-info frame, byte for byte; see
-/// `track_codec` for the layout and `docs/research/lavalink-source-architecture.md`
+/// `track_codec` for the layout and `docs/research/nexora-source-architecture.md`
 /// §6 for the ground truth.
-pub fn encode_track(info: &V4TrackInfo) -> Result<String, NexoraError> {
+pub fn encode_track(info: &NexoraTrackInfo) -> Result<String, NexoraError> {
     super::track_codec::encode_binary_track(info)
 }
 
 /// Decode an encoded-track string back into track metadata.
-pub fn decode_track(encoded: &str) -> Result<V4TrackInfo, NexoraError> {
+pub fn decode_track(encoded: &str) -> Result<NexoraTrackInfo, NexoraError> {
     super::track_codec::decode_binary_track(encoded)
 }
 
@@ -57,8 +57,8 @@ mod tests {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
 
-    fn sample_info() -> V4TrackInfo {
-        V4TrackInfo {
+    fn sample_info() -> NexoraTrackInfo {
+        NexoraTrackInfo {
             identifier: "tone.wav".into(),
             is_seekable: true,
             author: "artist".into(),

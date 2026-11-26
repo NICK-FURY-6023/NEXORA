@@ -1,10 +1,10 @@
-//! The Lavalink v4 `/v4/loadtracks` result.
+//! The Nexora nexora `/nexora/loadtracks` result.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::error::V4Exception;
-use super::track::V4Track;
+use super::error::NexoraException;
+use super::track::NexoraTrack;
 
 /// The `loadType` discriminator of a load result.
 ///
@@ -14,7 +14,7 @@ use super::track::V4Track;
 /// (bytecode evidence on `ResultStatus` in `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum V4LoadType {
+pub enum NexoraLoadType {
     Track,
     Playlist,
     Search,
@@ -22,21 +22,21 @@ pub enum V4LoadType {
     Error,
 }
 
-impl V4LoadType {
+impl NexoraLoadType {
     pub fn as_str(&self) -> &'static str {
         match self {
-            V4LoadType::Track => "track",
-            V4LoadType::Playlist => "playlist",
-            V4LoadType::Search => "search",
-            V4LoadType::Empty => "empty",
-            V4LoadType::Error => "error",
+            NexoraLoadType::Track => "track",
+            NexoraLoadType::Playlist => "playlist",
+            NexoraLoadType::Search => "search",
+            NexoraLoadType::Empty => "empty",
+            NexoraLoadType::Error => "error",
         }
     }
 }
 
 /// The playlist header of a `playlist` load result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4PlaylistInfo {
+pub struct NexoraPlaylistInfo {
     pub name: String,
     #[serde(rename = "selectedTrack")]
     pub selected_track: i64,
@@ -44,42 +44,42 @@ pub struct V4PlaylistInfo {
 
 /// The `playlist` load result payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4Playlist {
-    pub info: V4PlaylistInfo,
+pub struct NexoraPlaylist {
+    pub info: NexoraPlaylistInfo,
     #[serde(rename = "pluginInfo")]
     pub plugin_info: Value,
-    pub tracks: Vec<V4Track>,
+    pub tracks: Vec<NexoraTrack>,
 }
 
 /// The `search` load result payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4SearchResult {
-    pub tracks: Vec<V4Track>,
+pub struct NexoraSearchResult {
+    pub tracks: Vec<NexoraTrack>,
 }
 
-/// The `/v4/loadtracks` response body.
+/// The `/nexora/loadtracks` response body.
 ///
 /// The reference always answers HTTP 200: a failure is reported in the body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4LoadResult {
+pub struct NexoraLoadResult {
     #[serde(rename = "loadType")]
-    pub load_type: V4LoadType,
+    pub load_type: NexoraLoadType,
     pub data: Value,
 }
 
-impl V4LoadResult {
+impl NexoraLoadResult {
     /// A single track was loaded.
-    pub fn track(track: V4Track) -> Self {
+    pub fn track(track: NexoraTrack) -> Self {
         Self {
-            load_type: V4LoadType::Track,
+            load_type: NexoraLoadType::Track,
             data: serde_json::to_value(track).unwrap_or(Value::Null),
         }
     }
 
     /// A playlist was loaded.
-    pub fn playlist(name: impl Into<String>, selected_track: i64, tracks: Vec<V4Track>) -> Self {
-        let playlist = V4Playlist {
-            info: V4PlaylistInfo {
+    pub fn playlist(name: impl Into<String>, selected_track: i64, tracks: Vec<NexoraTrack>) -> Self {
+        let playlist = NexoraPlaylist {
+            info: NexoraPlaylistInfo {
                 name: name.into(),
                 selected_track,
             },
@@ -87,16 +87,16 @@ impl V4LoadResult {
             tracks,
         };
         Self {
-            load_type: V4LoadType::Playlist,
+            load_type: NexoraLoadType::Playlist,
             data: serde_json::to_value(playlist).unwrap_or(Value::Null),
         }
     }
 
     /// A search result was loaded.
-    pub fn search(tracks: Vec<V4Track>) -> Self {
-        let result = V4SearchResult { tracks };
+    pub fn search(tracks: Vec<NexoraTrack>) -> Self {
+        let result = NexoraSearchResult { tracks };
         Self {
-            load_type: V4LoadType::Search,
+            load_type: NexoraLoadType::Search,
             data: serde_json::to_value(result).unwrap_or(Value::Null),
         }
     }
@@ -104,15 +104,15 @@ impl V4LoadResult {
     /// Nothing matched the identifier.
     pub fn empty() -> Self {
         Self {
-            load_type: V4LoadType::Empty,
+            load_type: NexoraLoadType::Empty,
             data: Value::Null,
         }
     }
 
     /// The lookup failed.
-    pub fn error(exception: V4Exception) -> Self {
+    pub fn error(exception: NexoraException) -> Self {
         Self {
-            load_type: V4LoadType::Error,
+            load_type: NexoraLoadType::Error,
             data: serde_json::to_value(exception).unwrap_or(Value::Null),
         }
     }
@@ -121,24 +121,24 @@ impl V4LoadResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::v4::error::V4ErrorSeverity;
+    use crate::nexora::error::NexoraErrorSeverity;
 
     #[test]
     fn load_types_serialise_in_lower_case() {
-        assert_eq!(V4LoadType::Track.as_str(), "track");
-        assert_eq!(V4LoadType::Playlist.as_str(), "playlist");
-        assert_eq!(V4LoadType::Search.as_str(), "search");
-        assert_eq!(V4LoadType::Empty.as_str(), "empty");
-        assert_eq!(V4LoadType::Error.as_str(), "error");
+        assert_eq!(NexoraLoadType::Track.as_str(), "track");
+        assert_eq!(NexoraLoadType::Playlist.as_str(), "playlist");
+        assert_eq!(NexoraLoadType::Search.as_str(), "search");
+        assert_eq!(NexoraLoadType::Empty.as_str(), "empty");
+        assert_eq!(NexoraLoadType::Error.as_str(), "error");
 
-        let value = serde_json::to_value(V4LoadResult::empty()).unwrap();
+        let value = serde_json::to_value(NexoraLoadResult::empty()).unwrap();
         assert_eq!(value["loadType"], "empty");
         assert!(value["data"].is_null());
     }
 
     #[test]
     fn a_search_result_carries_its_tracks() {
-        let result = V4LoadResult::search(Vec::new());
+        let result = NexoraLoadResult::search(Vec::new());
         let value = serde_json::to_value(result).unwrap();
         assert_eq!(value["loadType"], "search");
         assert!(value["data"]["tracks"].as_array().unwrap().is_empty());
@@ -146,13 +146,13 @@ mod tests {
 
     #[test]
     fn an_error_result_carries_the_exception() {
-        let exception = V4Exception {
+        let exception = NexoraException {
             message: "boom".into(),
-            severity: V4ErrorSeverity::Fault,
+            severity: NexoraErrorSeverity::Fault,
             cause: Some("java.lang.IllegalStateException".into()),
             cause_stack_trace: None,
         };
-        let value = serde_json::to_value(V4LoadResult::error(exception)).unwrap();
+        let value = serde_json::to_value(NexoraLoadResult::error(exception)).unwrap();
         assert_eq!(value["loadType"], "error");
         assert_eq!(value["data"]["message"], "boom");
         assert_eq!(value["data"]["severity"], "fault");

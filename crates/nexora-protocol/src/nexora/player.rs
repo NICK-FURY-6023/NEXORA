@@ -1,17 +1,17 @@
-//! The Lavalink v4 player object, its state, and the player-update body.
+//! The Nexora nexora player object, its state, and the player-update body.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use super::filters::V4Filters;
-use super::track::V4Track;
+use super::filters::NexoraFilters;
+use super::track::NexoraTrack;
 
 /// A field the reference models as `Omissible<T?>`: absent, explicitly null,
 /// or present with a value.
 ///
 /// The three states are distinguishable: `None` is absent, `Some(None)` is an
 /// explicit `null`, `Some(Some(value))` carries a value.
-pub type V4Nullable<T> = Option<Option<T>>;
+pub type NexoraNullable<T> = Option<Option<T>>;
 
 /// Deserialises a field that may be absent or explicitly null.
 fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -22,9 +22,9 @@ where
     T::deserialize(deserializer).map(Some)
 }
 
-/// The Lavalink v4 player state block.
+/// The Nexora nexora player state block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4PlayerState {
+pub struct NexoraPlayerState {
     /// Epoch milliseconds at the moment the update was emitted.
     pub time: i64,
     /// The playing track's position in milliseconds, or `0`.
@@ -35,7 +35,7 @@ pub struct V4PlayerState {
     pub ping: i64,
 }
 
-impl Default for V4PlayerState {
+impl Default for NexoraPlayerState {
     fn default() -> Self {
         Self {
             time: 0,
@@ -46,12 +46,12 @@ impl Default for V4PlayerState {
     }
 }
 
-/// The Lavalink v4 voice state.
+/// The Nexora nexora voice state.
 ///
 /// The shipped reference carries the gateway token, the endpoint, the voice
 /// session id and the channel id — there is no `serverId`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4VoiceState {
+pub struct NexoraVoiceState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,7 +62,7 @@ pub struct V4VoiceState {
     pub channel_id: Option<String>,
 }
 
-impl V4VoiceState {
+impl NexoraVoiceState {
     /// Whether the state carries every field the reference requires.
     pub fn is_complete(&self) -> bool {
         self.token.as_deref().is_some_and(|value| !value.is_empty())
@@ -81,51 +81,51 @@ impl V4VoiceState {
     }
 }
 
-/// The Lavalink v4 player object.
+/// The Nexora nexora player object.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4Player {
+pub struct NexoraPlayer {
     #[serde(rename = "guildId")]
     pub guild_id: String,
-    pub track: Option<V4Track>,
+    pub track: Option<NexoraTrack>,
     pub volume: i64,
     pub paused: bool,
-    pub state: V4PlayerState,
-    pub voice: V4VoiceState,
-    pub filters: V4Filters,
+    pub state: NexoraPlayerState,
+    pub voice: NexoraVoiceState,
+    pub filters: NexoraFilters,
 }
 
 /// The track block of a player update.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct V4PlayerUpdateTrack {
+pub struct NexoraPlayerUpdateTrack {
     #[serde(
         default,
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub encoded: V4Nullable<String>,
+    pub encoded: NexoraNullable<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
     #[serde(default, rename = "userData", skip_serializing_if = "Option::is_none")]
     pub user_data: Option<Value>,
 }
 
-/// The request body of `PATCH /v4/sessions/{sessionId}/players/{guildId}`.
+/// The request body of `PATCH /nexora/sessions/{sessionId}/players/{guildId}`.
 ///
 /// `encodedTrack` and `endTime` are nullable in the reference: an explicit
 /// `null` is meaningful and differs from an absent field.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct V4PlayerUpdate {
+pub struct NexoraPlayerUpdate {
     #[serde(
         default,
         rename = "encodedTrack",
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub encoded_track: V4Nullable<String>,
+    pub encoded_track: NexoraNullable<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub track: Option<V4PlayerUpdateTrack>,
+    pub track: Option<NexoraPlayerUpdateTrack>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<u64>,
     #[serde(
@@ -134,21 +134,21 @@ pub struct V4PlayerUpdate {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub end_time: V4Nullable<u64>,
+    pub end_time: NexoraNullable<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub volume: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paused: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub filters: Option<V4Filters>,
+    pub filters: Option<NexoraFilters>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub voice: Option<V4VoiceState>,
+    pub voice: Option<NexoraVoiceState>,
 }
 
-/// The `GET /v4/sessions/{sessionId}/players` payload.
+/// The `GET /nexora/sessions/{sessionId}/players` payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct V4Players {
-    pub players: Vec<V4Player>,
+pub struct NexoraPlayers {
+    pub players: Vec<NexoraPlayer>,
 }
 
 #[cfg(test)]
@@ -158,14 +158,14 @@ mod tests {
 
     #[test]
     fn player_serialises_the_reference_field_names() {
-        let player = V4Player {
+        let player = NexoraPlayer {
             guild_id: "1234".into(),
             track: None,
             volume: 100,
             paused: false,
-            state: V4PlayerState::default(),
-            voice: V4VoiceState::default(),
-            filters: V4Filters::default(),
+            state: NexoraPlayerState::default(),
+            voice: NexoraVoiceState::default(),
+            filters: NexoraFilters::default(),
         };
         let value = serde_json::to_value(player).unwrap();
         assert_eq!(value["guildId"], "1234");
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn voice_state_carries_the_four_reference_fields() {
-        let voice = V4VoiceState {
+        let voice = NexoraVoiceState {
             token: Some("t".into()),
             endpoint: Some("e".into()),
             session_id: Some("s".into()),
@@ -195,32 +195,32 @@ mod tests {
 
     #[test]
     fn an_explicit_null_encoded_track_differs_from_an_absent_one() {
-        let update: V4PlayerUpdate =
+        let update: NexoraPlayerUpdate =
             serde_json::from_value(json!({ "encodedTrack": null })).unwrap();
         assert_eq!(update.encoded_track, Some(None));
 
-        let absent: V4PlayerUpdate = serde_json::from_value(json!({})).unwrap();
+        let absent: NexoraPlayerUpdate = serde_json::from_value(json!({})).unwrap();
         assert_eq!(absent.encoded_track, None);
     }
 
     #[test]
     fn an_explicit_null_end_time_differs_from_an_absent_one() {
-        let update: V4PlayerUpdate = serde_json::from_value(json!({ "endTime": null })).unwrap();
+        let update: NexoraPlayerUpdate = serde_json::from_value(json!({ "endTime": null })).unwrap();
         assert_eq!(update.end_time, Some(None));
 
-        let absent: V4PlayerUpdate = serde_json::from_value(json!({})).unwrap();
+        let absent: NexoraPlayerUpdate = serde_json::from_value(json!({})).unwrap();
         assert_eq!(absent.end_time, None);
     }
 
     #[test]
     fn a_present_end_time_keeps_its_value() {
-        let update: V4PlayerUpdate = serde_json::from_value(json!({ "endTime": 5000 })).unwrap();
+        let update: NexoraPlayerUpdate = serde_json::from_value(json!({ "endTime": 5000 })).unwrap();
         assert_eq!(update.end_time, Some(Some(5000)));
     }
 
     #[test]
     fn the_nested_track_block_keeps_its_field_names() {
-        let update: V4PlayerUpdate =
+        let update: NexoraPlayerUpdate =
             serde_json::from_value(json!({ "track": { "encoded": null, "userData": { "a": 1 } } }))
                 .unwrap();
         let track = update.track.unwrap();

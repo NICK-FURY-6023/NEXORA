@@ -1,8 +1,8 @@
-//! DSP filter chain implementing the Lavalink v4 filter set.
+//! DSP filter chain implementing the Nexora nexora filter set.
 //!
 //! Every parameter name and default below matches the shipped reference:
-//! `filterConfigs.kt` for Lavalink, `src/typings/playback/filters.types.ts`
-//! for the NodeLink extras.
+//! `filterConfigs.kt` for Nexora, `src/typings/playback/filters.types.ts`
+//! for the Nexora extras.
 //!
 //! Filters are applied in-place to interleaved f32 PCM, in the reference's
 //! declaration order: volume, equalizer, karaoke, timescale, tremolo, vibrato,
@@ -12,17 +12,17 @@
 use std::f32::consts::PI;
 
 use crate::NexoraResult;
-use nexora_protocol::v4::{
-    V4ChannelMixFilter, V4CompressorFilter, V4DistortionFilter, V4EchoFilter, V4EqualizerBand,
-    V4Filters, V4HighPassFilter, V4KaraokeFilter, V4LowPassFilter, V4PhaserFilter,
-    V4RotationFilter, V4TimescaleFilter, V4TremoloFilter, V4VibratoFilter,
+use nexora_protocol::nexora::{
+    NexoraChannelMixFilter, NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter, NexoraEqualizerBand,
+    NexoraFilters, NexoraHighPassFilter, NexoraKaraokeFilter, NexoraLowPassFilter, NexoraPhaserFilter,
+    NexoraRotationFilter, NexoraTimescaleFilter, NexoraTremoloFilter, NexoraVibratoFilter,
 };
 
 // ---------------------------------------------------------------------------
 // Filter chain
 // ---------------------------------------------------------------------------
 
-/// Apply the full Lavalink v4 filter chain to interleaved f32 PCM, in place.
+/// Apply the full Nexora nexora filter chain to interleaved f32 PCM, in place.
 ///
 /// Filters are applied in the reference's declaration order: volume, equalizer,
 /// karaoke, timescale, tremolo, vibrato, distortion, rotation, channelMix,
@@ -32,7 +32,7 @@ pub fn apply_filters(
     samples: &mut [f32],
     channels: usize,
     sample_rate: u32,
-    filters: &V4Filters,
+    filters: &NexoraFilters,
 ) -> NexoraResult<()> {
     if let Some(volume) = filters.volume {
         apply_volume(samples, volume);
@@ -137,10 +137,10 @@ impl Biquad {
 }
 
 /// Build a biquad from equalizer band parameters (gain in dB).
-fn eq_band(sample_rate: u32, band: &V4EqualizerBand) -> Biquad {
+fn eq_band(sample_rate: u32, band: &NexoraEqualizerBand) -> Biquad {
     let gain_db = band.gain;
     let center_freq = band.band as f32;
-    // V4EqualizerBand carries no Q on the wire, so Q is fixed; upgrade when the wire adds Q.
+    // NexoraEqualizerBand carries no Q on the wire, so Q is fixed; upgrade when the wire adds Q.
     // shortcut: fixed Q = 1.0, revisit if the protocol gains a per-band Q field.
     let q = 1.0;
     Biquad::peaking(sample_rate, gain_db, center_freq, q)
@@ -150,7 +150,7 @@ fn apply_equalizer(
     samples: &mut [f32],
     channels: usize,
     sample_rate: u32,
-    bands: &[V4EqualizerBand],
+    bands: &[NexoraEqualizerBand],
 ) {
     let mut filters: Vec<Biquad> = bands.iter().map(|b| eq_band(sample_rate, b)).collect();
     for frame in 0..samples.len() / channels {
@@ -192,7 +192,7 @@ fn apply_karaoke(
     samples: &mut [f32],
     channels: usize,
     sample_rate: u32,
-    karaoke: &V4KaraokeFilter,
+    karaoke: &NexoraKaraokeFilter,
 ) {
     let mut bandpass = OnePole::new(sample_rate, karaoke.filter_band);
     for frame in 0..samples.len() / channels {
@@ -219,7 +219,7 @@ fn apply_timescale(
     samples: &mut [f32],
     channels: usize,
     sample_rate: u32,
-    timescale: &V4TimescaleFilter,
+    timescale: &NexoraTimescaleFilter,
 ) -> NexoraResult<()> {
     let rate = timescale.rate;
     if rate == 1.0 {
@@ -238,7 +238,7 @@ fn apply_timescale(
 // tremolo
 // ---------------------------------------------------------------------------
 
-fn apply_tremolo(samples: &mut [f32], sample_rate: u32, tremolo: &V4TremoloFilter) {
+fn apply_tremolo(samples: &mut [f32], sample_rate: u32, tremolo: &NexoraTremoloFilter) {
     let mut phase = 0.0f32;
     let step = 2.0 * PI * tremolo.frequency / sample_rate as f32;
     let depth = tremolo.depth.clamp(0.0, 1.0);
@@ -283,7 +283,7 @@ impl DelayLine {
     }
 }
 
-fn apply_vibrato(samples: &mut [f32], sample_rate: u32, vibrato: &V4VibratoFilter) {
+fn apply_vibrato(samples: &mut [f32], sample_rate: u32, vibrato: &NexoraVibratoFilter) {
     let max_delay = (sample_rate as f32 * 0.02) as usize; // max 20ms delay
     let mut delay_line = DelayLine::new(max_delay);
     let mut phase = 0.0f32;
@@ -304,7 +304,7 @@ fn apply_vibrato(samples: &mut [f32], sample_rate: u32, vibrato: &V4VibratoFilte
 // distortion
 // ---------------------------------------------------------------------------
 
-fn apply_distortion(samples: &mut [f32], distortion: &V4DistortionFilter) {
+fn apply_distortion(samples: &mut [f32], distortion: &NexoraDistortionFilter) {
     let drive = distortion.sin_scale.clamp(0.0, 10.0);
     for sample in samples.iter_mut() {
         let x = *sample * drive;
@@ -325,7 +325,7 @@ fn apply_distortion(samples: &mut [f32], distortion: &V4DistortionFilter) {
 // rotation / channelMix
 // ---------------------------------------------------------------------------
 
-fn apply_rotation(samples: &mut [f32], channels: usize, rotation: &V4RotationFilter) {
+fn apply_rotation(samples: &mut [f32], channels: usize, rotation: &NexoraRotationFilter) {
     if channels < 2 {
         return;
     }
@@ -341,7 +341,7 @@ fn apply_rotation(samples: &mut [f32], channels: usize, rotation: &V4RotationFil
     }
 }
 
-fn apply_channel_mix(samples: &mut [f32], channels: usize, mix: &V4ChannelMixFilter) {
+fn apply_channel_mix(samples: &mut [f32], channels: usize, mix: &NexoraChannelMixFilter) {
     if channels < 2 {
         return;
     }
@@ -358,7 +358,7 @@ fn apply_channel_mix(samples: &mut [f32], channels: usize, mix: &V4ChannelMixFil
 // lowPass / highPass (one-pole)
 // ---------------------------------------------------------------------------
 
-fn apply_low_pass(samples: &mut [f32], sample_rate: u32, low_pass: &V4LowPassFilter) {
+fn apply_low_pass(samples: &mut [f32], sample_rate: u32, low_pass: &NexoraLowPassFilter) {
     let mut state = 0.0f32;
     let smoothing = low_pass.smoothing.clamp(0.0, 1.0);
     let c = 2.0 * PI * low_pass_filter_cutoff(sample_rate, smoothing);
@@ -377,7 +377,7 @@ fn low_pass_filter_cutoff(sample_rate: u32, smoothing: f32) -> f32 {
     min_freq + (max_freq - min_freq) * (1.0 - smoothing)
 }
 
-fn apply_high_pass(samples: &mut [f32], sample_rate: u32, high_pass: &V4HighPassFilter) {
+fn apply_high_pass(samples: &mut [f32], sample_rate: u32, high_pass: &NexoraHighPassFilter) {
     let mut state = 0.0f32;
     let mut prev_input = 0.0f32;
     let smoothing = high_pass.smoothing.clamp(0.0, 1.0);
@@ -395,7 +395,7 @@ fn apply_high_pass(samples: &mut [f32], sample_rate: u32, high_pass: &V4HighPass
 // compressor
 // ---------------------------------------------------------------------------
 
-fn apply_compressor(samples: &mut [f32], _sample_rate: u32, compressor: &V4CompressorFilter) {
+fn apply_compressor(samples: &mut [f32], _sample_rate: u32, compressor: &NexoraCompressorFilter) {
     let threshold = compressor.threshold.clamp(-1.0, 1.0);
     let ratio = compressor.ratio.max(1.0);
     let attack = compressor.attack.clamp(0.0, 1.0);
@@ -427,7 +427,7 @@ fn apply_compressor(samples: &mut [f32], _sample_rate: u32, compressor: &V4Compr
 // echo
 // ---------------------------------------------------------------------------
 
-fn apply_echo(samples: &mut [f32], sample_rate: u32, echo: &V4EchoFilter) {
+fn apply_echo(samples: &mut [f32], sample_rate: u32, echo: &NexoraEchoFilter) {
     let delay_samples = (sample_rate as f32 * echo.delay / 1000.0) as usize;
     if delay_samples == 0 {
         return;
@@ -476,7 +476,7 @@ impl AllPass {
     }
 }
 
-fn apply_phaser(samples: &mut [f32], sample_rate: u32, phaser: &V4PhaserFilter) {
+fn apply_phaser(samples: &mut [f32], sample_rate: u32, phaser: &NexoraPhaserFilter) {
     let mut allpasses = [
         AllPass::new(sample_rate, phaser.min_frequency),
         AllPass::new(sample_rate, phaser.max_frequency),
@@ -520,7 +520,7 @@ mod tests {
     fn filter_chain_empty_is_identity() {
         let mut samples = sine(440.0, 48_000, 960);
         let before = samples.clone();
-        apply_filters(&mut samples, 1, 48_000, &V4Filters::default()).unwrap();
+        apply_filters(&mut samples, 1, 48_000, &NexoraFilters::default()).unwrap();
         assert_eq!(samples, before);
     }
 
@@ -531,7 +531,7 @@ mod tests {
             &mut samples,
             1,
             48_000,
-            &V4Filters {
+            &NexoraFilters {
                 volume: Some(0.5),
                 ..Default::default()
             },
@@ -545,7 +545,7 @@ mod tests {
     fn filter_preserves_sample_count() {
         let mut samples = sine(440.0, 48_000, 1000);
         let n = samples.len();
-        apply_filters(&mut samples, 1, 48_000, &V4Filters::default()).unwrap();
+        apply_filters(&mut samples, 1, 48_000, &NexoraFilters::default()).unwrap();
         assert_eq!(samples.len(), n);
     }
 
@@ -557,8 +557,8 @@ mod tests {
             &mut samples,
             1,
             48_000,
-            &V4Filters {
-                low_pass: Some(V4LowPassFilter { smoothing: 1.0 }),
+            &NexoraFilters {
+                low_pass: Some(NexoraLowPassFilter { smoothing: 1.0 }),
                 ..Default::default()
             },
         )
@@ -574,8 +574,8 @@ mod tests {
             &mut samples,
             1,
             48_000,
-            &V4Filters {
-                equalizer: Some(vec![V4EqualizerBand {
+            &NexoraFilters {
+                equalizer: Some(vec![NexoraEqualizerBand {
                     band: 1000,
                     gain: 12.0,
                 }]),
@@ -588,13 +588,13 @@ mod tests {
 }
 
 // ---------------------------------------------------------------------------
-// XSecret — Opus packet encryption for the v4 voice transport
+// XSecret — Opus packet encryption for the nexora voice transport
 // ---------------------------------------------------------------------------
 
 // XSecret encrypts each Opus packet with AES-128-CTR before it is sent to
 // the Discord voice gateway. The key is derived from the voice session
-// token the client supplies on `PATCH /v4/sessions/{id}/players/{guildId}`
-// (`V4VoiceState.token`); the counter block is the packet's sequence
+// token the client supplies on `PATCH /nexora/sessions/{id}/players/{guildId}`
+// (`NexoraVoiceState.token`); the counter block is the packet's sequence
 // number as a 4-byte big-endian integer, zero-padded to 16 bytes.
 //
 // NEXORA has no voice gateway handshake yet, so the token is the only key

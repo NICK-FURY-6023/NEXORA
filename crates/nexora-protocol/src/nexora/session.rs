@@ -1,19 +1,19 @@
-//! The Lavalink v4 session object and its update body.
+//! The Nexora nexora session object and its update body.
 
 use serde::{Deserialize, Serialize};
 
-/// The Lavalink v4 session object.
+/// The Nexora nexora session object.
 ///
 /// The reference's property is `timeoutSeconds` but it serialises under the
 /// JSON name `timeout` (bytecode evidence on `Session` in
 /// `protocol-jvm-4.2.2.jar`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Session {
+pub struct NexoraSession {
     pub resuming: bool,
     pub timeout: u64,
 }
 
-impl Default for V4Session {
+impl Default for NexoraSession {
     fn default() -> Self {
         Self {
             resuming: false,
@@ -25,9 +25,9 @@ impl Default for V4Session {
 /// The reference's default resume timeout, in seconds.
 pub const DEFAULT_RESUME_TIMEOUT_SECONDS: u64 = 60;
 
-/// The request body of `PATCH /v4/sessions/{sessionId}`.
+/// The request body of `PATCH /nexora/sessions/{sessionId}`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4SessionUpdate {
+pub struct NexoraSessionUpdate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resuming: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn session_serialises_the_timeout_under_its_json_name() {
-        let session = V4Session {
+        let session = NexoraSession {
             resuming: true,
             timeout: 30,
         };
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn session_update_accepts_the_reference_field_names() {
-        let update: V4SessionUpdate =
+        let update: NexoraSessionUpdate =
             serde_json::from_value(json!({ "resuming": true, "timeout": 120 })).unwrap();
         assert_eq!(update.resuming, Some(true));
         assert_eq!(update.timeout, Some(120));
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn session_update_ignores_an_empty_body() {
-        let update: V4SessionUpdate = serde_json::from_value(json!({})).unwrap();
+        let update: NexoraSessionUpdate = serde_json::from_value(json!({})).unwrap();
         assert_eq!(update.resuming, None);
         assert_eq!(update.timeout, None);
     }
