@@ -90,6 +90,27 @@ async fn every_builtin_source_adapter_is_registered() {
 }
 
 #[tokio::test]
+async fn fetching_an_http_source_refuses_a_private_target() {
+    use nexora_server::download_source_to_temp;
+
+    // The download path runs the source framework's SSRF validation before it
+    // fetches anything, so a private-network target never reaches the network.
+    for url in [
+        "http://127.0.0.1/stream",
+        "http://localhost/stream",
+        "http://10.0.0.1/stream",
+        "http://192.168.1.1/stream",
+        "http://[::1]/stream",
+        "http://2130706433/stream",
+    ] {
+        assert!(
+            download_source_to_temp(url).await.is_err(),
+            "{url} must be refused"
+        );
+    }
+}
+
+#[tokio::test]
 async fn health_endpoint_is_available() {
     let response = test_app()
         .oneshot(

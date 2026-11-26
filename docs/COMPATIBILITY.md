@@ -81,7 +81,7 @@ without opening the socket.
 | `/nexora/loadlyrics` | GET | `load_lyrics` | partial | answers an empty payload; NEXORA has no lyrics source |
 | `/nexora/loadchapters` | GET | `load_chapters` | partial | answers `[]`; NEXORA has no chapters source |
 | `/nexora/connection` | GET | `connection` | partial | reports the reference's disabled payload; NEXORA has no voice gateway |
-| `/nexora/trackstream/{encodedTrack}` | GET | `trackstream` | partial | transcodes a local file to Opus; other source types are a 422 |
+| `/nexora/trackstream/{encodedTrack}` | GET | `trackstream` | implemented | transcodes a local file or an HTTP source to Opus — `fetching_an_http_source_refuses_a_private_target` |
 | `/nexora/loadstream` | GET | — | missing | M8; raw PCM streaming, gated by config |
 | `/nexora/hls/*` | GET | — | not-targeted | HLS serving is a NodeLink feature, not Lavalink's |
 | `/nexora/profiler*` | GET | — | not-targeted | NodeLink profiling endpoints |
@@ -195,7 +195,7 @@ only the filters it actually applies.
 | Surface | NEXORA | Status |
 |---|---|---|
 | Local files | `LocalMediaAdapter` | implemented |
-| HTTP streams | `AuthorizedHttpAdapter` | implemented |
+| HTTP streams | `AuthorizedHttpAdapter` | implemented | the server fetches the URL into a temporary file after the SSRF check, so an HTTP source plays like a local one |
 | Radio | `PublicRadioAdapter` | implemented |
 | Deezer, Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream`, `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
 | Spotify, Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream`, `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |

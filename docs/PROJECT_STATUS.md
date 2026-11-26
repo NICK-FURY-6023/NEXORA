@@ -166,6 +166,15 @@ Workspace total is now 153 passing Rust tests.
 - Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0.
 
+### HTTP sources play like local files (M9)
+
+- `ResolvedSource::Stream { url }` used to be a 422 — the server only
+  accepted `LocalFile`. `download_source_to_temp` now fetches the URL into a
+  temporary file after the source framework's SSRF validation, and the
+  playback task removes the file when the track ends.
+- The same path serves `/nexora/trackstream/{encodedTrack}`.
+- `fetching_an_http_source_refuses_a_private_target` covers the SSRF gate.
+
 ### Source adapters wired into the server (M9)
 
 - `crates/nexora-source-universal` was implemented but orphaned — no crate
