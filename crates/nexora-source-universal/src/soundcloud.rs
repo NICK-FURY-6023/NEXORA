@@ -134,7 +134,7 @@ pub struct SoundcloudSource {
 impl SoundcloudSource {
     pub fn new(tokens: Arc<TokenStore>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::http::client(),
             tokens,
         }
     }
@@ -178,7 +178,7 @@ impl SoundcloudSource {
             .await
             .map_err(|_| SourceError::Unavailable)?;
         match response.status().as_u16() {
-            200 => response.text().await.map_err(|_| SourceError::Unavailable),
+            200 => crate::http::read_text(response).await,
             401 | 403 => Err(SourceError::Unauthorized),
             404 => Err(SourceError::NotFound),
             429 => Err(SourceError::RateLimited),

@@ -228,7 +228,25 @@ impl PluginSandbox {
             ));
         }
         let path = root.join(relative);
-        let metadata = std::fs::metadata(&path)
+        if std::fs::symlink_metadata(&path)
+            .map(|metadata| metadata.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Err(NexoraError::invalid_input(
+                "plugin entrypoint must stay inside the plugin root",
+            ));
+        }
+        // Resolve symlinks first: a link inside the root may point outside it.
+        let root = std::fs::canonicalize(root)
+            .map_err(|_| NexoraError::invalid_input("plugin root is missing"))?;
+        let resolved = std::fs::canonicalize(&path)
+            .map_err(|_| NexoraError::invalid_input("plugin entrypoint is missing"))?;
+        if !resolved.starts_with(&root) {
+            return Err(NexoraError::invalid_input(
+                "plugin entrypoint must stay inside the plugin root",
+            ));
+        }
+        let metadata = std::fs::metadata(&resolved)
             .map_err(|_| NexoraError::invalid_input("plugin entrypoint is missing"))?;
         if !metadata.is_file() {
             return Err(NexoraError::invalid_input(
@@ -242,7 +260,7 @@ impl PluginSandbox {
         Ok(PluginModule {
             manifest: manifest.clone(),
             policy: self.policy.clone(),
-            entrypoint: path,
+            entrypoint: resolved,
         })
     }
 }
@@ -290,7 +308,9 @@ fn path_matches(allowed: &str, path: &str) -> bool {
     if root.is_empty() || candidate.len() < root.len() {
         return false;
     }
-    root.iter().zip(candidate.iter()).all(|(left, right)| left == right)
+    root.iter()
+        .zip(candidate.iter())
+        .all(|(left, right)| left == right)
 }
 
 fn numeric_v4(host: &str) -> Option<IpAddr> {

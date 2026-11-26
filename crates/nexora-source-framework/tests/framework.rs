@@ -95,6 +95,25 @@ fn ssrf_validation_rejects_private_targets() {
 }
 
 #[test]
+fn ssrf_validation_rejects_a_backslash_smuggled_private_target() {
+    // A backslash ends the authority for an http(s) URL, so the host is what
+    // precedes it. The validator must read the same host the fetcher will.
+    for url in [
+        "https://example.com\\@127.0.0.1/stream",
+        "https://example.com\\169.254.169.254/stream",
+        "https://example.com\\@localhost/stream",
+    ] {
+        assert!(
+            matches!(
+                validate_public_http_url(url),
+                Err(SourceError::InvalidInput)
+            ),
+            "{url} must be rejected"
+        );
+    }
+}
+
+#[test]
 fn ssrf_validation_rejects_a_smuggled_private_target() {
     for url in [
         "https://localhost?@example.com/stream",

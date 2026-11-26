@@ -1,4 +1,5 @@
 mod detect;
+pub mod http;
 
 pub mod apple;
 pub mod archive;

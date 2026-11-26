@@ -21,8 +21,9 @@ longer than 128 characters, a version longer than 64 characters, a duplicated
 capability and a capability with an empty host or path target.
 
 The entrypoint is a path relative to the plugin root. `PluginSandbox::load`
-resolves it, rejects an absolute or traversing entrypoint, and refuses a
-module larger than the sandbox memory limit.
+resolves it through symlinks, rejects an absolute, traversing or
+out-of-root entrypoint, and refuses a module larger than the sandbox memory
+limit.
 
 ## Capabilities
 
@@ -52,6 +53,20 @@ sandbox.check_path("data/track.bin")?;
 sandbox.allocate(64 * 1024)?;
 sandbox.check_time()?;
 ```
+
+## Host approval
+
+A manifest states what a plugin asks for; the host decides what it gets.
+`PluginSandbox::from_manifest_with` narrows the manifest's policy with a
+host-owned one: hosts and paths the host did not approve are dropped, and the
+time and memory limits can only go down.
+
+```rust
+let sandbox = PluginSandbox::from_manifest_with(&manifest, &host_policy)?;
+```
+
+The allow lists name hosts, not ports: approving `api.example.com` approves
+that host on any port.
 
 What each check refuses:
 

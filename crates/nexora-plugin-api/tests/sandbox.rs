@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::time::Duration;
 
 use nexora_error::ErrorCode;
@@ -234,9 +235,70 @@ fn loading_a_module_resolves_the_entrypoint_inside_the_root() {
         .expect("manifest should be valid")
         .load(&root, &manifest)
         .expect("module should load");
-    assert_eq!(module.entrypoint(), root.join("plugin.wasm"));
+    let expected = std::fs::canonicalize(root.join("plugin.wasm")).expect("canonical path");
+    assert_eq!(module.entrypoint(), expected);
 
     fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn loading_a_module_rejects_a_symlink_out_of_the_root() {
+    let root = std::env::temp_dir().join(format!("nexora-plugin-symlink-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("temp root should exist");
+    let outside =
+        std::env::temp_dir().join(format!("nexora-plugin-outside-{}.wasm", std::process::id()));
+    fs::write(&outside, b"\0asm").expect("module should be written");
+
+    if symlink_file(&outside, &root.join("plugin.wasm")).is_err() {
+        // The platform does not let this user create symlinks.
+        fs::remove_dir_all(&root).ok();
+        fs::remove_file(&outside).ok();
+        return;
+    }
+
+    let manifest = manifest_with(vec![]);
+    let error = PluginSandbox::from_manifest(&manifest)
+        .expect("manifest should be valid")
+        .load(&root, &manifest)
+        .expect_err("a symlink out of the root must be rejected");
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+
+    fs::remove_dir_all(&root).ok();
+    fs::remove_file(&outside).ok();
+}
+
+#[test]
+fn the_host_policy_narrows_what_the_plugin_may_reach() {
+    let mut approved = SandboxPolicy::deny_all();
+    approved.network = true;
+    approved.allowed_hosts = vec!["api.example.com".to_owned()];
+    approved.time_limit_ms = 1_000;
+    approved.memory_limit_mb = 16;
+
+    let manifest = manifest_with(vec![
+        PluginCapability::Network("api.example.com".to_owned()),
+        PluginCapability::Network("evil.example.org".to_owned()),
+    ]);
+    let sandbox =
+        PluginSandbox::from_manifest_with(&manifest, &approved).expect("manifest should be valid");
+
+    sandbox
+        .check_network("https://api.example.com/track")
+        .expect("the approved host stays allowed");
+    let error = sandbox
+        .check_network("https://evil.example.org/track")
+        .expect_err("an unapproved host must be denied");
+    assert_eq!(error.code(), ErrorCode::Service);
+}
+
+#[cfg(windows)]
+fn symlink_file(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(source, target)
+}
+
+#[cfg(unix)]
+fn symlink_file(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(source, target)
 }
 
 #[test]

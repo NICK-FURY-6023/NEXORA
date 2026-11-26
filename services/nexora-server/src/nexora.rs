@@ -1139,12 +1139,20 @@ async fn trackstream(
                 "/nexora/trackstream",
             )
         })?;
-    let ResolvedSource::LocalFile { path } = resolved else {
-        return Err(NexoraApiError::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "source type cannot be streamed yet",
-            "/nexora/trackstream",
-        ));
+    // A local file plays from disk; an HTTP source is fetched into a
+    // temporary file first, so the decoder reads it the same way.
+    let (path, downloaded) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, false),
+        ResolvedSource::Stream { url } => (
+            crate::download_source_to_temp(&url).await.map_err(|error| {
+                NexoraApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    error.to_string(),
+                    "/nexora/trackstream",
+                )
+            })?,
+            true,
+        ),
     };
     let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus);
     let output = std::env::temp_dir().join(format!(
@@ -1185,6 +1193,9 @@ async fn trackstream(
         )
     })?;
     let _ = tokio::fs::remove_file(&output).await;
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
     Ok((
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "audio/ogg")],

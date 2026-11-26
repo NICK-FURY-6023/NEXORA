@@ -198,7 +198,8 @@ only the filters it actually applies.
 | HTTP streams | `AuthorizedHttpAdapter` | implemented |
 | Radio | `PublicRadioAdapter` | implemented |
 | Deezer, Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream`, `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
-| Spotify, Apple Music, YouTube and the rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
+| Spotify, Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream`, `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
+| YouTube and the rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
 | Lavalink's Java plugin ecosystem | — | not-targeted (a pure-Rust server cannot load a Java plugin; the WASM runtime is the substitute, M10) |
 
 ## Summary
@@ -216,6 +217,9 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 18 rows.
 | Track end reasons | 5 | 2 | 0 | 0 |
 | Filters | 4 | 0 | 1 | 2 |
 | Sources | 5 | 0 | 0 | 2 |
+| Track end reasons | 4 | 3 | 0 | 0 |
+| Filters | 4 | 0 | 1 | 2 |
+| Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is
 `implemented` only when a test in `tests/compat` exercises it against the

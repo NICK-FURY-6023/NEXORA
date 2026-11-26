@@ -166,6 +166,19 @@ Workspace total is now 153 passing Rust tests.
 - Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0.
 
+### Source adapters wired into the server (M9)
+
+- `crates/nexora-source-universal` was implemented but orphaned — no crate
+  depended on it, so every provider adapter was unreachable from the running
+  server. `services/nexora-server` now depends on it and registers all eight
+  adapters through `register_builtin_sources`.
+- Provider tokens are read from the environment: `NEXORA_TOKEN_<PROVIDER>`,
+  where the provider is the source id uppercased with `-` replaced by `_`
+  (`NEXORA_TOKEN_DEEZER`, `NEXORA_TOKEN_APPLE_MUSIC`, …). A provider without
+  a token still registers and reports `Unauthorized` until one is supplied.
+- `every_builtin_source_adapter_is_registered` proves the eight adapters are
+  in the registry.
+
 ### Implemented in Phase 4b
 
 - `nexora-grpc` with a versioned `nexora.v1.SessionService` protobuf contract (tonic/prost, vendored protoc).

@@ -91,19 +91,56 @@ pub struct AppState {
 
 pub type AudioChannels = Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>>;
 
+/// Downloads an HTTP source into a temporary file the decoder can read.
+///
+/// The URL goes through the source framework's SSRF validation first, so a
+/// private-network target is refused before anything is fetched.
+pub async fn download_source_to_temp(url: &str) -> NexoraResult<PathBuf> {
+    nexora_source_framework::validate_public_http_url(url)
+        .map_err(|_| NexoraError::invalid_input("source url is not a public http target"))?;
+    let response = reqwest::get(url)
+        .await
+        .map_err(|error| NexoraError::io_with_source("cannot fetch the source", error))?;
+    if !response.status().is_success() {
+        return Err(NexoraError::service("the source refused the request"));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| NexoraError::io_with_source("cannot read the source", error))?;
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("nexora-source-{unique}"));
+    tokio::fs::write(&path, &bytes)
+        .await
+        .map_err(|error| NexoraError::io_with_source("cannot store the source", error))?;
+    Ok(path)
+}
+
 #[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
     code: &'static str,
-    message: &'static str,
+    message: String,
 }
 
 impl ApiError {
+    fn new(status: StatusCode, message: impl Into<String>, path: impl Into<String>) -> Self {
+        let _ = path;
+        Self {
+            status,
+            code: "REQUEST_FAILED",
+            message: message.into(),
+        }
+    }
+
     fn bad_request() -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             code: "INVALID_INPUT",
-            message: "invalid request",
+            message: "invalid request".to_owned(),
         }
     }
 
@@ -111,7 +148,7 @@ impl ApiError {
         Self {
             status: StatusCode::NOT_FOUND,
             code: "NOT_FOUND",
-            message: "resource not found",
+            message: "resource not found".to_owned(),
         }
     }
 
@@ -119,7 +156,7 @@ impl ApiError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "UNAUTHORIZED",
-            message: "authorization required",
+            message: "authorization required".to_owned(),
         }
     }
 
@@ -127,7 +164,7 @@ impl ApiError {
         Self {
             status: StatusCode::UNPROCESSABLE_ENTITY,
             code: "UNSUPPORTED_SOURCE",
-            message: "source type cannot be streamed yet",
+            message: "source type cannot be streamed yet".to_owned(),
         }
     }
 }
@@ -141,12 +178,12 @@ impl From<SourceError> for ApiError {
             SourceError::Unavailable | SourceError::Timeout | SourceError::RateLimited => Self {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 code: "SOURCE_UNAVAILABLE",
-                message: "source temporarily unavailable",
+                message: "source temporarily unavailable".to_owned(),
             },
             _ => Self {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 code: "INTERNAL",
-                message: "internal server error",
+                message: "internal server error".to_owned(),
             },
         }
     }
@@ -160,7 +197,7 @@ impl From<NexoraError> for ApiError {
             _ => Self {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 code: "INTERNAL",
-                message: "internal server error",
+                message: "internal server error".to_owned(),
             },
         }
     }
@@ -388,8 +425,20 @@ pub(crate) async fn start_playback(
         .sources
         .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
         .await?;
-    let ResolvedSource::LocalFile { path } = resolved else {
-        return Err(ApiError::unsupported());
+    // A local file plays from disk; an HTTP source is fetched into a
+    // temporary file first, so the decoder reads it the same way.
+    let (path, downloaded) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, false),
+        ResolvedSource::Stream { url } => (
+            download_source_to_temp(&url).await.map_err(|error| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    error.to_string(),
+                    "/api/v1/sessions/play",
+                )
+            })?,
+            true,
+        ),
     };
     let format = state.sessions.output_format(session_id).await?;
 
@@ -442,6 +491,7 @@ pub(crate) async fn start_playback(
         session_id.clone(),
         track_id.clone(),
         path,
+        downloaded,
         format,
         control_rx,
         PlaybackContext {
@@ -633,6 +683,7 @@ async fn run_playback(
     session_id: SessionId,
     track_id: TrackId,
     mut path: PathBuf,
+    downloaded: bool,
     format: AudioFormat,
     mut control: watch::Receiver<PlaybackSignal>,
     context: PlaybackContext,
@@ -825,8 +876,15 @@ async fn run_playback(
     update_task.abort();
     sessions.detach_playback(&session_id).await;
     sessions.audio_registry().deregister(&session_id).await;
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
     // Dropping `voice_socket` closes the port when playback ends.
     drop(voice_socket);
+    // A source that was fetched into a temporary file is removed with it.
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
 }
 
 async fn pause(

@@ -161,7 +161,7 @@ pub struct BandcampSource {
 impl BandcampSource {
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::http::client(),
         }
     }
 
@@ -197,7 +197,7 @@ impl BandcampSource {
             .await
             .map_err(|_| SourceError::Unavailable)?;
         match response.status().as_u16() {
-            200 => response.text().await.map_err(|_| SourceError::Unavailable),
+            200 => crate::http::read_text(response).await,
             404 => Err(SourceError::NotFound),
             429 => Err(SourceError::RateLimited),
             _ => Err(SourceError::Unavailable),
@@ -222,7 +222,7 @@ impl BandcampSource {
             .await
             .map_err(|_| SourceError::Unavailable)?;
         match response.status().as_u16() {
-            200 => response.text().await.map_err(|_| SourceError::Unavailable),
+            200 => crate::http::read_text(response).await,
             429 => Err(SourceError::RateLimited),
             _ => Err(SourceError::Unavailable),
         }
