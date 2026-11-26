@@ -1144,13 +1144,15 @@ async fn trackstream(
     let (path, downloaded) = match resolved {
         ResolvedSource::LocalFile { path } => (path, false),
         ResolvedSource::Stream { url } => (
-            crate::download_source_to_temp(&url).await.map_err(|error| {
-                NexoraApiError::new(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    error.to_string(),
-                    "/nexora/trackstream",
-                )
-            })?,
+            crate::download_source_to_temp(&url)
+                .await
+                .map_err(|error| {
+                    NexoraApiError::new(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        error.to_string(),
+                        "/nexora/trackstream",
+                    )
+                })?,
             true,
         ),
     };
