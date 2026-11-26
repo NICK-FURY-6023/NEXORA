@@ -23,7 +23,7 @@ All JSON request/response bodies use `application/json`. Error responses use a s
 
 Routes require Bearer-token authorization when `NEXORA_SERVER_PASSWORD` (or `--password`) is set. When unset, authorization is disabled for local development only.
 
-Routes that do **not** require authorization: `/health`, `/api/v1/info`, `/v4/info`.
+Routes that do **not** require authorization: `/health`, `/api/v1/info`, `/nexora/info`.
 
 Authorized routes read the `Authorization: Bearer <token>` header and compare it to the configured password.
 
@@ -264,14 +264,14 @@ The `/v4` surface is a translation layer for existing Lavalink clients. `/api/v1
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v4/info` | GET | Server info (version, build time, source managers, filters, plugins) |
-| `/v4/stats` | GET | Runtime stats (`cpu.lavalinkLoad`, players, memory) |
-| `/v4/routeplanner/status` | GET | Route planner status (placeholder) |
-| `/v4/loadtracks` | GET | Load tracks by identifier; returns v4 track shape |
-| `/v4/sessions` | POST | Create a session (returns 201) |
-| `/v4/sessions/{id}/player` | GET | Read player state |
-| `/v4/sessions/{id}/player` | PATCH | Patch player (pause, volume, track) |
-| `/v4/sessions/{id}` | GET | WebSocket events (same as native event WS) |
+| `/nexora/info` | GET | Server info (version, build time, source managers, filters, plugins) |
+| `/nexora/stats` | GET | Runtime stats (`cpu.lavalinkLoad`, players, memory) |
+| `/nexora/routeplanner/status` | GET | Route planner status (placeholder) |
+| `/nexora/loadtracks` | GET | Load tracks by identifier; returns v4 track shape |
+| `/nexora/sessions` | POST | Create a session (returns 201) |
+| `/nexora/sessions/{id}/player` | GET | Read player state |
+| `/nexora/sessions/{id}/player` | PATCH | Patch player (pause, volume, track) |
+| `/nexora/sessions/{id}` | GET | WebSocket events (same as native event WS) |
 
 Key compatibility notes:
 
@@ -279,7 +279,7 @@ Key compatibility notes:
 - Tracks carry the v4 shape: `encoded`, `info`, `pluginInfo`, `userData`.
 - `encoded` is an opaque NEXORA base64 JSON blob; it is **not** Lavalink's binary track encoding and must be round-tripped through NEXORA.
 - No real voice connection exists yet, so player responses report `connected: false` and `ping: -1`.
-- `/v4/decodetrack` is absent by design.
+- `/nexora/decodetrack` is absent by design.
 
 ## 6. Versioned contract types
 

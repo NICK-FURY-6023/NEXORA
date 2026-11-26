@@ -6,9 +6,9 @@ Phase 4a implements REST and WebSocket endpoints in `nexora-server`. Phase 4b ad
 
 NEXORA API: `/health`, `/api/v1/info`, `/api/v1/sources`, `/api/v1/search`, session create/read/play/pause/resume/stop/seek/volume/queue/stream, `/api/v1/metrics`, and `/ws/v1/sessions/{id}`.
 
-Lavalink-compatible surface: `/v4/info`, `/v4/loadtracks`, `/v4/sessions`, `/v4/sessions/{id}/player`, and `/v4/sessions/{id}` WebSocket events.
+Lavalink-compatible surface: `/nexora/info`, `/nexora/loadtracks`, `/nexora/sessions`, `/nexora/sessions/{id}/player`, and `/nexora/sessions/{id}` WebSocket events.
 
-The `/v4/loadtracks` response uses the v4 track shape (`encoded`, `info`, `pluginInfo`, `userData`). `encoded` is an opaque NEXORA base64 JSON blob; it is not Lavalink's binary track encoding and must be round-tripped through NEXORA.
+The `/nexora/loadtracks` response uses the v4 track shape (`encoded`, `info`, `pluginInfo`, `userData`). `encoded` is an opaque NEXORA base64 JSON blob; it is not Lavalink's binary track encoding and must be round-tripped through NEXORA.
 
 Versioned contract types live in the `nexora-protocol` crate:
 

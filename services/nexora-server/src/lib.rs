@@ -12,7 +12,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
+use nexora_audio_pipeline::filters::xsecret_key;
+use nexora_audio_pipeline::voice::{VoiceStream, derive_ssrc, parse_voice_endpoint};
 use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process_file};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
@@ -583,6 +584,18 @@ struct PlaybackContext {
     voice_key: Option<[u8; 16]>,
 }
 
+/// Resolves a voice endpoint to the UDP address the RTP packets go to.
+///
+/// The lookup happens once per playback task: a DNS lookup per packet would
+/// dominate the cost of sending a 20 ms frame.
+async fn resolve_voice_target(endpoint: Option<&str>) -> Option<std::net::SocketAddr> {
+    let (host, port) = parse_voice_endpoint(endpoint?)?;
+    tokio::net::lookup_host((host, port))
+        .await
+        .ok()
+        .and_then(|mut addresses| addresses.next())
+}
+
 async fn run_playback(
     session_id: SessionId,
     track_id: TrackId,
@@ -606,6 +619,10 @@ async fn run_playback(
         .await
         .map(|state| state.volume)
         .unwrap_or(100);
+    // The voice stream's SSRC is derived from the session id, so it stays
+    // stable for the life of this playback task.
+    let mut voice_stream = VoiceStream::new(derive_ssrc(session_id.as_str()));
+    let voice_target = resolve_voice_target(voice_endpoint.as_deref()).await;
     let mut packets = match prepare_packets(&path, &format, volume, &filters).await {
         Ok(packets) => packets,
         Err(_) => {
@@ -753,16 +770,17 @@ async fn run_playback(
                 let frame = OpusFrame::packet(index as u64, payload.clone());
                 let _ = sessions.audio_registry().send_frame(&session_id, frame).await;
                 metrics.streamed(payload.len());
-                // M5: encrypt the Opus packet with XSecret (AES-128-CTR keyed
-                // by the voice session token, IV = packet sequence) and forward
-                // it to the Discord voice gateway over UDP. A cipher failure
-                // leaves the packet undelivered; audio keeps playing.
+                // M5: frame the Opus packet as RTP, encrypt the payload with
+                // XSecret (AES-128-CTR keyed by the voice session token, nonce
+                // = the RTP sequence number) and forward it to the Discord
+                // voice gateway over UDP. A cipher failure leaves the packet
+                // undelivered; audio keeps playing.
                 if let Some(key) = voice_key.as_ref()
-                    && let Ok(encrypted) = xsecret_crypt(key, index as u32, &payload)
-                    && let (Some(socket), Some(endpoint)) =
-                        (voice_socket.as_ref(), voice_endpoint.as_deref())
+                    && let (Some(socket), Some(target)) =
+                        (voice_socket.as_ref(), voice_target)
+                    && let Ok(datagram) = voice_stream.next_packet(key, &payload)
                 {
-                    let _ = socket.send_to(&encrypted, endpoint).await;
+                    let _ = socket.send_to(&datagram, target).await;
                 }
                 index += 1;
                 position_ms += 20;

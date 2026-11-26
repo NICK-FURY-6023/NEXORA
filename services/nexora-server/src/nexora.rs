@@ -235,7 +235,10 @@ fn stats_payload(state: &AppState) -> NexoraStatsFrame {
                 .map(|value| value.get() as i64)
                 .unwrap_or(1),
             "systemLoad": 0.0,
-            "nexoraLoad": 0.0,
+            // The wire field name is part of the stats contract a client
+            // reads; it keeps the reference's name even though the value is
+            // NEXORA's own load.
+            "lavalinkLoad": 0.0,
         }),
     }
 }
@@ -553,7 +556,23 @@ async fn delete_player(
             format!("/nexora/sessions/{id}/players/{guild}"),
         ));
     }
+    // The player that is being destroyed owns the track, so the track's end
+    // reason is `cleanup` and the audio stops with the player.
+    let destroyed = state.nexora_sessions.player(&id, &guild).await;
+    if let Some(track) = destroyed.as_ref().and_then(|player| player.track.clone()) {
+        state.nexora_sessions.emit(NexoraEventMessage::TrackEnd {
+            guild_id: guild.clone(),
+            track: Box::new(track),
+            reason: NexoraTrackEndReason::Cleanup,
+        });
+    }
     state.nexora_sessions.remove_player(&id, &guild).await;
+    // The playback task outlives the player otherwise, so the audio would keep
+    // playing after the client asked for the player to go away.
+    if let Ok(native) = SessionId::new(id.clone()) {
+        state.sessions.abort_playback_task(&native).await;
+        let _ = state.sessions.stop(&native).await;
+    }
     state
         .nexora_sessions
         .emit(NexoraEventMessage::PlayerDestroyed {

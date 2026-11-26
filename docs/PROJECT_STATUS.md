@@ -20,7 +20,7 @@ Status: **implemented and verified** on 2026-11-23.
   --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
   82 passing tests. Live server smoke delivered 43 raw Opus packets in 1.3 s
   (first bytes `fc7f06de6f6e6d19`) and advanced session position to 900 ms.
-- Deferred: queue auto-advance, packet-level pause/seek timing tests, Discord voice sender, and `/v4/decodetrack`.
+- Deferred: queue auto-advance, packet-level pause/seek timing tests, Discord voice sender, and `/nexora/decodetrack`.
 
 ### Slice 2: queue auto-advance (2026-11-23)
 
@@ -46,11 +46,11 @@ Status: **implemented and verified** on 2026-11-23.
   across the track change, and the session position restarted from 0 on the
   queued track.
 - Deferred: packet-level pause/seek timing tests, the Lavalink `playerUpdate`
-  event, Discord voice sender, and `/v4/decodetrack`.
+  event, Discord voice sender, and `/nexora/decodetrack`.
 
 ### Implemented after Phase 4b
 
-- Runtime API counters exposed through `/api/v1/metrics` and `/v4/stats`.
+- Runtime API counters exposed through `/api/v1/metrics` and `/nexora/stats`.
 - Python SDK (6 tests) and Node.js SDK (5 tests); Java/Go/C#/PHP SDK sources are provided but their toolchains are unavailable on this host, so they are unverified by compilers.
 - Docker/compose deployment artifacts, `.env.example`, and deployment docs.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
@@ -62,19 +62,19 @@ Workspace total is now 153 passing Rust tests.
 
 - `docs/LAVALINK_ANALYSIS.md` records the v4 protocol behavior, REA evidence
   from the shipped `Lavalink.jar`, and deliberate non-goals.
-- `/v4/loadtracks` now returns documented lowercase `loadType` values and the
-  v4 track shape (`encoded`, `info`, `pluginInfo`, `userData`); `/v4/stats`
+- `/nexora/loadtracks` now returns documented lowercase `loadType` values and the
+  v4 track shape (`encoded`, `info`, `pluginInfo`, `userData`); `/nexora/stats`
   uses `cpu.lavalinkLoad`. Three RED-GREEN contract tests cover the parity.
-- `/v4/info` now returns the documented `version` object, numeric `buildTime`
+- `/nexora/info` now returns the documented `version` object, numeric `buildTime`
   and `git.commitTime`, and real `sourceManagers` from the registry; `/v4`
   player responses carry `state.time`, `state.connected`, `state.ping` and
-  `filters`; `POST /v4/sessions` returns 201. Two more contract tests cover it.
+  `filters`; `POST /nexora/sessions` returns 201. Two more contract tests cover it.
 - Known compatibility boundary: `encoded` is an opaque NEXORA base64 JSON
-  blob, not Lavalink's binary track encoding; `/v4/decodetrack` is absent.
+  blob, not Lavalink's binary track encoding; `/nexora/decodetrack` is absent.
 
 ### Lavalink v4 protocol core, WebSocket and session lifecycle
 
-- `crates/nexora-protocol/src/v4/` owns every Lavalink v4 wire type: the op
+- `crates/nexora-protocol/src/nexora/` owns every Lavalink v4 wire type: the op
   codes, the flat event envelope, the error envelope, the exception severities,
   the load results, the player and session objects, the filter chain, and the
   encoded-track codec. Every shape is read from the shipped
@@ -83,10 +83,10 @@ Workspace total is now 153 passing Rust tests.
   byte: the reference blob in `docs/research/lavalink-source-architecture.md`
   §6.4 decodes to the documented fields and re-encodes to the same bytes.
 - `services/nexora-server/src/lavalink.rs` serves the reference's route
-  inventory: `/version`, `/v4/info`, `/v4/stats`, the three route-planner
-  routes, `/v4/loadtracks`, `/v4/decodetrack`, `/v4/decodetracks`,
-  `PATCH /v4/sessions/{id}`, the three player routes, and the
-  `/v4/websocket` event socket. `POST /v4/sessions` is a NEXORA extension.
+  inventory: `/version`, `/nexora/info`, `/nexora/stats`, the three route-planner
+  routes, `/nexora/loadtracks`, `/nexora/decodetrack`, `/nexora/decodetracks`,
+  `PATCH /nexora/sessions/{id}`, the three player routes, and the
+  `/nexora/websocket` event socket. `POST /nexora/sessions` is a NEXORA extension.
 - The event socket emits the reference's flat frames: the `ready` frame first,
   then `playerUpdate`, `stats` and the event types. The reference's handshake
   rules are enforced before the upgrade — a missing or zero `User-Id` is a
@@ -96,7 +96,7 @@ Workspace total is now 153 passing Rust tests.
 
 ### Lavalink v4 events (M3)
 
-- Every frame on `/v4/websocket` is flat: `op`, the `type` discriminator,
+- Every frame on `/nexora/websocket` is flat: `op`, the `type` discriminator,
   `guildId` and the event's own fields are siblings, with no `data` wrapper.
 - The reference's order for one track is reproduced exactly: the
   `TrackStartEvent`, then a `playerUpdate` immediately, then one every five
@@ -121,10 +121,10 @@ Workspace total is now 153 passing Rust tests.
   echo, phaser — applied in-place to interleaved f32 PCM in the reference's
   declaration order; only configured filters run, the rest are skipped.
 - `encode_file_packets` runs the chain between volume gain and Opus encoding,
-  so a PATCHed player's `V4Filters` is audible on the next encoded packet; an
+  so a PATCHed player's `NexoraFilters` is audible on the next encoded packet; an
   empty chain is identity and preserves the sample count.
-- `crates/nexora-protocol/src/v4/filters.rs` keeps the reference's wire names
-  and defaults (`V4Filters`, `V4EqualizerBand`, …) with round-trip JSON tests.
+- `crates/nexora-protocol/src/nexora/filters.rs` keeps the reference's wire names
+  and defaults (`NexoraFilters`, `NexoraEqualizerBand`, …) with round-trip JSON tests.
 - Tests: `filter_chain_empty_is_identity`, `filter_applies_gain`,
   `filter_preserves_sample_count`, `filter_low_pass_attenuates_high_freq`,
   `filter_equalizer_band_gain`, plus `encode_file_packets` coverage in
@@ -135,22 +135,36 @@ Workspace total is now 153 passing Rust tests.
 
 ### Lavalink v4 voice (M5)
 
-- `V4EventMessage::VoiceStateUpdate` carries `{guildId, userId, channelId,
-  selfDeaf, selfMute}` as a flat event frame on `/v4/websocket`; a client's
-  voice state update is echoed back — `compat_v4_voice_state_update_echoes_back`.
-- `V4PlayerRecord` gains `voice_channel_id`, `self_deaf`, `self_mute` (defaulting
+- `NexoraEventMessage::VoiceStateUpdate` carries `{guildId, userId, channelId,
+  selfDeaf, selfMute}` as a flat event frame on `/nexora/websocket`; a client's
+  voice state update is echoed back — `compat_nexora_voice_state_update_echoes_back`.
+- `NexoraPlayerRecord` gains `voice_channel_id`, `self_deaf`, `self_mute` (defaulting
   to `None`, `false`, `false`), applied through `update_player`.
 - `start_playback` binds one UDP socket per session to `0.0.0.0:0` (a bind
   failure degrades gracefully: audio still plays) and forwards each Opus packet
   to the voice gateway endpoint over UDP, XSecret-encrypted with AES-128-CTR
-  (key derived from the voice session token, IV = the packet sequence) —
+  (key derived from the voice session token, nonce = the packet sequence) —
   `nexora-audio-pipeline` unit tests cover encrypt/decrypt round-trips.
-- DAVE E2EE is not targeted: NEXORA has no voice gateway handshake to exchange
-  key material (the reference's DAVE uses `tink-1.14.1`, bundled in
-  `Lavalink.jar`).
+- `nexora-audio-pipeline::voice` frames every datagram as an RTP packet, which
+  is what Discord's voice servers expect on the UDP path: version 2, Opus
+  payload type 120, a sequence number, a timestamp that advances by exactly
+  960 samples per 20 ms frame, and the stream's SSRC. Only the payload is
+  encrypted, so the voice server can route on the SSRC. The voice endpoint is
+  resolved to a UDP address once per playback task — `compat_nexora_voice_datagram_is_an_rtp_packet`
+  asserts the whole path against a real UDP receiver.
+- A voice state change on `PATCH /nexora/sessions/{id}/players/{guildId}`
+  aborts and restarts the playback task, so the packets are encrypted with the
+  new token and sent to the new endpoint —
+  `compat_nexora_voice_state_change_is_stored`.
+- Destroying a player ends its track with the `cleanup` reason and stops the
+  playback task, so the audio does not outlive the player —
+  `compat_nexora_destroying_a_player_ends_the_track_with_cleanup`.
+- DAVE E2EE is not targeted: the reference implements it in the native
+  `libdave` bundle, and the MLS protocol details are not observable from the
+  shipped-artifact evidence in `docs/research/`, so there is nothing to
+  reimplement against. NEXORA's voice path stops at XSecret.
 - Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
-  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0 with
-  201 passing tests.
+  --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0.
 
 ### Implemented in Phase 4b
 
@@ -169,7 +183,7 @@ Phase 4b adds 1 integration test and 1 example client; the workspace total is no
 - Consistent `{ error: { code, message } }` API errors.
 - Local-file audio streaming endpoint that decodes/resamples/encodes to Ogg Opus through the Phase 2 pipeline.
 
-Live smoke: `/health` 200, `/v4/info` 200, NEXORA session create 201, play 200, Lavalink session create 200, and a real WebSocket `session_ready` event after a volume change.
+Live smoke: `/health` 200, `/nexora/info` 200, NEXORA session create 201, play 200, Lavalink session create 200, and a real WebSocket `session_ready` event after a volume change.
 
 Phase 4a adds 5 tests; the workspace total is now 62 passing tests.
 

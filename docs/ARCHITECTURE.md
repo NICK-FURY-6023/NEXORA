@@ -230,7 +230,7 @@ P0 means required for the first useful implementation. P1 and P2 are later capab
 - No unsafe Rust.
 - Dependency versions are pinned in the workspace manifest and locked in `Cargo.lock`.
 - Local media stays under the configured root; traversal, absolute paths, and parent components are rejected.
-- Bearer-token authorization on every REST/WS route except `/health`, `/api/v1/info`, `/v4/info`.
+- Bearer-token authorization on every REST/WS route except `/health`, `/api/v1/info`, `/nexora/info`.
 - SSRF-safe URL validation for http(s) targets; private/loopback/link-local/localhost targets are rejected without DNS resolution.
 - Bounded broadcast channels prevent a slow client from growing memory.
 - Volume is clamped to 0..150; gain above 100 may clip and is documented as such.

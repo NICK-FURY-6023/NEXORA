@@ -30,13 +30,13 @@ Provide `NEXORA_SERVER_PASSWORD` via `.env` or the container environment. When u
 - Terminate TLS with a reverse proxy; NEXORA itself exposes plain HTTP/gRPC inside the trusted network.
 - Restrict access to port 9090; it is an internal service RPC.
 - Use a read-only media mount and keep source credentials outside the image.
-- Runtime metrics are available at `/api/v1/metrics`; Lavalink-compatible stats at `/v4/stats`.
+- Runtime metrics are available at `/api/v1/metrics`; Lavalink-compatible stats at `/nexora/stats`.
 
 ## Verification
 
 After startup, check:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/v4/info
+curl -fsS http://127.0.0.1:8080/nexora/info
 curl -fsS http://127.0.0.1:8080/api/v1/metrics
 ```

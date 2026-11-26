@@ -178,7 +178,7 @@ All require `Authorization: <password>` header.
 | `/api/v1/info` | GET | version/build/sourceManagers/filters/plugins |
 | `/api/v1/stats` | GET | players, playingPlayers, uptime, memory, cpu |
 | `/api/v1/version` | GET | plain version |
-| `/v4/...` | same | `/v4` alias → `/api/v1` (ADR-016) |
+| `/nexora/...` | same | `/v4` alias → `/api/v1` (ADR-016) |
 
 ### 5.2 WebSocket (`/api/v1/websocket`)
 Headers: `Authorization`, `User-Id`, `Client-Name`, optional `Session-Id`. Server→client ops: `ready`, `playerUpdate`, `stats`, `event` (TrackStart/End/Exception/Stuck/WebSocketClosed). Client→server text: **not supported** (mirrors Lavalink v4 — OBSERVED `handleTextMessage` warning).

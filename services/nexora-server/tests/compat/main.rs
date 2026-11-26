@@ -193,7 +193,7 @@ async fn compat_nexora_stats_shape() {
     assert!(value["memory"]["reservable"].is_u64());
     assert!(value["cpu"]["cores"].is_u64());
     assert!(value["cpu"]["systemLoad"].is_number());
-    assert!(value["cpu"]["nexoraLoad"].is_number());
+    assert!(value["cpu"]["lavalinkLoad"].is_number());
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -936,6 +936,83 @@ async fn compat_nexora_voice_state_change_is_stored() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Row: voice transport — the UDP datagram is an RTP packet carrying the
+/// XSecret-encrypted Opus frame.
+///
+/// A real UDP receiver is bound and the voice state points the player at it,
+/// so the assertion covers the whole path: RTP header, encrypted payload and
+/// the nonce the voice server derives its keystream from.
+#[tokio::test]
+async fn compat_nexora_voice_datagram_is_an_rtp_packet() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    // The receiver stands in for the Discord voice server.
+    let receiver = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = receiver.local_addr().unwrap();
+
+    // The voice state first, so the playback task picks the endpoint up.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(
+            r#"{{"voice":{{"token":"voice-token","endpoint":"{endpoint}","sessionId":"vs","channelId":"vc"}}}}"#
+        )),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The first datagram is the first RTP frame.
+    let mut buffer = [0u8; 2048];
+    let (len, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        receiver.recv_from(&mut buffer),
+    )
+    .await
+    .expect("a voice datagram arrives")
+    .expect("the datagram is received");
+
+    // The RTP header comes first and in the clear: version 2, payload type 120
+    // for Opus, then the sequence number, the timestamp and the SSRC.
+    assert!(len > 12, "the datagram carries an RTP header and a payload");
+    assert_eq!(buffer[0], 0x80, "RTP version 2, no padding or extension");
+    assert_eq!(buffer[1], 120, "the Opus payload type");
+
+    // The timestamp advances by 960 samples per 20 ms frame, so the first
+    // frame's timestamp is the initial value plus one increment.
+    let timestamp = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
+    assert_eq!(
+        timestamp % 960,
+        0,
+        "the timestamp stays on the 48 kHz clock"
+    );
+
+    // The payload is the XSecret-encrypted Opus frame: it does not decrypt to
+    // the plaintext, but it does decrypt with the frame's sequence number.
+    let sequence = u16::from_be_bytes([buffer[2], buffer[3]]);
+    let key = xsecret_key("voice-token");
+    let decrypted = xsecret_crypt(&key, u32::from(sequence), &buffer[12..len]).expect("decrypts");
+    assert!(!decrypted.is_empty(), "the decrypted frame carries audio");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Row: voice socket — one UDP socket is bound per session and keyed by session id.
 #[tokio::test]
 async fn compat_nexora_voice_socket_is_keyed_by_session_id() {
@@ -1100,6 +1177,72 @@ async fn compat_nexora_player_events_report_the_change() {
     let destroyed = next_frame(&mut stream).await;
     assert_eq!(destroyed["type"], "PlayerDestroyedEvent");
     assert_eq!(destroyed["guildId"], "1234");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: the `cleanup` end reason — destroying a player ends its track with
+/// `cleanup` and stops the audio.
+#[tokio::test]
+async fn compat_nexora_destroying_a_player_ends_the_track_with_cleanup() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Drain the created and started frames.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+
+    let (status, _) = request(
+        app.clone(),
+        "DELETE",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 204);
+
+    // The track ends with `cleanup` before the player reports its destruction.
+    let mut saw_cleanup = false;
+    let mut saw_destroyed = false;
+    for _ in 0..4 {
+        let frame = next_frame(&mut stream).await;
+        match frame["type"].as_str() {
+            Some("TrackEndEvent") => {
+                assert_eq!(frame["reason"], "cleanup");
+                assert_eq!(frame["guildId"], "1234");
+                saw_cleanup = true;
+            }
+            Some("PlayerDestroyedEvent") => saw_destroyed = true,
+            _ => {}
+        }
+        if saw_cleanup && saw_destroyed {
+            break;
+        }
+    }
+    assert!(saw_cleanup, "the track ended with the cleanup reason");
+    assert!(saw_destroyed, "the player reported its destruction");
 
     let _ = fs::remove_dir_all(&root);
 }

@@ -12,6 +12,7 @@ use rubato::{Fft, FixedSync, Resampler};
 use tokio::sync::mpsc;
 
 pub mod filters;
+pub mod voice;
 
 /// Interleaved sample-rate conversion using Rubato's FFT resampler.
 pub fn resample_interleaved(

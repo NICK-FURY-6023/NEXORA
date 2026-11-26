@@ -34,9 +34,9 @@ sends commands over REST; the node resolves media, decodes it, produces Opus,
 and sends frames to a Discord voice server. Audio never flows through the bot's
 gateway process. Official v4 contract facts:
 
-- All client commands are REST; `/v4/websocket` is server-push only. Client
+- All client commands are REST; `/nexora/websocket` is server-push only. Client
   commands over WebSocket were removed in v4. (`https://lavalink.dev/changelog/v4`)
-- `GET /v4/loadtracks?identifier=...` returns `loadType` of `track`, `playlist`,
+- `GET /nexora/loadtracks?identifier=...` returns `loadType` of `track`, `playlist`,
   `search`, `empty`, or `error`; tracks carry `encoded`, `info`, `pluginInfo`,
   `userData`. (`https://lavalink.dev/api/rest`)
 - Player updates carry track, voice state (token, endpoint, session id,
@@ -166,7 +166,7 @@ In scope:
 
 Out of scope for this slice:
 
-- Discord gateway/voice UDP/DAVE, `/v4/decodetrack`, filters, plugins, cluster,
+- Discord gateway/voice UDP/DAVE, `/nexora/decodetrack`, filters, plugins, cluster,
   durable sessions, YouTube/Spotify providers, rate-limit evasion.
 
 Runtime flow:
@@ -227,7 +227,7 @@ Event channel remains `EventEnvelope` JSON text at `/ws/v1/sessions/{id}`.
 ## 8. Security design
 
 - Bearer check on every REST/WS route except `/health`, `/api/v1/info`,
-  `/v4/info` as today; adding new routes must use the same `authorize` helper.
+  `/nexora/info` as today; adding new routes must use the same `authorize` helper.
 - Local media stays under the configured root; traversal, absolute paths, and
   parent components remain rejected (`crates/nexora-source-framework/src/lib.rs:325-340`).
 - `ResolvedSource::Stream` is not fetched in this slice, so no new SSRF surface.
@@ -278,7 +278,7 @@ timing. Those measurements belong to slice 2; queue auto-advance is done
 | 1 (done) | Real-time local-file playback + dedicated binary Opus WS + working controls | fmt/clippy; tests green; live Opus packets |
 | 2 (in progress) | Queue auto-advance (done, ADR-023) + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
 | 3 | Discord voice sender: voice update REST, voice gateway v8, UDP, encryption, DAVE boundary | Live test against a disposable voice server or documented harness |
-| 4 | `/v4/decodetrack`, filters, resumable sessions, frame stats, real CPU/memory metrics | Lavalink client compatibility tests |
+| 4 | `/nexora/decodetrack`, filters, resumable sessions, frame stats, real CPU/memory metrics | Lavalink client compatibility tests |
 | 5 | Durable sessions, clustering, WASM plugins, production hardening | Deployment and chaos/conformance tests |
 
 Slice 2 depends on slice 1 because auto-advance needs a real end-of-track signal.
@@ -295,7 +295,7 @@ fanout. Later slices stay behind explicit evidence gates.
 - No real voice delivery means NEXORA is not yet a drop-in replacement for a
   Discord music bot; slice 3 is required for that claim.
 - `encoded` is an opaque NEXORA base64 JSON blob, not Lavalink's binary track
-  encoding. `/v4/decodetrack` is absent by design for now.
+  encoding. `/nexora/decodetrack` is absent by design for now.
 - Session state is in-memory and lost on restart (ADR-017).
 - Whole-file packet preparation is acceptable for the first slice, bounded by a
   documented local-file size policy; streaming decode from a reader is the next

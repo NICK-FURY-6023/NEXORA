@@ -298,7 +298,7 @@ async fn nexora_stats_uses_nexora_cpu_field_names() {
         .await
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert!(value["cpu"]["nexoraLoad"].is_number());
+    assert!(value["cpu"]["lavalinkLoad"].is_number());
 }
 
 #[tokio::test]
