@@ -213,9 +213,9 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 18 rows.
 | NodeLink extra routes | 0 | 4 | 2 | 4 |
 | WebSocket endpoints | 2 | 1 | 0 | 2 |
 | Events | 12 | 1 | 1 | 4 |
-| Track end reasons | 4 | 3 | 0 | 0 |
+| Track end reasons | 5 | 2 | 0 | 0 |
 | Filters | 4 | 0 | 1 | 2 |
-| Sources | 3 | 0 | 0 | 2 |
+| Sources | 5 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is
 `implemented` only when a test in `tests/compat` exercises it against the
