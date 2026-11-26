@@ -36,9 +36,10 @@ use axum::{Json, Router};
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_protocol::{
-    NexoraErrorEnvelope, NexoraEventMessage, NexoraFilters, NexoraGit, NexoraInfo, NexoraLoadResult, NexoraPlayer,
-    NexoraPlayerUpdate, NexoraPlayers, NexoraPlugins, NexoraReady, NexoraSession, NexoraSessionUpdate, NexoraStatsFrame,
-    NexoraTrack, NexoraTrackEndReason, NexoraTrackInfo, NexoraVersion, decode_track, encode_track,
+    NexoraErrorEnvelope, NexoraEventMessage, NexoraFilters, NexoraGit, NexoraInfo,
+    NexoraLoadResult, NexoraPlayer, NexoraPlayerUpdate, NexoraPlayers, NexoraPlugins, NexoraReady,
+    NexoraSession, NexoraSessionUpdate, NexoraStatsFrame, NexoraTrack, NexoraTrackEndReason,
+    NexoraTrackInfo, NexoraVersion, decode_track, encode_track,
 };
 use nexora_source_api::{ResolvedSource, TrackMetadata, TrackReference};
 use nexora_source_framework::rank_candidates;
@@ -164,7 +165,10 @@ pub fn router() -> Router<AppState> {
         .route("/nexora/decodetrack", get(decode_track_route))
         .route("/nexora/decodetracks", post(decode_tracks))
         .route("/nexora/sessions", post(create_session))
-        .route("/nexora/sessions/{id}", get(get_session).patch(patch_session))
+        .route(
+            "/nexora/sessions/{id}",
+            get(get_session).patch(patch_session),
+        )
         .route("/nexora/sessions/{id}/players", get(players))
         .route(
             "/nexora/sessions/{id}/players/{guild}",
@@ -374,10 +378,9 @@ async fn decode_track_route(
     Query(query): Query<DecodeQuery>,
 ) -> Result<Json<Value>, NexoraApiError> {
     authorize(&headers, &state)?;
-    let encoded = query
-        .encoded_track
-        .or(query.track)
-        .ok_or_else(|| NexoraApiError::bad_request("No track to decode provided", "/nexora/decodetrack"))?;
+    let encoded = query.encoded_track.or(query.track).ok_or_else(|| {
+        NexoraApiError::bad_request("No track to decode provided", "/nexora/decodetrack")
+    })?;
     let info = decode_track(&encoded)
         .map_err(|error| NexoraApiError::bad_request(error.to_string(), "/nexora/decodetrack"))?;
     let track = NexoraTrack {
@@ -404,8 +407,9 @@ async fn decode_tracks(
     }
     let mut tracks = Vec::with_capacity(request.tracks.len());
     for encoded in request.tracks {
-        let info = decode_track(&encoded)
-            .map_err(|error| NexoraApiError::bad_request(error.to_string(), "/nexora/decodetracks"))?;
+        let info = decode_track(&encoded).map_err(|error| {
+            NexoraApiError::bad_request(error.to_string(), "/nexora/decodetracks")
+        })?;
         tracks.push(NexoraTrack {
             encoded,
             info,
@@ -462,7 +466,9 @@ async fn patch_session(
         .nexora_sessions
         .set_resuming(&id, update.resuming, update.timeout)
         .await
-        .ok_or_else(|| NexoraApiError::not_found("Session not found", format!("/nexora/sessions/{id}")))?;
+        .ok_or_else(|| {
+            NexoraApiError::not_found("Session not found", format!("/nexora/sessions/{id}"))
+        })?;
     Ok(Json(
         serde_json::to_value(NexoraSession { resuming, timeout }).unwrap_or(Value::Null),
     ))
@@ -475,10 +481,9 @@ async fn get_session(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, NexoraApiError> {
     authorize(&headers, &state)?;
-    let session =
-        state.nexora_sessions.session(&id).await.ok_or_else(|| {
-            NexoraApiError::not_found("Session not found", format!("/nexora/sessions/{id}"))
-        })?;
+    let session = state.nexora_sessions.session(&id).await.ok_or_else(|| {
+        NexoraApiError::not_found("Session not found", format!("/nexora/sessions/{id}"))
+    })?;
     Ok(Json(
         serde_json::to_value(NexoraSession {
             resuming: session.resuming,
@@ -496,7 +501,10 @@ async fn players(
 ) -> Result<Json<Value>, NexoraApiError> {
     authorize(&headers, &state)?;
     let players = state.nexora_sessions.players(&id).await.ok_or_else(|| {
-        NexoraApiError::not_found("Session not found", format!("/nexora/sessions/{id}/players"))
+        NexoraApiError::not_found(
+            "Session not found",
+            format!("/nexora/sessions/{id}/players"),
+        )
     })?;
     let players: Vec<NexoraPlayer> = players.iter().map(|player| player.to_player()).collect();
     Ok(Json(
@@ -511,12 +519,16 @@ async fn player(
     Path((id, guild)): Path<(String, String)>,
 ) -> Result<Json<Value>, NexoraApiError> {
     authorize(&headers, &state)?;
-    let player = state.nexora_sessions.player(&id, &guild).await.ok_or_else(|| {
-        NexoraApiError::not_found(
-            "Player not found",
-            format!("/nexora/sessions/{id}/players/{guild}"),
-        )
-    })?;
+    let player = state
+        .nexora_sessions
+        .player(&id, &guild)
+        .await
+        .ok_or_else(|| {
+            NexoraApiError::not_found(
+                "Player not found",
+                format!("/nexora/sessions/{id}/players/{guild}"),
+            )
+        })?;
     Ok(Json(
         serde_json::to_value(player.to_player()).unwrap_or(Value::Null),
     ))
@@ -542,9 +554,11 @@ async fn delete_player(
         ));
     }
     state.nexora_sessions.remove_player(&id, &guild).await;
-    state.nexora_sessions.emit(NexoraEventMessage::PlayerDestroyed {
-        guild_id: guild.to_owned(),
-    });
+    state
+        .nexora_sessions
+        .emit(NexoraEventMessage::PlayerDestroyed {
+            guild_id: guild.to_owned(),
+        });
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -699,10 +713,12 @@ async fn patch_player(
 
     // The Nexora events report the change the client just made.
     if before.is_none() {
-        state.nexora_sessions.emit(NexoraEventMessage::PlayerCreated {
-            guild_id: guild.clone(),
-            player: Box::new(player.to_player()),
-        });
+        state
+            .nexora_sessions
+            .emit(NexoraEventMessage::PlayerCreated {
+                guild_id: guild.clone(),
+                player: Box::new(player.to_player()),
+            });
     }
     if let Some(volume) = update.volume
         && before
@@ -718,20 +734,24 @@ async fn patch_player(
         {
             let _ = state.sessions.set_volume(&native, level).await;
         }
-        state.nexora_sessions.emit(NexoraEventMessage::VolumeChanged {
-            guild_id: guild.clone(),
-            volume,
-        });
+        state
+            .nexora_sessions
+            .emit(NexoraEventMessage::VolumeChanged {
+                guild_id: guild.clone(),
+                volume,
+            });
     }
     if let Some(filters) = &update.filters
         && before
             .as_ref()
             .is_none_or(|previous| &previous.filters != filters)
     {
-        state.nexora_sessions.emit(NexoraEventMessage::FiltersChanged {
-            guild_id: guild.clone(),
-            filters: filters.clone(),
-        });
+        state
+            .nexora_sessions
+            .emit(NexoraEventMessage::FiltersChanged {
+                guild_id: guild.clone(),
+                filters: filters.clone(),
+            });
     }
     if let Some(paused) = update.paused
         && !new_track_requested
@@ -964,12 +984,14 @@ async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, 
     // reference's `WebSocketClosedEvent` does.
     if let Some(players) = state.nexora_sessions.players(&session_id).await {
         for player in players {
-            state.nexora_sessions.emit(NexoraEventMessage::WebSocketClosed {
-                guild_id: player.guild_id.clone(),
-                code: 1000,
-                reason: "socket closed".to_owned(),
-                by_remote: false,
-            });
+            state
+                .nexora_sessions
+                .emit(NexoraEventMessage::WebSocketClosed {
+                    guild_id: player.guild_id.clone(),
+                    code: 1000,
+                    reason: "socket closed".to_owned(),
+                    by_remote: false,
+                });
         }
     }
 }
@@ -1060,8 +1082,9 @@ async fn trackstream(
     authorize(&headers, &state)?;
     let info = decode_track(&encoded)
         .map_err(|error| NexoraApiError::bad_request(error.to_string(), "/nexora/trackstream"))?;
-    let track_id = TrackId::new(info.identifier.clone())
-        .map_err(|_| NexoraApiError::bad_request("invalid track identifier", "/nexora/trackstream"))?;
+    let track_id = TrackId::new(info.identifier.clone()).map_err(|_| {
+        NexoraApiError::bad_request("invalid track identifier", "/nexora/trackstream")
+    })?;
     let resolved = state
         .sources
         .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())

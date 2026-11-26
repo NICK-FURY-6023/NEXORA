@@ -136,7 +136,8 @@ mod tests {
 
     #[test]
     fn the_error_envelope_uses_the_reference_field_names() {
-        let envelope = NexoraErrorEnvelope::new(400, "Bad Request", "invalid", "/nexora/loadtracks");
+        let envelope =
+            NexoraErrorEnvelope::new(400, "Bad Request", "invalid", "/nexora/loadtracks");
         let value = serde_json::to_value(&envelope).unwrap();
         assert_eq!(value["status"], 400);
         assert_eq!(value["error"], "Bad Request");

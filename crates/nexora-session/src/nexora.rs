@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nexora_protocol::{
-    NexoraEventMessage, NexoraFilters, NexoraFrame, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrack,
-    NexoraVoiceState,
+    NexoraEventMessage, NexoraFilters, NexoraFrame, NexoraPlayer, NexoraPlayerState,
+    NexoraPlayerUpdateFrame, NexoraTrack, NexoraVoiceState,
 };
 use tokio::sync::{RwLock, broadcast};
 

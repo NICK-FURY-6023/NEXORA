@@ -11,7 +11,7 @@ use nexora_error::NexoraResult;
 use nexora_grpc::NexoraGrpcService;
 use nexora_grpc::nexora::session_service_server::SessionServiceServer;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::{SessionManager, NexoraSessionManager};
+use nexora_session::{NexoraSessionManager, SessionManager};
 use nexora_source_framework::{
     AuthorizedHttpAdapter, LocalMediaAdapter, PublicRadioAdapter, RadioStation, SourceRegistry,
 };

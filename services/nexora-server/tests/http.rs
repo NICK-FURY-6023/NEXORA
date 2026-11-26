@@ -4,7 +4,7 @@ use base64::Engine;
 use nexora_common::SessionId;
 use nexora_protocol::SessionEventType;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::{SessionManager, NexoraSessionManager};
+use nexora_session::{NexoraSessionManager, SessionManager};
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use std::collections::HashMap;
 use std::fs;

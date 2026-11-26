@@ -16,7 +16,9 @@ use tokio::task::JoinHandle;
 
 pub mod nexora;
 
-pub use nexora::{PLAYER_UPDATE_INTERVAL_SECONDS, NexoraPlayerRecord, NexoraSessionContext, NexoraSessionManager};
+pub use nexora::{
+    NexoraPlayerRecord, NexoraSessionContext, NexoraSessionManager, PLAYER_UPDATE_INTERVAL_SECONDS,
+};
 
 /// Signals sent from session state to the single active playback task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

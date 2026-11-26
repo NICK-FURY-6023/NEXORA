@@ -13,9 +13,10 @@ use std::f32::consts::PI;
 
 use crate::NexoraResult;
 use nexora_protocol::nexora::{
-    NexoraChannelMixFilter, NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter, NexoraEqualizerBand,
-    NexoraFilters, NexoraHighPassFilter, NexoraKaraokeFilter, NexoraLowPassFilter, NexoraPhaserFilter,
-    NexoraRotationFilter, NexoraTimescaleFilter, NexoraTremoloFilter, NexoraVibratoFilter,
+    NexoraChannelMixFilter, NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter,
+    NexoraEqualizerBand, NexoraFilters, NexoraHighPassFilter, NexoraKaraokeFilter,
+    NexoraLowPassFilter, NexoraPhaserFilter, NexoraRotationFilter, NexoraTimescaleFilter,
+    NexoraTremoloFilter, NexoraVibratoFilter,
 };
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ use nexora_protocol::NexoraTrack;
 use nexora_protocol::NexoraTrackInfo;
 use nexora_protocol::decode_track;
 use nexora_server::{AppState, RuntimeMetrics, build_router};
-use nexora_session::{SessionManager, NexoraSessionManager};
+use nexora_session::{NexoraSessionManager, SessionManager};
 use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use tokio_stream::StreamExt;
 use tower::ServiceExt;
@@ -371,7 +371,11 @@ async fn compat_nexora_player_routes() {
     assert_eq!(value["paused"], true);
 
     // The list carries it.
-    let value = get_json(app.clone(), &format!("/nexora/sessions/{session_id}/players")).await;
+    let value = get_json(
+        app.clone(),
+        &format!("/nexora/sessions/{session_id}/players"),
+    )
+    .await;
     assert_eq!(value["players"].as_array().unwrap().len(), 1);
     assert_eq!(value["players"][0]["guildId"], "1234");
 

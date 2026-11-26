@@ -7,15 +7,17 @@ pub mod nexora;
 
 pub use nexora::{
     DEFAULT_RESUME_TIMEOUT_SECONDS, NEXORA_PROTOCOL_VERSION, NexoraChannelMixFilter,
-    NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter, NexoraEqualizerBand, NexoraErrorEnvelope,
-    NexoraErrorSeverity, NexoraEventMessage, NexoraException, NexoraFilters, NexoraFrame, NexoraGit, NexoraHighPassFilter,
-    NexoraInfo, NexoraKaraokeFilter, NexoraLoadResult, NexoraLoadType, NexoraLowPassFilter, NexoraNullable, NexoraOp,
-    NexoraPhaserFilter, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdate, NexoraPlayerUpdateFrame,
-    NexoraPlayerUpdateTrack, NexoraPlayers, NexoraPlaylist, NexoraPlaylistInfo, NexoraPlugin, NexoraPlugins, NexoraReady,
-    NexoraRotationFilter, NexoraSearchResult, NexoraSession, NexoraSessionUpdate, NexoraStatsFrame, NexoraTimescaleFilter,
-    NexoraTrack, NexoraTrackEndReason, NexoraTrackInfo, NexoraTremoloFilter, NexoraVersion, NexoraVibratoFilter,
-    NexoraVoiceState, check_protocol_version, decode_binary_track, decode_track, encode_binary_track,
-    encode_track,
+    NexoraCompressorFilter, NexoraDistortionFilter, NexoraEchoFilter, NexoraEqualizerBand,
+    NexoraErrorEnvelope, NexoraErrorSeverity, NexoraEventMessage, NexoraException, NexoraFilters,
+    NexoraFrame, NexoraGit, NexoraHighPassFilter, NexoraInfo, NexoraKaraokeFilter,
+    NexoraLoadResult, NexoraLoadType, NexoraLowPassFilter, NexoraNullable, NexoraOp,
+    NexoraPhaserFilter, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdate,
+    NexoraPlayerUpdateFrame, NexoraPlayerUpdateTrack, NexoraPlayers, NexoraPlaylist,
+    NexoraPlaylistInfo, NexoraPlugin, NexoraPlugins, NexoraReady, NexoraRotationFilter,
+    NexoraSearchResult, NexoraSession, NexoraSessionUpdate, NexoraStatsFrame,
+    NexoraTimescaleFilter, NexoraTrack, NexoraTrackEndReason, NexoraTrackInfo, NexoraTremoloFilter,
+    NexoraVersion, NexoraVibratoFilter, NexoraVoiceState, check_protocol_version,
+    decode_binary_track, decode_track, encode_binary_track, encode_track,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

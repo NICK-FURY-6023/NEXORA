@@ -205,7 +205,8 @@ mod tests {
 
     #[test]
     fn an_explicit_null_end_time_differs_from_an_absent_one() {
-        let update: NexoraPlayerUpdate = serde_json::from_value(json!({ "endTime": null })).unwrap();
+        let update: NexoraPlayerUpdate =
+            serde_json::from_value(json!({ "endTime": null })).unwrap();
         assert_eq!(update.end_time, Some(None));
 
         let absent: NexoraPlayerUpdate = serde_json::from_value(json!({})).unwrap();
@@ -214,7 +215,8 @@ mod tests {
 
     #[test]
     fn a_present_end_time_keeps_its_value() {
-        let update: NexoraPlayerUpdate = serde_json::from_value(json!({ "endTime": 5000 })).unwrap();
+        let update: NexoraPlayerUpdate =
+            serde_json::from_value(json!({ "endTime": 5000 })).unwrap();
         assert_eq!(update.end_time, Some(Some(5000)));
     }
 

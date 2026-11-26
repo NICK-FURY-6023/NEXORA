@@ -49,7 +49,10 @@ mod tests {
         assert_eq!(NexoraOp::Stats.as_str(), "stats");
         assert_eq!(NexoraOp::PlayerUpdate.as_str(), "playerUpdate");
         assert_eq!(NexoraOp::Event.as_str(), "event");
-        assert_eq!(NexoraOp::from_wire("playerUpdate"), Some(NexoraOp::PlayerUpdate));
+        assert_eq!(
+            NexoraOp::from_wire("playerUpdate"),
+            Some(NexoraOp::PlayerUpdate)
+        );
         assert_eq!(NexoraOp::from_wire("nope"), None);
     }
 

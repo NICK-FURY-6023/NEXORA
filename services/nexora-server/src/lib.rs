@@ -18,12 +18,13 @@ use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
 use nexora_protocol::{
-    CreateSessionRequest, HealthStatus, PlayRequest, SearchRequest, NexoraErrorSeverity,
-    NexoraEventMessage, NexoraException, NexoraFilters, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrackEndReason,
+    CreateSessionRequest, HealthStatus, NexoraErrorSeverity, NexoraEventMessage, NexoraException,
+    NexoraFilters, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrackEndReason, PlayRequest,
+    SearchRequest,
 };
 use nexora_session::{
-    PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal, SessionManager, NexoraPlayerRecord,
-    NexoraSessionManager,
+    NexoraPlayerRecord, NexoraSessionManager, PLAYER_UPDATE_INTERVAL_SECONDS, PlaybackSignal,
+    SessionManager,
 };
 use nexora_source_api::{AuthContext, ResolvedSource, SourceError, TrackReference};
 use nexora_source_framework::{SourceRegistry, rank_candidates};

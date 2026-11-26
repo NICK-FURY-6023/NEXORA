@@ -77,7 +77,11 @@ impl NexoraLoadResult {
     }
 
     /// A playlist was loaded.
-    pub fn playlist(name: impl Into<String>, selected_track: i64, tracks: Vec<NexoraTrack>) -> Self {
+    pub fn playlist(
+        name: impl Into<String>,
+        selected_track: i64,
+        tracks: Vec<NexoraTrack>,
+    ) -> Self {
         let playlist = NexoraPlaylist {
             info: NexoraPlaylistInfo {
                 name: name.into(),
