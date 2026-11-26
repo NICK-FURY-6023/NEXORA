@@ -23,6 +23,7 @@ nexora-protocol = { path = "../../crates/nexora-protocol" }
 nexora-telemetry = { path = "../../crates/nexora-telemetry" }
 nexora-source-api = { path = "../../crates/nexora-source-api" }
 nexora-source-framework = { path = "../../crates/nexora-source-framework" }
+nexora-source-universal = { path = "../../crates/nexora-source-universal" }
 nexora-session = { path = "../../crates/nexora-session" }
 nexora-grpc = { path = "../../crates/nexora-grpc" }
 nexora-audio-pipeline = { path = "../../crates/nexora-audio-pipeline" }

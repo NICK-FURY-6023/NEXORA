@@ -1476,6 +1476,7 @@ dependencies = [
  "nexora-session",
  "nexora-source-api",
  "nexora-source-framework",
+ "nexora-source-universal",
  "nexora-telemetry",
  "serde",
  "serde_json",

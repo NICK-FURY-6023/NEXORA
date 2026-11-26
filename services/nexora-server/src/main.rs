@@ -10,11 +10,13 @@ use nexora_config::NexoraConfig;
 use nexora_error::NexoraResult;
 use nexora_grpc::NexoraGrpcService;
 use nexora_grpc::nexora::session_service_server::SessionServiceServer;
-use nexora_server::{AppState, RuntimeMetrics, build_router};
+use nexora_server::{AppState, RuntimeMetrics, build_router, register_builtin_sources};
 use nexora_session::{NexoraSessionManager, SessionManager};
 use nexora_source_framework::{
     AuthorizedHttpAdapter, LocalMediaAdapter, PublicRadioAdapter, RadioStation, SourceRegistry,
 };
+use nexora_source_universal::PLATFORM_IDS;
+use nexora_source_universal::oauth::TokenStore;
 use nexora_telemetry::init_tracing;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
@@ -68,6 +70,19 @@ async fn main() -> NexoraResult<()> {
         let _ = sources.register(Box::new(adapter));
     }
     let _ = sources.register(Box::new(AuthorizedHttpAdapter));
+
+    // The provider adapters need their own tokens; a provider without one
+    // still registers so the rest of the surface stays reachable.
+    let mut tokens = TokenStore::new();
+    for provider in PLATFORM_IDS {
+        let variable = format!("NEXORA_TOKEN_{}", provider.replace('-', "_").to_uppercase());
+        if let Ok(token) = env::var(&variable)
+            && !token.is_empty()
+        {
+            tokens.put(provider, token);
+        }
+    }
+    register_builtin_sources(&sources, Arc::new(tokens));
 
     let password = args
         .password

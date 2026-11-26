@@ -44,6 +44,17 @@ impl AuthContext {
         &self.application
     }
 
+    /// Creates a context whose application id is already validated.
+    ///
+    /// The id comes from `ApplicationId::from_static`, so it was checked
+    /// when the program was compiled and this cannot fail.
+    pub fn from_validated(application: ApplicationId, scopes: Vec<String>) -> Self {
+        Self {
+            application,
+            scopes,
+        }
+    }
+
     pub fn allows(&self, scope: &str) -> bool {
         self.scopes.iter().any(|value| value == scope)
     }
@@ -63,8 +74,10 @@ impl TrackMetadata {
     pub fn local(track_id: impl Into<String>, title: impl Into<String>, path: PathBuf) -> Self {
         let _ = path;
         Self {
-            track_id: TrackId::new(track_id)
-                .unwrap_or_else(|_| TrackId::new("unknown").expect("static id")),
+            // A file name that fails the identifier rules still needs a
+            // track id, so it falls back to a constant that was validated
+            // when the program was compiled.
+            track_id: TrackId::new(track_id).unwrap_or_else(|_| TrackId::from_static("unknown")),
             title: title.into(),
             artist: None,
             duration_ms: None,

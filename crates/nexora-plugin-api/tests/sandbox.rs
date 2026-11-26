@@ -63,6 +63,53 @@ fn network_rejects_a_non_http_scheme() {
     assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
+#[test]
+fn the_query_cannot_decide_the_host() {
+    let error = network_sandbox()
+        .check_network("https://evil.example.org/track?next=api.example.com")
+        .expect_err("the query must not decide the host");
+    assert_eq!(error.code(), ErrorCode::Service);
+}
+
+#[test]
+fn the_fragment_cannot_decide_the_host() {
+    let error = network_sandbox()
+        .check_network("https://evil.example.org/track#api.example.com")
+        .expect_err("the fragment must not decide the host");
+    assert_eq!(error.code(), ErrorCode::Service);
+}
+
+#[test]
+fn userinfo_cannot_decide_the_host() {
+    let error = network_sandbox()
+        .check_network("https://api.example.com@evil.com/track")
+        .expect_err("the userinfo must not decide the host");
+    assert_eq!(error.code(), ErrorCode::Service);
+}
+
+fn loopback_sandbox(host: &str) -> PluginSandbox {
+    PluginSandbox::from_manifest(&manifest_with(vec![PluginCapability::Network(
+        host.to_owned(),
+    )]))
+    .expect("valid manifest")
+}
+
+#[test]
+fn a_numeric_loopback_host_is_denied() {
+    for host in [
+        "2130706433",
+        "0x7f000001",
+        "127.1",
+        "127.0.0.1.",
+        "::ffff:127.0.0.1",
+    ] {
+        let error = loopback_sandbox(host)
+            .check_network(&format!("https://{host}/track"))
+            .expect_err("a loopback host must be denied");
+        assert_eq!(error.code(), ErrorCode::Service, "{host} must be denied");
+    }
+}
+
 fn filesystem_sandbox() -> PluginSandbox {
     PluginSandbox::from_manifest(&manifest_with(vec![PluginCapability::FileSystem(
         "data".to_owned(),
@@ -142,6 +189,38 @@ fn the_granted_capability_set_comes_from_the_manifest() {
     assert!(sandbox.grants(&PluginCapability::Network("api.example.com".to_owned())));
     assert!(!sandbox.grants(&PluginCapability::Network("evil.example.org".to_owned())));
     assert!(!sandbox.grants(&PluginCapability::AudioDecode));
+}
+
+#[test]
+fn grants_refuses_a_traversing_filesystem_path() {
+    assert!(!filesystem_sandbox().grants(&PluginCapability::FileSystem(
+        "data/../../etc/passwd".to_owned()
+    )));
+}
+
+#[test]
+fn a_limit_cannot_be_raised_after_the_sandbox_is_built() {
+    let mut policy = SandboxPolicy::deny_all();
+    policy.memory_limit_mb = 1;
+    let mut sandbox = PluginSandbox::new(policy, Vec::new());
+    sandbox.set_memory_limit_mb(u64::MAX);
+    let error = sandbox
+        .allocate(2 * 1024 * 1024)
+        .expect_err("the memory limit must not be raised");
+    assert_eq!(error.code(), ErrorCode::Service);
+}
+
+#[test]
+fn the_time_limit_cannot_be_raised_after_the_sandbox_is_built() {
+    let mut policy = SandboxPolicy::deny_all();
+    policy.time_limit_ms = 0;
+    let mut sandbox = PluginSandbox::new(policy, Vec::new());
+    std::thread::sleep(Duration::from_millis(5));
+    sandbox.set_time_limit_ms(60_000);
+    let error = sandbox
+        .check_time()
+        .expect_err("the time limit must not be raised");
+    assert_eq!(error.code(), ErrorCode::Service);
 }
 
 #[test]

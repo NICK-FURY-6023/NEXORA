@@ -219,15 +219,48 @@ fn parse_session_id(value: &str) -> Result<SessionId, ApiError> {
 }
 
 pub(crate) fn internal_auth() -> AuthContext {
-    AuthContext::new(
-        "nexora-server",
+    // The application id is a constant that was validated when the program
+    // was compiled, so this path cannot fail.
+    AuthContext::from_validated(
+        nexora_common::ApplicationId::from_static("nexora-server"),
         vec![
             "media.local".to_string(),
             "radio.public".to_string(),
             "http.stream".to_string(),
         ],
     )
-    .expect("static auth context")
+}
+
+/// Registers every source adapter NEXORA ships.
+///
+/// The token-gated providers share one token store: a provider without a
+/// token still registers and reports `Unauthorized` until one is supplied,
+/// so the rest of the surface stays reachable.
+pub fn register_builtin_sources(
+    sources: &SourceRegistry,
+    tokens: std::sync::Arc<nexora_source_universal::oauth::TokenStore>,
+) {
+    use nexora_source_universal::apple::AppleMusicSource;
+    use nexora_source_universal::bandcamp::BandcampSource;
+    use nexora_source_universal::deezer::DeezerSource;
+    use nexora_source_universal::soundcloud::SoundcloudSource;
+    use nexora_source_universal::spotify::SpotifySource;
+    use nexora_source_universal::tidal::TidalSource;
+    use nexora_source_universal::transport::InternetArchiveSource;
+    use nexora_source_universal::youtube::YouTubeSource;
+
+    let _ = sources.register(Box::new(InternetArchiveSource::new()));
+    let _ = sources.register(Box::new(BandcampSource::new()));
+    let _ = sources.register(Box::new(YouTubeSource::new(tokens.get("youtube"))));
+    let _ = sources.register(Box::new(AppleMusicSource::new(std::sync::Arc::clone(
+        &tokens,
+    ))));
+    let _ = sources.register(Box::new(DeezerSource::new(std::sync::Arc::clone(&tokens))));
+    let _ = sources.register(Box::new(SoundcloudSource::new(std::sync::Arc::clone(
+        &tokens,
+    ))));
+    let _ = sources.register(Box::new(SpotifySource::new(std::sync::Arc::clone(&tokens))));
+    let _ = sources.register(Box::new(TidalSource::new(std::sync::Arc::clone(&tokens))));
 }
 
 pub fn build_router(state: AppState) -> Router {

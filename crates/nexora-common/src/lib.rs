@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -36,14 +37,38 @@ macro_rules! define_identifier {
         /// A validated identifier used by NEXORA domain objects.
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
         #[serde(try_from = "String")]
-        pub struct $name(String);
+        pub struct $name(Cow<'static, str>);
 
         impl $name {
             /// Creates an identifier after validating its contents.
             pub fn new(value: impl Into<String>) -> NexoraResult<Self> {
                 let value = value.into();
                 validate_identifier(&value)?;
-                Ok(Self(value))
+                Ok(Self(Cow::Owned(value)))
+            }
+
+            /// Creates an identifier whose value is checked at compile time.
+            ///
+            /// A value that breaks the identifier rules fails the build
+            /// rather than the running process, so a constant identifier
+            /// needs no runtime validation and no fallback path.
+            pub const fn from_static(value: &'static str) -> Self {
+                let bytes = value.as_bytes();
+                assert!(!bytes.is_empty(), "identifier must not be empty");
+                assert!(
+                    bytes.len() <= MAX_IDENTIFIER_LENGTH,
+                    "identifier must not exceed 128 characters"
+                );
+                let mut index = 0;
+                while index < bytes.len() {
+                    let byte = bytes[index];
+                    assert!(
+                        byte.is_ascii() && !byte.is_ascii_control(),
+                        "identifier must contain only printable ASCII characters"
+                    );
+                    index += 1;
+                }
+                Self(Cow::Borrowed(value))
             }
 
             /// Returns the identifier as a string slice.
@@ -53,7 +78,7 @@ macro_rules! define_identifier {
 
             /// Consumes the identifier and returns its owned value.
             pub fn into_inner(self) -> String {
-                self.0
+                self.0.into_owned()
             }
         }
 
@@ -219,6 +244,18 @@ mod tests {
         assert_eq!(session_id.as_str(), "session-123");
         assert_eq!(track_id.as_ref(), "track_456");
         assert_eq!(application_id.to_string(), "application-789");
+    }
+
+    #[test]
+    fn a_static_identifier_is_checked_when_the_program_is_compiled() {
+        // The value is valid, so this is a plain constant.
+        let application = ApplicationId::from_static("nexora-server");
+        assert_eq!(application.as_str(), "nexora-server");
+        assert_eq!(application.clone().into_inner(), "nexora-server");
+
+        // The same value through the validating constructor agrees.
+        let validated = ApplicationId::new("nexora-server").expect("valid application identifier");
+        assert_eq!(application, validated);
     }
 
     #[test]

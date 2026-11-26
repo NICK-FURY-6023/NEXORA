@@ -95,6 +95,27 @@ fn ssrf_validation_rejects_private_targets() {
 }
 
 #[test]
+fn ssrf_validation_rejects_a_smuggled_private_target() {
+    for url in [
+        "https://localhost?@example.com/stream",
+        "https://2130706433/stream",
+        "https://0x7f000001/stream",
+        "https://127.1/stream",
+        "https://127.0.0.1./stream",
+        "https://[::ffff:127.0.0.1]/stream",
+        "https://localhost./stream",
+    ] {
+        assert!(
+            matches!(
+                validate_public_http_url(url),
+                Err(SourceError::InvalidInput)
+            ),
+            "{url} must be rejected"
+        );
+    }
+}
+
+#[test]
 fn local_adapter_rejects_traversal() {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)

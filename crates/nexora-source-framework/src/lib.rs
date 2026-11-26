@@ -211,24 +211,77 @@ pub fn validate_public_http_url(url: &str) -> Result<(), SourceError> {
         .strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))
         .ok_or(SourceError::InvalidInput)?;
-    let authority = rest.split('/').next().unwrap_or_default();
-    let host_port = authority.rsplit('@').next().unwrap_or_default();
-    let host = if host_port.starts_with('[') {
-        host_port
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return Err(SourceError::InvalidInput);
+    }
+    let host = if authority.starts_with('[') {
+        authority
             .split(']')
             .next()
             .unwrap_or_default()
             .trim_start_matches('[')
+    } else if authority.matches(':').count() > 1 {
+        authority
     } else {
-        host_port.split(':').next().unwrap_or_default()
+        authority.split(':').next().unwrap_or_default()
     };
-    if host.is_empty()
-        || host.eq_ignore_ascii_case("localhost")
-        || host.to_ascii_lowercase().ends_with(".localhost")
-    {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() || host == "localhost" || host.ends_with(".localhost") {
         return Err(SourceError::InvalidInput);
     }
-    if let Ok(address) = host.parse::<std::net::IpAddr>() {
+    let numeric = if let Some(hex) = host.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).ok()
+    } else if host.bytes().all(|byte| byte.is_ascii_digit()) {
+        host.parse::<u64>().ok()
+    } else {
+        None
+    }
+    .filter(|value| *value <= u64::from(u32::MAX))
+    .map(|value| {
+        let value = value as u32;
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+            (value >> 24) as u8,
+            (value >> 16) as u8,
+            (value >> 8) as u8,
+            value as u8,
+        ))
+    });
+    let short_v4 = {
+        let parts: Vec<&str> = host.split('.').collect();
+        if (2..=3).contains(&parts.len())
+            && parts
+                .iter()
+                .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+        {
+            parts
+                .iter()
+                .map(|part| part.parse::<u32>().ok())
+                .collect::<Option<Vec<u32>>>()
+                .filter(|octets| octets.iter().all(|octet| *octet <= 255))
+                .map(|octets| {
+                    let mut values = [0u8; 4];
+                    for (index, value) in octets.iter().enumerate() {
+                        values[index] = *value as u8;
+                    }
+                    if octets.len() == 2 {
+                        values[3] = values[1];
+                        values[1] = 0;
+                    } else {
+                        values[3] = values[2];
+                        values[2] = values[1];
+                        values[1] = 0;
+                    }
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::from(values))
+                })
+        } else {
+            None
+        }
+    };
+    let address = numeric
+        .or(short_v4)
+        .or_else(|| host.parse::<std::net::IpAddr>().ok());
+    if let Some(address) = address {
         let blocked = match address {
             std::net::IpAddr::V4(value) => {
                 value.is_loopback()
@@ -238,7 +291,12 @@ pub fn validate_public_http_url(url: &str) -> Result<(), SourceError> {
                     || value.is_multicast()
             }
             std::net::IpAddr::V6(value) => {
-                value.is_loopback() || value.is_unspecified() || value.is_multicast()
+                value.is_loopback()
+                    || value.is_unspecified()
+                    || value.is_multicast()
+                    || value
+                        .to_ipv4()
+                        .is_some_and(|mapped| mapped.is_loopback() || mapped.is_private())
             }
         };
         if blocked {

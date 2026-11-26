@@ -100,6 +100,23 @@ fn soundcloud_hosts_are_allowlisted() {
 }
 
 #[test]
+fn soundcloud_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
+    for url in [
+        "https://api-v2.soundcloud.com:443@evil.com/artist/song",
+        "https://api-v2.soundcloud.com@evil.com/artist/song",
+        "https://evil.com?@api-v2.soundcloud.com/artist/song",
+        "https://evil.com#@api-v2.soundcloud.com/artist/song",
+    ] {
+        assert!(safe_soundcloud_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
+fn an_uppercase_host_is_still_the_allowed_host() {
+    assert!(safe_soundcloud_url("https://API-V2.SOUNDCLOUD.COM/tracks/1").is_ok());
+}
+
+#[test]
 fn soundcloud_source_has_a_stable_identity() {
     use nexora_source_api::{AudioSource, SourceCapabilities};
 

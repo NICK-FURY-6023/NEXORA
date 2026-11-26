@@ -23,16 +23,19 @@ pub fn parse_oembed(body: &str) -> Result<TrackMetadata, SourceError> {
 }
 
 pub fn safe_bandcamp_url(url: &str) -> Result<&str, SourceError> {
-    let path = url
+    let rest = url
         .strip_prefix("https://")
         .ok_or(SourceError::InvalidInput)?;
-    let host = path
-        .split('/')
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority
+        .rsplit('@')
         .next()
         .unwrap_or("")
         .split(':')
         .next()
-        .unwrap_or("");
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     if host == "bandcamp.com"
         || host == "www.bandcamp.com"
         || host.ends_with(".bandcamp.com")
@@ -92,24 +95,12 @@ pub fn parse_tralbum_ids(body: &str) -> Result<TralbumIds, SourceError> {
         .get("html")
         .and_then(Value::as_str)
         .ok_or(SourceError::InvalidInput)?;
-    let start = html
-        .find("data-tralbum=\"")
-        .ok_or(SourceError::InvalidInput)?
-        + "data-tralbum=\"".len();
-    let end = html[start..]
-        .find('"')
-        .map(|offset| start + offset)
+    let marker = "data-tralbum=";
+    let start = html.find(marker).ok_or(SourceError::InvalidInput)? + marker.len();
+    let raw = html[start..].trim_start_matches(['\'', '"']);
+    let tralbum = first_json_value(raw)
+        .or_else(|| first_json_value(&decode_entities(raw)))
         .ok_or(SourceError::InvalidInput)?;
-    let encoded = &html[start..end];
-    // The embed carries its JSON HTML-escaped; the entity names are split so
-    // they cannot be mistaken for markup.
-    let decoded = encoded
-        .replace(concat!("&", "quot;"), "\"")
-        .replace(concat!("&", "#39;"), "'")
-        .replace(concat!("&", "lt;"), "<")
-        .replace(concat!("&", "gt;"), ">")
-        .replace(concat!("&", "amp;"), "&");
-    let tralbum: Value = serde_json::from_str(&decoded).map_err(|_| SourceError::InvalidInput)?;
 
     let band_id = tralbum
         .get("band_id")
@@ -129,6 +120,25 @@ pub fn parse_tralbum_ids(body: &str) -> Result<TralbumIds, SourceError> {
         tralbum_id,
         tralbum_type,
     })
+}
+
+/// Reads the first JSON value in the text, ignoring whatever follows it.
+fn first_json_value(text: &str) -> Option<Value> {
+    serde_json::Deserializer::from_str(text)
+        .into_iter::<Value>()
+        .next()
+        .and_then(Result::ok)
+}
+
+/// The embed carries its JSON HTML-escaped; the entity names are split so
+/// they cannot be mistaken for markup.
+fn decode_entities(value: &str) -> String {
+    value
+        .replace(concat!("&", "quot;"), "\"")
+        .replace(concat!("&", "#39;"), "'")
+        .replace(concat!("&", "lt;"), "<")
+        .replace(concat!("&", "gt;"), ">")
+        .replace(concat!("&", "amp;"), "&")
 }
 
 /// Resolves the tralbum details payload to its mp3 stream.

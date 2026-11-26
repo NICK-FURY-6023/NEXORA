@@ -102,6 +102,23 @@ fn apple_hosts_are_allowlisted() {
 }
 
 #[test]
+fn apple_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
+    for url in [
+        "https://audio-ssl.itunes.apple.com:443@evil.com/x",
+        "https://api.music.apple.com@evil.com/x",
+        "https://evil.com?@api.music.apple.com/x",
+        "https://evil.com#@api.music.apple.com/x",
+    ] {
+        assert!(safe_apple_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
+fn an_uppercase_host_is_still_the_allowed_host() {
+    assert!(safe_apple_url("https://API.MUSIC.APPLE.COM/v1/catalog").is_ok());
+}
+
+#[test]
 fn apple_source_has_a_stable_identity() {
     use nexora_source_api::{AudioSource, SourceCapabilities};
 

@@ -64,6 +64,32 @@ fn temp_media_root() -> PathBuf {
 }
 
 #[tokio::test]
+async fn every_builtin_source_adapter_is_registered() {
+    use nexora_server::register_builtin_sources;
+    use nexora_source_universal::oauth::TokenStore;
+
+    let sources = SourceRegistry::new();
+    register_builtin_sources(&sources, Arc::new(TokenStore::new()));
+
+    let ids = sources.source_ids();
+    for expected in [
+        "internet-archive",
+        "bandcamp-public",
+        "soundcloud-public",
+        "youtube",
+        "spotify",
+        "deezer",
+        "apple-music",
+        "tidal",
+    ] {
+        assert!(
+            ids.contains(&expected),
+            "the {expected} adapter is registered: {ids:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn health_endpoint_is_available() {
     let response = test_app()
         .oneshot(

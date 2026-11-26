@@ -24,16 +24,19 @@ pub fn require_client_id(store: &TokenStore) -> Result<String, SourceError> {
 }
 
 pub fn safe_soundcloud_url(url: &str) -> Result<&str, SourceError> {
-    let path = url
+    let rest = url
         .strip_prefix("https://")
         .ok_or(SourceError::InvalidInput)?;
-    let host = path
-        .split('/')
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority
+        .rsplit('@')
         .next()
         .unwrap_or("")
         .split(':')
         .next()
-        .unwrap_or("");
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     if host == "soundcloud.com" || host.ends_with(".soundcloud.com") {
         Ok(url)
     } else {
@@ -104,9 +107,22 @@ pub fn resolve_details(body: &str, client_id: &str) -> Result<ResolvedSource, So
     let root: Value = serde_json::from_str(body).map_err(|_| SourceError::Unavailable)?;
     let url = transcoding_url(&root).ok_or(SourceError::NotFound)?;
     safe_soundcloud_url(url)?;
-    let separator = if url.contains('?') { '&' } else { '?' };
+    let mut parsed = reqwest::Url::parse(url).map_err(|_| SourceError::Unavailable)?;
+    let kept: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .filter(|(key, _)| key != "client_id")
+        .collect();
+    {
+        let mut pairs = parsed.query_pairs_mut();
+        pairs.clear();
+        for (key, value) in kept {
+            pairs.append_pair(&key, &value);
+        }
+        pairs.append_pair("client_id", client_id);
+    }
     Ok(ResolvedSource::Stream {
-        url: format!("{url}{separator}client_id={client_id}"),
+        url: parsed.to_string(),
     })
 }
 
@@ -202,7 +218,12 @@ impl AudioSource for SoundcloudSource {
     }
 
     async fn health(&self, _context: &AuthContext) -> Result<SourceHealth, SourceError> {
-        let client_id = require_client_id(&self.tokens)?;
+        let client_id = match require_client_id(&self.tokens) {
+            Ok(client_id) => client_id,
+            Err(error) => {
+                return Ok(SourceHealth::unhealthy(SOURCE_ID, format!("{error:?}")));
+            }
+        };
         match self.get_text(Self::search_url("health", &client_id)?).await {
             Ok(_) => Ok(SourceHealth::healthy(SOURCE_ID)),
             Err(error) => Ok(SourceHealth::unhealthy(SOURCE_ID, format!("{error:?}"))),

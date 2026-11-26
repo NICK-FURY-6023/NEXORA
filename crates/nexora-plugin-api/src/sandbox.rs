@@ -78,12 +78,12 @@ impl PluginSandbox {
 
     /// Shortens the time limit for the running plugin.
     pub fn set_time_limit_ms(&mut self, time_limit_ms: u64) {
-        self.policy.time_limit_ms = time_limit_ms;
+        self.policy.time_limit_ms = self.policy.time_limit_ms.min(time_limit_ms);
     }
 
     /// Shortens the memory limit for the running plugin.
     pub fn set_memory_limit_mb(&mut self, memory_limit_mb: u64) {
-        self.policy.memory_limit_mb = memory_limit_mb;
+        self.policy.memory_limit_mb = self.policy.memory_limit_mb.min(memory_limit_mb);
     }
 
     /// Reports whether the plugin holds a capability.
@@ -99,6 +99,9 @@ impl PluginSandbox {
             }
             PluginCapability::FileSystem(path) => {
                 self.policy.filesystem
+                    && Path::new(path)
+                        .components()
+                        .all(|component| matches!(component, Component::Normal(_)))
                     && self
                         .policy
                         .allowed_paths
@@ -218,13 +221,17 @@ fn host_of(url: &str) -> Option<String> {
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
-    let host = rest.split('/').next().unwrap_or("");
-    let host = host.split('@').next_back().unwrap_or(host);
-    let host = host.split(':').next().unwrap_or("");
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let hostport = authority.rsplit('@').next().unwrap_or("");
+    let host = match hostport.strip_prefix('[') {
+        Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
+        None if hostport.matches(':').count() > 1 => hostport,
+        None => hostport.split(':').next().unwrap_or(""),
+    };
     if host.is_empty() {
         None
     } else {
-        Some(host.to_ascii_lowercase())
+        Some(host.trim_end_matches('.').to_ascii_lowercase())
     }
 }
 
@@ -253,29 +260,86 @@ fn path_matches(allowed: &str, path: &str) -> bool {
     candidate == root || candidate.starts_with(&format!("{root}/"))
 }
 
+fn numeric_v4(host: &str) -> Option<IpAddr> {
+    let value = if let Some(hex) = host.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).ok()?
+    } else if host.bytes().all(|byte| byte.is_ascii_digit()) {
+        host.parse::<u64>().ok()?
+    } else {
+        return None;
+    };
+    if value > u64::from(u32::MAX) {
+        return None;
+    }
+    let value = value as u32;
+    Some(IpAddr::V4(std::net::Ipv4Addr::new(
+        (value >> 24) as u8,
+        (value >> 16) as u8,
+        (value >> 8) as u8,
+        value as u8,
+    )))
+}
+
+fn short_v4(host: &str) -> Option<IpAddr> {
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.is_empty()
+        || parts.len() > 3
+        || !parts
+            .iter()
+            .all(|part| part.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return None;
+    }
+    let mut octets = [0u8; 4];
+    for (index, part) in parts.iter().enumerate() {
+        let value = part.parse::<u32>().ok()?;
+        if value > 255 {
+            return None;
+        }
+        octets[index] = value as u8;
+    }
+    if parts.len() < 3 {
+        octets[3] = octets[2];
+        octets[2] = octets[1];
+        octets[1] = 0;
+    }
+    Some(IpAddr::V4(std::net::Ipv4Addr::from(octets)))
+}
+
+fn is_private_address(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(value) => {
+            value.is_loopback()
+                || value.is_private()
+                || value.is_link_local()
+                || value.is_unspecified()
+                || value.is_multicast()
+                || value.is_broadcast()
+        }
+        IpAddr::V6(value) => {
+            value.is_loopback()
+                || value.is_unspecified()
+                || value.is_multicast()
+                || (value.segments()[0] & 0xfe00) == 0xfc00
+                || (value.segments()[0] & 0xffc0) == 0xfe80
+                || value
+                    .to_ipv4()
+                    .is_some_and(|mapped| is_private_address(IpAddr::V4(mapped)))
+        }
+    }
+}
+
 /// Reports whether a host points at the local network.
 fn is_private_host(host: &str) -> bool {
+    let host = host.trim_end_matches('.');
     if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") {
         return true;
     }
+    if let Some(address) = numeric_v4(host).or_else(|| short_v4(host)) {
+        return is_private_address(address);
+    }
     match host.parse::<IpAddr>() {
-        Ok(address) => match address {
-            IpAddr::V4(value) => {
-                value.is_loopback()
-                    || value.is_private()
-                    || value.is_link_local()
-                    || value.is_unspecified()
-                    || value.is_multicast()
-                    || value.is_broadcast()
-            }
-            IpAddr::V6(value) => {
-                value.is_loopback()
-                    || value.is_unspecified()
-                    || value.is_multicast()
-                    || (value.segments()[0] & 0xfe00) == 0xfc00
-                    || (value.segments()[0] & 0xffc0) == 0xfe80
-            }
-        },
+        Ok(address) => is_private_address(address),
         Err(_) => false,
     }
 }

@@ -19,16 +19,19 @@ pub fn require_token(store: &TokenStore) -> Result<String, SourceError> {
 }
 
 pub fn safe_apple_url(url: &str) -> Result<&str, SourceError> {
-    let path = url
+    let rest = url
         .strip_prefix("https://")
         .ok_or(SourceError::InvalidInput)?;
-    let host = path
-        .split('/')
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority
+        .rsplit('@')
         .next()
         .unwrap_or("")
         .split(':')
         .next()
-        .unwrap_or("");
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     if host == "api.music.apple.com"
         || host == "music.apple.com"
         || host == "audio-ssl.itunes.apple.com"

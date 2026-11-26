@@ -99,6 +99,23 @@ fn bandcamp_hosts_are_allowlisted() {
 }
 
 #[test]
+fn bandcamp_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
+    for url in [
+        "https://artist.bandcamp.com:443@evil.com/track/song",
+        "https://artist.bandcamp.com@evil.com/track/song",
+        "https://evil.com?@artist.bandcamp.com/track/song",
+        "https://evil.com#@artist.bandcamp.com/track/song",
+    ] {
+        assert!(safe_bandcamp_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
+fn an_uppercase_host_is_still_the_allowed_host() {
+    assert!(safe_bandcamp_url("https://ARTIST.BANDCAMP.COM/track/song").is_ok());
+}
+
+#[test]
 fn bandcamp_source_has_a_stable_identity() {
     use nexora_source_api::{AudioSource, SourceCapabilities};
 

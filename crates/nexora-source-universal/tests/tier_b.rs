@@ -1,8 +1,10 @@
 use nexora_source_api::{ResolvedSource, SourceError};
 use nexora_source_universal::{
     oauth::TokenStore,
-    spotify::{parse_search_response, require_token, resolve_track},
-    youtube::{map_status, parse_search_response as parse_youtube, resolve_video},
+    spotify::{parse_search_response, require_token, resolve_details},
+    youtube::{
+        map_status, parse_search_response as parse_youtube, resolve_details as resolve_video,
+    },
 };
 
 const SPOTIFY_FIXTURE: &str = r#"{
@@ -26,7 +28,7 @@ const YOUTUBE_FIXTURE: &str = r#"{
 
 const YOUTUBE_DETAILS: &str = r#"{
   "streamingData": {
-    "formats": [{ "url": "https://media.example.com/audio?sig=1", "mimeType": "audio/mp4" }]
+    "formats": [{ "url": "https://rr1---sn-abc.googlevideo.com/audio?sig=1", "mimeType": "audio/mp4" }]
   }
 }"#;
 
@@ -55,7 +57,7 @@ fn spotify_stored_token_is_used() {
 
 #[test]
 fn spotify_resolve_uses_preview_url() {
-    let source = resolve_track(SPOTIFY_FIXTURE).expect("first track has a preview");
+    let source = resolve_details(SPOTIFY_FIXTURE).expect("first track has a preview");
     assert_eq!(
         source,
         ResolvedSource::Stream {
@@ -80,7 +82,7 @@ fn youtube_resolve_uses_audio_format() {
     assert_eq!(
         source,
         ResolvedSource::Stream {
-            url: "https://media.example.com/audio?sig=1".to_owned()
+            url: "https://rr1---sn-abc.googlevideo.com/audio?sig=1".to_owned()
         }
     );
 }
