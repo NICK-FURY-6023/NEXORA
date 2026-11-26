@@ -207,6 +207,9 @@ pub fn rank_candidates(
 /// DNS resolution is intentionally not performed here; egress policy and
 /// DNS-rebinding protection belong to the deployment layer.
 pub fn validate_public_http_url(url: &str) -> Result<(), SourceError> {
+    if url.contains('\\') {
+        return Err(SourceError::InvalidInput);
+    }
     let rest = url
         .strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))
