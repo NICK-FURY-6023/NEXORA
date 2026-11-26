@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn the_nodelink_reasons_use_their_own_names() {
+    fn the_nexora_reasons_use_their_own_names() {
         assert_eq!(NexoraTrackEndReason::Gapless.as_str(), "gapless");
         assert_eq!(NexoraTrackEndReason::Crossfading.as_str(), "crossfading");
         // A transition to the next track is a reason to advance the queue.
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn the_nodelink_events_carry_their_payloads() {
+    fn the_nexora_events_carry_their_payloads() {
         let frame = NexoraEventMessage::Seek {
             guild_id: "1234".into(),
             position: 5_000,
