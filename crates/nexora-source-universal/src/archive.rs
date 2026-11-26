@@ -6,17 +6,7 @@ const SOURCE_ID: &str = "internet-archive";
 const AUDIO_EXTENSIONS: [&str; 6] = [".flac", ".mp3", ".ogg", ".m4a", ".wav", ".opus"];
 
 pub fn safe_archive_url(url: &str) -> Result<&str, SourceError> {
-    let path = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .ok_or(SourceError::InvalidInput)?;
-    let host = path
-        .split('/')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
+    let host = crate::http::host_of_any(url)?;
     if host == "archive.org" || host == "www.archive.org" {
         Ok(url)
     } else {

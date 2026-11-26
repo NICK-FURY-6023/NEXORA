@@ -215,7 +215,9 @@ pub fn validate_public_http_url(url: &str) -> Result<(), SourceError> {
         .or_else(|| url.strip_prefix("https://"))
         .ok_or(SourceError::InvalidInput)?;
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains('@') {
+    // A userinfo or a backslash in the authority is parsed differently by
+    // different clients, so the host cannot be trusted.
+    if authority.contains('@') || authority.contains('\\') {
         return Err(SourceError::InvalidInput);
     }
     let host = if authority.starts_with('[') {

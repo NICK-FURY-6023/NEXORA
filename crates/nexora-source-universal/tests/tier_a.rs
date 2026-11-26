@@ -89,6 +89,18 @@ fn archive_org_https_url_is_accepted() {
     assert!(safe_archive_url("https://archive.org/details/test-item").is_ok());
 }
 
+#[test]
+fn archive_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\archive.org/details/x",
+        r"https://evil.com\@archive.org/details/x",
+    ] {
+        assert!(safe_archive_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
 const BANDCAMP_OEMBED: &str = r#"{
   "title": "Song",
   "author_name": "Artist",

@@ -23,19 +23,7 @@ pub fn parse_oembed(body: &str) -> Result<TrackMetadata, SourceError> {
 }
 
 pub fn safe_bandcamp_url(url: &str) -> Result<&str, SourceError> {
-    let rest = url
-        .strip_prefix("https://")
-        .ok_or(SourceError::InvalidInput)?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority
-        .rsplit('@')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    let host = crate::http::host_of(url)?;
     if host == "bandcamp.com"
         || host == "www.bandcamp.com"
         || host.ends_with(".bandcamp.com")

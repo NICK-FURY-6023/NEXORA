@@ -112,6 +112,18 @@ fn soundcloud_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
 }
 
 #[test]
+fn soundcloud_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\api-v2.soundcloud.com/tracks/1",
+        r"https://evil.com\@api-v2.soundcloud.com/tracks/1",
+    ] {
+        assert!(safe_soundcloud_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
 fn an_uppercase_host_is_still_the_allowed_host() {
     assert!(safe_soundcloud_url("https://API-V2.SOUNDCLOUD.COM/tracks/1").is_ok());
 }

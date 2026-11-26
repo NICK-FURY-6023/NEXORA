@@ -111,6 +111,18 @@ fn bandcamp_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
 }
 
 #[test]
+fn bandcamp_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\artist.bandcamp.com/track/song",
+        r"https://evil.com\@artist.bandcamp.com/track/song",
+    ] {
+        assert!(safe_bandcamp_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
 fn an_uppercase_host_is_still_the_allowed_host() {
     assert!(safe_bandcamp_url("https://ARTIST.BANDCAMP.COM/track/song").is_ok());
 }

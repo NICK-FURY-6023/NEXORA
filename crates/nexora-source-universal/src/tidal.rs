@@ -17,10 +17,7 @@ pub fn require_token(store: &TokenStore) -> Result<String, SourceError> {
 }
 
 pub fn safe_tidal_url(url: &str) -> Result<&str, SourceError> {
-    let path = url
-        .strip_prefix("https://")
-        .ok_or(SourceError::InvalidInput)?;
-    let host = path.split('/').next().unwrap_or("");
+    let host = crate::http::host_of(url)?;
     if host == "tidal.com"
         || host == "www.tidal.com"
         || host == "api.tidal.com"

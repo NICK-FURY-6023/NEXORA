@@ -107,3 +107,20 @@ fn both_platforms_reject_unsafe_hosts() {
     assert!(safe_tidal_url("https://api.tidal.com/v1/tracks/1").is_ok());
     assert!(safe_tidal_url("http://169.254.169.254/latest").is_err());
 }
+
+#[test]
+fn both_platforms_reject_a_backslash_smuggled_host() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\api.deezer.com/track/1",
+        r"https://evil.com\@api.deezer.com/track/1",
+        r"https://evil.com\api.tidal.com/v1/tracks/1",
+        r"https://evil.com\@api.tidal.com/v1/tracks/1",
+    ] {
+        assert!(
+            safe_deezer_url(url).is_err() && safe_tidal_url(url).is_err(),
+            "{url} must be rejected"
+        );
+    }
+}

@@ -114,6 +114,18 @@ fn apple_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
 }
 
 #[test]
+fn apple_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\api.music.apple.com/x",
+        r"https://evil.com\@api.music.apple.com/x",
+    ] {
+        assert!(safe_apple_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
 fn an_uppercase_host_is_still_the_allowed_host() {
     assert!(safe_apple_url("https://API.MUSIC.APPLE.COM/v1/catalog").is_ok());
 }
