@@ -103,6 +103,18 @@ fn spotify_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
 }
 
 #[test]
+fn spotify_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\open.spotify.com/track/abc123",
+        r"https://evil.com\@open.spotify.com/track/abc123",
+    ] {
+        assert!(safe_spotify_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
 fn an_uppercase_spotify_host_is_still_the_allowed_host() {
     assert!(safe_spotify_url("https://OPEN.SPOTIFY.COM/track/abc123").is_ok());
 }

@@ -6,6 +6,8 @@ use nexora_source_api::{
 };
 use serde_json::Value;
 
+use crate::http;
+
 const SOURCE_ID: &str = "youtube";
 const PLAYER_URL: &str = "https://www.youtube.com/youtubei/v1/player";
 
@@ -20,19 +22,7 @@ pub fn map_status(status: u16) -> SourceError {
 /// Accepts only the hosts YouTube serves watch pages and media from. The
 /// googlevideo CDN hosts are per-shard, so the suffix check is used there.
 pub fn safe_youtube_url(url: &str) -> Result<&str, SourceError> {
-    let rest = url
-        .strip_prefix("https://")
-        .ok_or(SourceError::InvalidInput)?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority
-        .rsplit('@')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    let host = http::host_of(url)?;
     let allowed = host == "youtube.com"
         || host.ends_with(".youtube.com")
         || host == "youtu.be"

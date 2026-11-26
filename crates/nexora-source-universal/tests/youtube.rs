@@ -122,6 +122,18 @@ fn youtube_hosts_cannot_be_smuggled_through_userinfo_or_a_query() {
 }
 
 #[test]
+fn youtube_hosts_cannot_be_smuggled_through_a_backslash() {
+    // A backslash ends the authority, so the host is what precedes it. The
+    // guard must read the same host the fetcher will.
+    for url in [
+        r"https://evil.com\www.youtube.com/watch?v=vid1",
+        r"https://evil.com\@www.youtube.com/watch?v=vid1",
+    ] {
+        assert!(safe_youtube_url(url).is_err(), "{url} must be rejected");
+    }
+}
+
+#[test]
 fn an_uppercase_youtube_host_is_still_the_allowed_host() {
     assert!(safe_youtube_url("https://WWW.YOUTUBE.COM/watch?v=vid1").is_ok());
 }

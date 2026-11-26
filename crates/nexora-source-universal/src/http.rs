@@ -9,6 +9,41 @@ pub fn client() -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
+/// Reads the host of an https URL the way the fetcher reads it.
+///
+/// The URL parser is used rather than string splitting: a backslash ends the
+/// authority and a userinfo section precedes it, so a guard that reads the
+/// authority by hand can be made to see an allowed host where the request
+/// would go somewhere else entirely.
+pub fn host_of(url: &str) -> Result<String, SourceError> {
+    let host = host_of_any(url)?;
+    if reqwest::Url::parse(url)
+        .map_err(|_| SourceError::InvalidInput)?
+        .scheme()
+        != "https"
+    {
+        return Err(SourceError::InvalidInput);
+    }
+    Ok(host)
+}
+
+/// Reads the host of an http(s) URL the way the fetcher reads it.
+pub fn host_of_any(url: &str) -> Result<String, SourceError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| SourceError::InvalidInput)?;
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err(SourceError::InvalidInput);
+    }
+    let host = parsed
+        .host_str()
+        .ok_or(SourceError::InvalidInput)?
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if host.is_empty() {
+        return Err(SourceError::InvalidInput);
+    }
+    Ok(host)
+}
+
 pub async fn read_text(response: reqwest::Response) -> Result<String, SourceError> {
     if response
         .content_length()

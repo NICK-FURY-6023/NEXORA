@@ -8,7 +8,7 @@ use nexora_source_api::{
 };
 use serde_json::Value;
 
-use crate::oauth::TokenStore;
+use crate::{http, oauth::TokenStore};
 
 const SOURCE_ID: &str = "spotify";
 
@@ -19,19 +19,7 @@ pub fn require_token(store: &TokenStore) -> Result<String, SourceError> {
 /// Accepts only the hosts Spotify itself serves from: the public site, the
 /// web API and the preview CDN. Anything else is refused before a request.
 pub fn safe_spotify_url(url: &str) -> Result<&str, SourceError> {
-    let rest = url
-        .strip_prefix("https://")
-        .ok_or(SourceError::InvalidInput)?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority
-        .rsplit('@')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    let host = http::host_of(url)?;
     let allowed = host == "spotify.com"
         || host.ends_with(".spotify.com")
         || host == "scdn.co"
