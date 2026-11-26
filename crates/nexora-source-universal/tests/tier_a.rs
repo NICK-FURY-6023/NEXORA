@@ -1,4 +1,4 @@
-use nexora_source_api::ResolvedSource;
+use nexora_source_api::{AudioSource, ResolvedSource, SourceCapabilities};
 use nexora_source_universal::{
     archive::{parse_search_response, resolve_details, safe_archive_url},
     bandcamp::{parse_oembed as parse_bandcamp_oembed, safe_bandcamp_url},
@@ -118,6 +118,15 @@ fn soundcloud_oembed_maps_to_track_metadata() {
     assert_eq!(track.title, "Track");
     assert_eq!(track.artist.as_deref(), Some("Publisher"));
     assert_eq!(track.source_id, "soundcloud-public");
+}
+
+#[test]
+fn transport_source_has_a_stable_identity() {
+    use nexora_source_universal::transport::InternetArchiveSource;
+
+    let source = InternetArchiveSource::new();
+    assert_eq!(source.source_id(), "internet-archive");
+    assert_eq!(source.capabilities(), SourceCapabilities::full());
 }
 
 #[test]

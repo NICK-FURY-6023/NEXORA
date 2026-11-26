@@ -12,3 +12,5 @@ nexora-common = { path = "../nexora-common" }
 base64 = { workspace = true }
 sha2 = "=0.10.9"
 rand = "=0.9.5"
+reqwest = "=0.13.5"
+async-trait = { workspace = true }

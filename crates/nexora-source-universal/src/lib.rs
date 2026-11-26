@@ -10,6 +10,7 @@ pub mod simple;
 pub mod soundcloud;
 pub mod spotify;
 pub mod tidal;
+pub mod transport;
 pub mod youtube;
 
 pub const PLATFORM_IDS: [&str; 8] = [
