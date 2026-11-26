@@ -1,5 +1,9 @@
 use nexora_error::{NexoraError, NexoraResult};
 
+mod sandbox;
+
+pub use sandbox::{PluginModule, PluginSandbox};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PluginCapability {
     AudioDecode,
@@ -72,6 +76,18 @@ pub struct SandboxPolicy {
 }
 
 impl SandboxPolicy {
+    /// A policy that grants nothing and allows no time or memory.
+    pub fn deny_all() -> Self {
+        Self {
+            network: false,
+            filesystem: false,
+            time_limit_ms: 0,
+            memory_limit_mb: 0,
+            allowed_hosts: Vec::new(),
+            allowed_paths: Vec::new(),
+        }
+    }
+
     pub fn from_manifest(manifest: &PluginManifest) -> NexoraResult<Self> {
         validate_manifest(manifest)?;
         let mut policy = Self {
