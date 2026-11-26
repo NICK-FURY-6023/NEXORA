@@ -843,11 +843,10 @@ async fn patch_player(
     if before
         .as_ref()
         .is_some_and(|previous| previous.voice != player.voice)
-        && player.track.is_some()
+        && let Some(track) = player.track.as_ref()
     {
         let native = SessionId::new(id.clone())
             .map_err(|_| NexoraApiError::not_found("Session not found", path.clone()))?;
-        let track = player.track.as_ref().unwrap();
         let track_id = TrackId::new(track.info.identifier.clone())
             .map_err(|_| NexoraApiError::bad_request("invalid track identifier", path.clone()))?;
         state.sessions.abort_playback_task(&native).await;
