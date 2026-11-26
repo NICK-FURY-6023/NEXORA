@@ -107,6 +107,11 @@ pub struct NexoraSessionContext {
 #[derive(Debug)]
 pub struct NexoraSessionManager {
     sessions: RwLock<HashMap<String, NexoraSessionContext>>,
+    /// The number of live WebSocket connections per session.
+    ///
+    /// A session lives as long as it has a socket, plus its resume timeout
+    /// after the last one goes away.
+    sockets: RwLock<HashMap<String, usize>>,
     events: broadcast::Sender<NexoraFrame>,
     counter: AtomicU64,
 }
@@ -122,6 +127,7 @@ impl NexoraSessionManager {
         let (events, _receiver) = broadcast::channel(256);
         Self {
             sessions: RwLock::new(HashMap::new()),
+            sockets: RwLock::new(HashMap::new()),
             events,
             counter: AtomicU64::new(0),
         }
@@ -240,6 +246,46 @@ impl NexoraSessionManager {
     /// Removes a session and every player in it.
     pub async fn remove_session(&self, session_id: &str) -> bool {
         self.sessions.write().await.remove(session_id).is_some()
+    }
+
+    /// Claims a WebSocket connection for a session.
+    ///
+    /// Returns the session's resume state when the session was found, so a
+    /// reconnect can report that it resumed rather than started fresh.
+    pub async fn open_socket(&self, session_id: &str) -> Option<(bool, u64)> {
+        let (resuming, timeout) = {
+            let sessions = self.sessions.read().await;
+            let session = sessions.get(session_id)?;
+            (session.resuming, session.resume_timeout)
+        };
+        let mut sockets = self.sockets.write().await;
+        *sockets.entry(session_id.to_owned()).or_insert(0) += 1;
+        Some((resuming, timeout))
+    }
+
+    /// Releases a WebSocket connection.
+    ///
+    /// Returns `true` when the session has no sockets left, which is when its
+    /// resume window starts.
+    pub async fn close_socket(&self, session_id: &str) -> bool {
+        let mut sockets = self.sockets.write().await;
+        let count = sockets.entry(session_id.to_owned()).or_insert(0);
+        *count = count.saturating_sub(1);
+        let empty = *count == 0;
+        if empty {
+            sockets.remove(session_id);
+        }
+        empty
+    }
+
+    /// The number of live WebSocket connections on a session.
+    pub async fn socket_count(&self, session_id: &str) -> usize {
+        self.sockets
+            .read()
+            .await
+            .get(session_id)
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -372,6 +418,28 @@ mod tests {
         let (resuming, timeout) = manager.set_resuming(&session, None, None).await.unwrap();
         assert!(resuming);
         assert_eq!(timeout, 120);
+    }
+
+    #[tokio::test]
+    async fn a_session_is_held_until_its_last_socket_is_gone() {
+        let manager = NexoraSessionManager::new();
+        let session = manager.create_session().await;
+
+        assert!(manager.open_socket(&session).await.is_some());
+        assert_eq!(manager.socket_count(&session).await, 1);
+        manager.open_socket(&session).await;
+        assert_eq!(manager.socket_count(&session).await, 2);
+
+        // The first socket going away leaves the session alive.
+        assert!(!manager.close_socket(&session).await);
+        assert_eq!(manager.socket_count(&session).await, 1);
+
+        // The last one releases it.
+        assert!(manager.close_socket(&session).await);
+        assert_eq!(manager.socket_count(&session).await, 0);
+
+        // A session that does not exist has no socket to claim.
+        assert!(manager.open_socket("nope").await.is_none());
     }
 
     #[tokio::test]

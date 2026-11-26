@@ -469,6 +469,83 @@ async fn handshake(
     }
 }
 
+/// Row: `/nexora/sources/health` — a health snapshot of every source.
+#[tokio::test]
+async fn compat_nexora_sources_health_reports_every_source() {
+    let root = media_root();
+    let value = get_json(app(&root), "/nexora/sources/health").await;
+
+    let sources = value["sources"].as_array().expect("a source list");
+    assert!(!sources.is_empty(), "the registry reports its sources");
+    let local = sources
+        .iter()
+        .find(|source| source["sourceId"] == "local-media")
+        .expect("the local media source is reported");
+    assert!(local["healthy"].is_boolean());
+    assert!(local["detail"].is_string());
+    assert!(local["checkedAt"].is_number());
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: session resume — a reconnect with the `Session-Id` header resumes the
+/// session and its player state.
+#[tokio::test]
+async fn compat_nexora_session_resume_restores_the_player_state() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    // The session opts into resume with a short window.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}"),
+        Some(r#"{"resuming":true,"timeout":60}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let address = serve(app.clone()).await;
+    let (mut stream, headers) = handshake_with_session(&address, "1234", Some(&session_id))
+        .await
+        .unwrap();
+    assert_eq!(headers.get("Session-Resumed").unwrap(), "true");
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+    assert_eq!(ready["resumed"], true);
+
+    // A player on the session carries a volume.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(r#"{"volume":80}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The connection drops and the client comes back with the same session id.
+    drop(stream);
+    let (mut stream, headers) = handshake_with_session(&address, "1234", Some(&session_id))
+        .await
+        .unwrap();
+    assert_eq!(headers.get("Session-Resumed").unwrap(), "true");
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["resumed"], true);
+
+    // The player is still there, with the volume it had.
+    let body = get_json(
+        app.clone(),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+    )
+    .await;
+    assert_eq!(body["volume"], 80);
+    assert_eq!(body["guildId"], "1234");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Row: `/nexora/websocket` — the handshake rules, checked before the upgrade.
 ///
 /// The reference refuses a missing, empty, unparseable or zero `User-Id`
@@ -491,6 +568,40 @@ async fn compat_nexora_websocket_handshake_refuses_a_bad_request() {
     );
 
     let _ = fs::remove_dir_all(&root);
+}
+
+/// Opens a WebSocket with an optional `Session-Id`, returning the response
+/// headers so the resume flag can be read.
+async fn handshake_with_session(
+    address: &str,
+    user_id: &str,
+    session_id: Option<&str>,
+) -> Result<
+    (
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        tokio_tungstenite::tungstenite::http::HeaderMap,
+    ),
+    u16,
+> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+    let mut request = address.into_client_request().unwrap();
+    let headers = request.headers_mut();
+    headers.insert("User-Id", user_id.parse().unwrap());
+    if let Some(session_id) = session_id {
+        headers.insert("Session-Id", session_id.parse().unwrap());
+    }
+    match tokio_tungstenite::connect_async(request).await {
+        Ok((stream, response)) => Ok((stream, response.headers().clone())),
+        Err(error) => match &error {
+            tokio_tungstenite::tungstenite::Error::Http(response) => {
+                Err(response.status().as_u16())
+            }
+            _ => panic!("handshake failed: {error}"),
+        },
+    }
 }
 
 /// Reads the next frame off a socket.

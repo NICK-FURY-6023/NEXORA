@@ -27,6 +27,8 @@
 //!
 //! The Nexora extras NEXORA also serves are marked as such below.
 
+use std::sync::Arc;
+
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -162,6 +164,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/nexora/routeplanner/free/all", post(routeplanner_free_all))
         .route("/nexora/loadtracks", get(loadtracks))
+        .route("/nexora/sources/health", get(sources_health))
         .route("/nexora/decodetrack", get(decode_track_route))
         .route("/nexora/decodetracks", post(decode_tracks))
         .route("/nexora/sessions", post(create_session))
@@ -370,6 +373,30 @@ async fn loadtracks(
     Ok(Json(
         serde_json::to_value(NexoraLoadResult::search(tracks)).unwrap_or(Value::Null),
     ))
+}
+
+/// `GET /nexora/sources/health` — a health snapshot of every registered source.
+///
+/// The snapshot names each source, whether it answered, the detail it gave
+/// and when it was checked.
+async fn sources_health(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, NexoraApiError> {
+    authorize(&headers, &state)?;
+    let reports = state.sources.health_all(&internal_auth()).await;
+    let sources: Vec<Value> = reports
+        .into_iter()
+        .map(|report| {
+            json!({
+                "sourceId": report.source_id,
+                "healthy": report.healthy,
+                "detail": report.detail,
+                "checkedAt": report.checked_at.as_millis(),
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "sources": sources })))
 }
 
 /// `GET /nexora/decodetrack` — decode one encoded track.
@@ -919,6 +946,9 @@ async fn websocket(
         _ => state.nexora_sessions.create_session().await,
     };
     let resumed = existing;
+    // The socket is counted, so the session's resume window only starts once
+    // its last connection is gone.
+    state.nexora_sessions.open_socket(&session_id).await;
 
     let mut response =
         upgrade.on_upgrade(move |socket| run_socket(socket, state, session_id, resumed));
@@ -1036,6 +1066,44 @@ async fn run_socket(mut socket: WebSocket, state: AppState, session_id: String, 
                     by_remote: false,
                 });
         }
+    }
+
+    // The last socket of a session is gone. A session that opted into resume
+    // is held for its timeout so a reconnect can pick it back up; one that did
+    // not is destroyed now.
+    if !state.nexora_sessions.close_socket(&session_id).await {
+        return;
+    }
+    let Some(session) = state.nexora_sessions.session(&session_id).await else {
+        return;
+    };
+    if !session.resuming {
+        destroy_session(&state, &session_id).await;
+        return;
+    }
+    let sessions = Arc::clone(&state.nexora_sessions);
+    let native = Arc::clone(&state.sessions);
+    let held = session_id.clone();
+    let timeout = session.resume_timeout;
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(timeout)).await;
+        // A reconnect in the meantime took the session back, so it lives on.
+        if sessions.socket_count(&held).await == 0 {
+            sessions.remove_session(&held).await;
+            if let Ok(native_id) = SessionId::new(held.clone()) {
+                native.abort_playback_task(&native_id).await;
+                let _ = native.stop(&native_id).await;
+            }
+        }
+    });
+}
+
+/// Destroys a session and stops the audio it was playing.
+async fn destroy_session(state: &AppState, session_id: &str) {
+    state.nexora_sessions.remove_session(session_id).await;
+    if let Ok(native) = SessionId::new(session_id.to_owned()) {
+        state.sessions.abort_playback_task(&native).await;
+        let _ = state.sessions.stop(&native).await;
     }
 }
 

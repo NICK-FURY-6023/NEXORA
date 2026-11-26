@@ -175,6 +175,18 @@ Workspace total is now 153 passing Rust tests.
 - The same path serves `/nexora/trackstream/{encodedTrack}`.
 - `fetching_an_http_source_refuses_a_private_target` covers the SSRF gate.
 
+### Session resume (M6)
+
+- The session manager counts the live WebSocket connections per session, so a
+  session's lifetime follows its sockets rather than leaking.
+- A reconnect that carries the `Session-Id` header resumes the session: the
+  `Session-Resumed` header and the `ready` frame both report it, and the
+  session's players come back with the state they had —
+  `compat_nexora_session_resume_restores_the_player_state`.
+- When the last socket of a session goes away, a session that opted into
+  resume is held for its timeout (60 s by default) so a reconnect can pick it
+  up; one that did not is destroyed at once, and its audio stops with it.
+
 ### Source adapters wired into the server (M9)
 
 - `crates/nexora-source-universal` was implemented but orphaned — no crate

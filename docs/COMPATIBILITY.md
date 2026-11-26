@@ -56,6 +56,7 @@ Reference inventory: `spec:` `docs/research/lavalink-source-architecture.md`
 | `/nexora/sessions/{id}/players` | GET | `players` | implemented | returns `{ "players": [ Player, ... ] }` — `compat_nexora_player_routes` |
 | `/nexora/sessions/{id}/players/{guildId}` | GET/PATCH/DELETE | `player`, `patch_player`, `delete_player` | implemented | a missing player is a 404; DELETE answers 204 — `compat_nexora_player_routes` |
 | `/nexora/sessions/{id}` | PATCH | `patch_session` | implemented | applies `resuming` and `timeout`; returns the session object — `compat_nexora_session_patch_applies_resume_settings` |
+| Session resume | — | `NexoraSessionManager::open_socket`/`close_socket` | implemented (M6) | a reconnect with the `Session-Id` header resumes the session, its players and their positions; a session is held for its resume timeout once its last socket is gone — `compat_nexora_session_resume_restores_the_player_state` |
 | `/nexora/info` | GET | `info` | implemented | `plugins` is an object, not a bare array — `compat_nexora_info_shape` |
 | `/version` | GET | `version` | implemented | plain text, no JSON quotes — `compat_version_endpoint_returns_the_plain_version` |
 | `/nexora/stats` | GET | `stats` | implemented | the REST payload has no `op`; only the WebSocket `stats` frame carries one — `compat_nexora_stats_shape` |
@@ -85,7 +86,7 @@ without opening the socket.
 | `/nexora/loadstream` | GET | — | missing | M8; raw PCM streaming, gated by config |
 | `/nexora/hls/*` | GET | — | not-targeted | HLS serving is a NodeLink feature, not Lavalink's |
 | `/nexora/profiler*` | GET | — | not-targeted | NodeLink profiling endpoints |
-| `/nexora/sources/health` | GET | — | missing | M8; source health snapshot |
+| `/nexora/sources/health` | GET | `sources_health` | implemented | every registered source with its health, detail and check time — `compat_nexora_sources_health_reports_every_source` |
 | `/nexora/workers` | GET | — | not-targeted | NodeLink's two-tier worker model |
 | `/nexora/youtube/config`, `/nexora/youtube/oauth` | GET | — | not-targeted | YouTube provider surface, out of scope |
 
