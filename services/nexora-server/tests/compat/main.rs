@@ -923,7 +923,11 @@ async fn compat_nexora_voice_state_change_is_stored() {
     assert_eq!(status, 200);
 
     // Fetch the player and verify the voice state is stored.
-    let body = get_json(app.clone(), &format!("/nexora/sessions/{session_id}/players/1234")).await;
+    let body = get_json(
+        app.clone(),
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+    )
+    .await;
     assert_eq!(body["voice"]["token"], "voice-token");
     assert_eq!(body["voice"]["endpoint"], "wss://voice.example.com");
     assert_eq!(body["voice"]["sessionId"], "voice-session");

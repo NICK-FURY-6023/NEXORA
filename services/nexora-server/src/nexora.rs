@@ -840,7 +840,9 @@ async fn patch_player(
     // If the voice state changed and the player has a track, restart the
     // playback task so Opus packets are encrypted with the new key and sent
     // to the new voice endpoint.
-    if before.as_ref().is_some_and(|previous| previous.voice != player.voice)
+    if before
+        .as_ref()
+        .is_some_and(|previous| previous.voice != player.voice)
         && player.track.is_some()
     {
         let native = SessionId::new(id.clone())
@@ -849,13 +851,15 @@ async fn patch_player(
         let track_id = TrackId::new(track.info.identifier.clone())
             .map_err(|_| NexoraApiError::bad_request("invalid track identifier", path.clone()))?;
         state.sessions.abort_playback_task(&native).await;
-        start_playback(&state, &native, &track_id).await.map_err(|error| {
-            NexoraApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                error.message,
-                path.clone(),
-            )
-        })?;
+        start_playback(&state, &native, &track_id)
+            .await
+            .map_err(|error| {
+                NexoraApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    error.message,
+                    path.clone(),
+                )
+            })?;
     }
 
     Ok(Json(
