@@ -61,6 +61,36 @@ impl PluginSandbox {
         Ok(Self::new(policy, manifest.capabilities.clone()))
     }
 
+    /// Creates a sandbox whose policy is the manifest's policy narrowed by a
+    /// host-owned policy.
+    ///
+    /// A manifest states what a plugin asks for; the host decides what it
+    /// gets. Hosts, paths and limits that the host does not approve are
+    /// dropped.
+    pub fn from_manifest_with(
+        manifest: &PluginManifest,
+        approved: &SandboxPolicy,
+    ) -> NexoraResult<Self> {
+        let mut policy = SandboxPolicy::from_manifest(manifest)?;
+        policy.network &= approved.network;
+        policy.filesystem &= approved.filesystem;
+        policy.allowed_hosts.retain(|host| {
+            approved
+                .allowed_hosts
+                .iter()
+                .any(|allowed| host_matches(allowed, host))
+        });
+        policy.allowed_paths.retain(|path| {
+            approved
+                .allowed_paths
+                .iter()
+                .any(|allowed| path_matches(allowed, path))
+        });
+        policy.time_limit_ms = policy.time_limit_ms.min(approved.time_limit_ms);
+        policy.memory_limit_mb = policy.memory_limit_mb.min(approved.memory_limit_mb);
+        Ok(Self::new(policy, manifest.capabilities.clone()))
+    }
+
     /// The enforced policy.
     pub fn policy(&self) -> &SandboxPolicy {
         &self.policy
@@ -250,14 +280,17 @@ fn host_matches(allowed: &str, host: &str) -> bool {
     }
 }
 
+/// True when the path sits below the allowed root.
+///
+/// The comparison is component-wise, so it agrees with the component check in
+/// `check_path` on every platform.
 fn path_matches(allowed: &str, path: &str) -> bool {
-    let root = allowed.replace('\\', "/").trim_matches('/').to_owned();
-    let normalized = path.replace('\\', "/");
-    let candidate = normalized.trim_start_matches('/');
-    if root.is_empty() {
+    let root: Vec<Component<'_>> = Path::new(allowed).components().collect();
+    let candidate: Vec<Component<'_>> = Path::new(path).components().collect();
+    if root.is_empty() || candidate.len() < root.len() {
         return false;
     }
-    candidate == root || candidate.starts_with(&format!("{root}/"))
+    root.iter().zip(candidate.iter()).all(|(left, right)| left == right)
 }
 
 fn numeric_v4(host: &str) -> Option<IpAddr> {
