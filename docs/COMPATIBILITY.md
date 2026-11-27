@@ -1,7 +1,8 @@
 # NEXORA compatibility matrix
 
-Status: draft, 2026-11-24. Target baseline: Lavalink v4.2.2 plus the
-NodeLink extensions worth having.
+Status: draft, 2026-11-24 (rows re-checked against the code on 2026-11-27).
+Target baseline: Lavalink v4.2.2 plus the NodeLink extensions worth having.
+NEXORA serves these routes under the `/nexora/` prefix, not `/v4/`.
 
 Each row states what the reference does, what NEXORA does today, the status,
 and the evidence. Status values: `implemented` (shipped and tested),
@@ -233,7 +234,6 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 18 rows.
 | Track end reasons | 6 | 0 | 0 | 1 |
 | Filters | 4 | 0 | 0 | 3 |
 | Sources | 13 | 0 | 0 | 2 |
-| Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is
 `implemented` only when a test in `tests/compat` exercises it against the

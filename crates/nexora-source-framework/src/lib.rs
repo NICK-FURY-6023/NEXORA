@@ -99,7 +99,16 @@ impl SourceRegistry {
             }
             match tokio::time::timeout(timeout, source.search(query, context)).await {
                 Ok(Ok(mut tracks)) => results.append(&mut tracks),
-                Ok(Err(SourceError::Unauthorized)) => continue,
+                // A single provider failing must not fail the whole search:
+                // search is best-effort across every registered source, and
+                // the healthy sources' results stay useful.
+                Ok(Err(
+                    SourceError::Unauthorized
+                    | SourceError::NotFound
+                    | SourceError::Unavailable
+                    | SourceError::InvalidInput
+                    | SourceError::RateLimited,
+                )) => continue,
                 Ok(Err(error)) => return Err(error),
                 Err(_) => return Err(SourceError::Timeout),
             }

@@ -2,8 +2,12 @@
 
 `examples/bot_poc.py` drives NEXORA through the same control flow a Discord
 bot uses: engine info, session create, enqueue, play, volume, state and the
-session event WebSocket URL. It uses the bundled Python SDK and the standard
-library only.
+session event WebSocket URL. It uses the Python standard library only — no SDK
+package is required.
+
+> The `sdks/` tree (including the Python SDK this PoC used to import) was
+> removed in commit `32208b4`; the PoC now calls the documented `/api/v1`
+> endpoints directly.
 
 ## Run
 

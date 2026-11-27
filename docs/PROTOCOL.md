@@ -2,7 +2,7 @@
 
 REST + WebSocket endpoint specification for NEXORA.
 
-This document describes the implemented wire contracts. It is the authoritative reference for the native `/api/v1` contract, the native audio WebSocket, the event WebSocket, and the Lavalink-compatible `/v4` adapter. Machine-readable contracts (OpenAPI / protobuf) live in `crates/nexora-protocol` and `proto/nexora.proto`.
+This document describes the implemented wire contracts. It is the authoritative reference for the native `/api/v1` contract, the native audio WebSocket, the event WebSocket, and the Lavalink-v4-compatible adapter, which is served under the `/nexora/*` prefix (there are no `/v4/*` routes). Machine-readable contracts (OpenAPI / protobuf) live in `crates/nexora-protocol` and `proto/nexora.proto`.
 
 ## 1. Base paths and versions
 
@@ -258,28 +258,46 @@ Binary Opus delivery. Auth required. One raw Opus packet per binary message; no 
 
 The event WebSocket stays text-only; audio never shares the control channel.
 
-## 5. Lavalink-compatible adapter (`/v4`)
+## 5. Lavalink-v4-compatible adapter (`/nexora/*`)
 
-The `/v4` surface is a translation layer for existing Lavalink clients. `/api/v1` remains the durable native contract.
+The `/nexora/*` surface is a translation layer for Lavalink v4 clients. It is
+served under the `/nexora/` prefix, not `/v4/`. `/api/v1` remains the durable
+native contract, and [COMPATIBILITY.md](COMPATIBILITY.md) is the authoritative
+per-route status.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
+| `/version` | GET | Plain-text server version |
 | `/nexora/info` | GET | Server info (version, build time, source managers, filters, plugins) |
 | `/nexora/stats` | GET | Runtime stats (`cpu.lavalinkLoad`, players, memory) |
-| `/nexora/routeplanner/status` | GET | Route planner status (placeholder) |
-| `/nexora/loadtracks` | GET | Load tracks by identifier; returns v4 track shape |
+| `/nexora/routeplanner/status` | GET | Route planner status (204 — no planner configured) |
+| `/nexora/routeplanner/free/address` | POST | 204 placeholder |
+| `/nexora/routeplanner/free/all` | POST | 204 placeholder |
+| `/nexora/loadtracks` | GET | Load tracks by identifier; returns the v4 track shape |
+| `/nexora/decodetrack` | GET | Decode one encoded track |
+| `/nexora/decodetracks` | POST | Decode a batch of encoded tracks |
 | `/nexora/sessions` | POST | Create a session (returns 201) |
-| `/nexora/sessions/{id}/player` | GET | Read player state |
-| `/nexora/sessions/{id}/player` | PATCH | Patch player (pause, volume, track) |
-| `/nexora/sessions/{id}` | GET | WebSocket events (same as native event WS) |
+| `/nexora/sessions/{id}` | PATCH | Patch session (`resuming`, `timeout`) |
+| `/nexora/sessions/{id}/players` | GET | List players |
+| `/nexora/sessions/{id}/players/{guildId}` | GET/PATCH/DELETE | Read, patch or destroy one player |
+| `/nexora/websocket` | GET | Lavalink event socket (server push only) |
+| `/nexora/sources/health` | GET | Source health snapshot |
+| `/nexora/plugins` | GET | Loaded plugins and their manifests |
+| `/nexora/plugins/{name}/call` | POST | Run one plugin function under the sandbox |
+| `/nexora/loadstream` | GET | Raw PCM (WAV) stream, gated by `audio.raw_streaming` |
+| `/nexora/trackstream/{encoded}` | GET | Opus transcode of one track |
+| `/nexora/connection` | GET | Voice connection report (no voice gateway) |
+| `/nexora/loadlyrics`, `/nexora/loadchapters` | GET | Empty payloads (no lyrics/chapters source) |
 
 Key compatibility notes:
 
 - `loadType` values are lowercase: `track`, `playlist`, `search`, `empty`, `error`.
 - Tracks carry the v4 shape: `encoded`, `info`, `pluginInfo`, `userData`.
 - `encoded` is an opaque NEXORA base64 JSON blob; it is **not** Lavalink's binary track encoding and must be round-tripped through NEXORA.
-- No real voice connection exists yet, so player responses report `connected: false` and `ping: -1`.
-- `/nexora/decodetrack` is absent by design.
+- Player responses report `connected: false` and `ping: -1` because NEXORA has no
+  voice gateway; the voice transport itself (per-player UDP socket, RTP framing,
+  AES-128-CTR payloads) is implemented and the client owns the gateway.
+- The event socket is `/nexora/websocket`, not `/nexora/sessions/{id}`.
 
 ## 6. Versioned contract types
 
@@ -300,13 +318,13 @@ Internal gRPC contract (`nexora.v1.SessionService`) lives in `proto/nexora.proto
 
 ## 7. Versioning policy
 
-Public API contracts are versioned independently from implementation details. Breaking changes require a new version and migration notes. The base path `/api/v1` is the stable integration point; `/v4` is an compatibility adapter that may evolve independently.
+Public API contracts are versioned independently from implementation details. Breaking changes require a new version and migration notes. The base path `/api/v1` is the stable integration point; the `/nexora/*` Lavalink-compatible adapter may evolve independently.
 
 ## 8. Related documents
 
 - `docs/ARCHITECTURE.md` — high-level system design and data flow.
 - `docs/SYSTEM_DESIGN.md` — observed runtime behavior and invariants.
-- `docs/API.md` — native `/api/v1`, audio WebSocket, and `/v4` contracts (shorter reference).
+- `docs/API.md` — native `/api/v1`, audio WebSocket, and `/nexora/*` contracts (shorter reference).
 - `docs/LAVALINK_ANALYSIS.md` — Lavalink protocol reference and deliberate non-goals.
 - `crates/nexora-protocol` — Rust source of versioned DTOs.
 - `proto/nexora.proto` — internal gRPC contract.

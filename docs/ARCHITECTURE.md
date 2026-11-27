@@ -124,7 +124,7 @@ The Rust workspace is defined in the root `Cargo.toml`. Current members:
 | `crates/nexora-plugin-api` | Plugin manifest validation, sandbox policy, and the wasmi runtime with `fetch`/`push` host effects | M10 |
 | `crates/nexora-source-universal` | Eight source adapters wired by the server (archive, Bandcamp, SoundCloud, Apple Music, Deezer, Tidal, Spotify, YouTube) | M9 |
 | `services/nexora-gateway` | Phase 1 skeleton binary | Phase 1 |
-| `services/nexora-server` | Axum REST + WebSocket, `/api/v1` and `/v4` surfaces, gRPC listener | Phase 4a/4b |
+| `services/nexora-server` | Axum REST + WebSocket, `/api/v1` and `/nexora/*` surfaces, gRPC listener | Phase 4a/4b |
 | `services/nexora-audio-engine` | Standalone CLI: decode → resample → encode | Phase 2 |
 
 ### 4.1 Dependency direction
@@ -247,7 +247,7 @@ the deliberate non-goals are listed in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 - `README.md` — product vision, long-term architecture, and proposed repository structure.
 - `docs/SYSTEM_DESIGN.md` — observed runtime behavior, invariants, and the first working vertical slice.
-- `docs/API.md` — native `/api/v1`, audio WebSocket, and `/v4` contracts.
+- `docs/API.md` — native `/api/v1`, audio WebSocket, and `/nexora/*` contracts.
 - `docs/PROTOCOL.md` — REST + WebSocket endpoint specification.
 - `docs/PROJECT_STATUS.md` — what is verified right now.
 - `docs/LAVALINK_ANALYSIS.md` — Lavalink protocol reference and deliberate non-goals.

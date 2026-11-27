@@ -45,24 +45,29 @@ pub fn parse_search_response(body: &str) -> Result<Vec<TrackMetadata>, SourceErr
         .and_then(Value::as_array)
         .ok_or(SourceError::Unavailable)?;
 
-    rows.iter()
-        .map(|row| {
+    // The autocomplete payload carries tracks as `{ id, name, band_name }`,
+    // while cached/embedded shapes use `{ item_id, item_title }` inside an
+    // `auto` wrapper. Both are accepted, and a row that carries neither is
+    // skipped: one malformed row must not fail a whole search.
+    let tracks = rows
+        .iter()
+        .filter_map(|row| {
             let item = row.get("auto").unwrap_or(row);
             let id = item
                 .get("item_id")
+                .or_else(|| item.get("id"))
                 .and_then(|value| {
                     value
                         .as_str()
                         .map(str::to_owned)
                         .or_else(|| value.as_u64().map(|number| number.to_string()))
-                })
-                .ok_or(SourceError::InvalidInput)?;
+                })?;
             let title = item
                 .get("item_title")
-                .and_then(Value::as_str)
-                .ok_or(SourceError::InvalidInput)?;
-            Ok(TrackMetadata {
-                track_id: TrackId::new(id).map_err(|_| SourceError::InvalidInput)?,
+                .or_else(|| item.get("name"))
+                .and_then(Value::as_str)?;
+            Some(TrackMetadata {
+                track_id: TrackId::new(id).ok()?,
                 title: title.to_owned(),
                 artist: item
                     .get("band_name")
@@ -73,7 +78,8 @@ pub fn parse_search_response(body: &str) -> Result<Vec<TrackMetadata>, SourceErr
                 available: true,
             })
         })
-        .collect()
+        .collect();
+    Ok(tracks)
 }
 
 /// Extracts the tralbum identity from an oEmbed payload's player markup.

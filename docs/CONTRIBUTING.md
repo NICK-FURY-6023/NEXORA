@@ -26,7 +26,7 @@ cargo test --workspace
 | Source adapter or SSRF rule | `crates/nexora-source-framework` | `crates/nexora-source-framework/tests/framework.rs` |
 | Decode/resample/encode behavior | `crates/nexora-audio-*` | crate tests + `cargo bench` where relevant |
 | Public DTO shape | `crates/nexora-protocol` | round-trip tests + `docs/PROTOCOL.md` |
-| Lavalink wire compatibility | `/v4` handler in `nexora-server` | contract test + `docs/LAVALINK_ANALYSIS.md` |
+| Lavalink wire compatibility | `/nexora/*` handlers in `nexora-server` | contract test + `docs/LAVALINK_ANALYSIS.md` |
 | Deployment/monitoring | `deploy/` | `docs/DEPLOYMENT.md` |
 | Architecture decision | `docs/adr/` | new ADR, never rewrite old ADRs |
 

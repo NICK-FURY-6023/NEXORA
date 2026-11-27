@@ -10,7 +10,7 @@ docker compose -f deploy/docker-compose.yml up --build -d
 
 Ports:
 
-- `8080` — REST and WebSocket (`/health`, `/api/v1`, `/v4`, `/ws/v1`)
+- `8080` — REST and WebSocket (`/health`, `/api/v1`, `/nexora/*`, `/ws/v1`)
 - `9090` — internal gRPC (`nexora.v1.SessionService`)
 
 The container runs `nexora-server --host 0.0.0.0`. Local media can be mounted read-only at `/app/data/media`; pass `--media-root /app/data/media` to the binary if using a custom entrypoint.

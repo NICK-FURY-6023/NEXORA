@@ -62,6 +62,65 @@ async fn registry_searches_registered_sources() {
     assert_eq!(registry.source_ids(), vec!["stub"]);
 }
 
+struct FailingSource {
+    id: &'static str,
+    error: SourceError,
+}
+
+#[async_trait::async_trait]
+impl AudioSource for FailingSource {
+    fn source_id(&self) -> &'static str {
+        self.id
+    }
+    async fn search(
+        &self,
+        _query: &str,
+        _ctx: &AuthContext,
+    ) -> Result<Vec<TrackMetadata>, SourceError> {
+        Err(self.error.clone())
+    }
+    async fn resolve(
+        &self,
+        _track: &nexora_source_api::TrackReference,
+        _ctx: &AuthContext,
+    ) -> Result<ResolvedSource, SourceError> {
+        Err(SourceError::NotFound)
+    }
+    async fn health(
+        &self,
+        _ctx: &AuthContext,
+    ) -> Result<nexora_source_api::SourceHealth, SourceError> {
+        Ok(nexora_source_api::SourceHealth::healthy(self.id))
+    }
+}
+
+#[tokio::test]
+async fn a_failing_source_does_not_fail_the_whole_search() {
+    let registry = SourceRegistry::new();
+    registry
+        .register(Box::new(FailingSource {
+            id: "broken-provider",
+            error: SourceError::InvalidInput,
+        }))
+        .unwrap();
+    registry
+        .register(Box::new(FailingSource {
+            id: "offline-provider",
+            error: SourceError::Unavailable,
+        }))
+        .unwrap();
+    registry
+        .register(Box::new(StubSource {
+            id: "stub",
+            delay: std::time::Duration::ZERO,
+        }))
+        .unwrap();
+
+    let results = registry.search("song", &auth()).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].source_id, "local-media");
+}
+
 #[tokio::test]
 async fn registry_enforces_timeout() {
     let registry = SourceRegistry::new();

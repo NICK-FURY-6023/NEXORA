@@ -2,7 +2,7 @@
 
 ## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `3b60c24` (2026-11-27). The
+Status: **implemented and verified** at commit `cb0de19` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
 Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
@@ -10,9 +10,9 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **365 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **366 passing
   tests, 0 failures**.
-- CI run `45985629016` is green on Linux and Windows. The docs site and
+- CI run `45989029381` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8

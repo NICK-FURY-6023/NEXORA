@@ -4,6 +4,54 @@ All notable changes to NEXORA are documented here.
 
 ## [Unreleased]
 
+### Added - end-to-end audio WebSocket proof
+
+- `services/nexora-server/tests/audio_ws.rs` serves the real router on a TCP
+  port, creates a session, plays a one-second 48 kHz stereo WAV, connects to
+  `/ws/v1/sessions/{id}/audio` with a real WebSocket client, and asserts the
+  binary messages are real Opus packets at the 20 ms pacing contract (about 50
+  packets per second, each a valid Opus TOC byte under 4000 bytes). The live
+  server was also probed manually: 41 packets of 161–265 bytes in 1.4 s.
+
+### Fixed - search across providers
+
+- `/api/v1/search` returned `400 INVALID_INPUT` for every query and
+  `/nexora/loadtracks` returned `500` once the built-in adapters were
+  registered. Cause: the Bandcamp response parser only understood a synthetic
+  `item_id`/`item_title` shape, while the public autocomplete API returns
+  `id`/`name`, so the adapter errored and the registry propagated the first
+  failure. The parser accepts both shapes and skips a row that carries neither.
+- `SourceRegistry::search` is now best-effort across sources: an
+  `Unauthorized`, `NotFound`, `Unavailable`, `InvalidInput` or `RateLimited`
+  result from one provider no longer fails the whole search. A timeout is still
+  reported as an error. New test:
+  `a_failing_source_does_not_fail_the_whole_search`.
+- `examples/bot_poc.py` sends `start_position_ms` with `play` (the field is
+  required) and uses the local file name as the track id, so the documented
+  quick start completes the whole session lifecycle.
+
+### Fixed - documentation now matches the code
+
+- Removed the SDK claims: the `sdks/` tree was deleted in `32208b4`, so the
+  README, `docs/README.md`, `docs/PROJECT_STATUS.md` and `docs/SECURITY_REVIEW.md`
+  no longer state that Python/Node SDKs exist or that Java/Go/C#/PHP sources are
+  provided.
+- `examples/bot_poc.py` no longer imports the deleted Python SDK. It calls the
+  documented `/api/v1` endpoints with the Python standard library, so the quick
+  start works again.
+- Corrected the compatibility surface path: the Lavalink-v4-shaped routes are
+  served under `/nexora/*`, not `/v4/*` (README, `docs/API.md`, `docs/PROTOCOL.md`,
+  `docs/ARCHITECTURE.md`, `docs/SYSTEM_DESIGN.md`, `docs/DEPLOYMENT.md`,
+  `docs/CONTRIBUTING.md`).
+- `docs/PROTOCOL.md` §5 was stale: it listed `sessions/{id}/player` (the code
+  serves `sessions/{id}/players` and `players/{guildId}`), claimed
+  `/nexora/decodetrack` was absent (it is implemented), said events were served at
+  `/nexora/sessions/{id}` (it is `/nexora/websocket`), and said no voice
+  connection exists (the RTP/UDP transport is implemented).
+- `docs/API.md` no longer advertises native `/api/v1/resolve` and
+  `/api/v1/.../filters` routes, which do not exist.
+- Removed a duplicated `Sources` row from the `docs/COMPATIBILITY.md` summary.
+
 ### Added - community and documentation site
 
 - Added `SECURITY.md` (security policy with a private vulnerability reporting path) and `CODE_OF_CONDUCT.md`.

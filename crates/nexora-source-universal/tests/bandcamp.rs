@@ -51,6 +51,39 @@ fn bandcamp_search_maps_track_rows() {
 }
 
 #[test]
+fn bandcamp_search_maps_the_live_autocomplete_shape() {
+    // The public autocomplete API returns `{ id, name, band_name }` rows
+    // directly, without the `auto` wrapper.
+    let body = r#"{
+      "auto": {
+        "results": [
+          { "type": "t", "id": 97712853, "name": "Song", "band_name": "Artist" }
+        ]
+      }
+    }"#;
+    let tracks = parse_search_response(body).expect("live shape should parse");
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].track_id.as_str(), "97712853");
+    assert_eq!(tracks[0].title, "Song");
+    assert_eq!(tracks[0].artist.as_deref(), Some("Artist"));
+}
+
+#[test]
+fn bandcamp_search_skips_a_row_without_an_id() {
+    let body = r#"{
+      "auto": {
+        "results": [
+          { "type": "b", "name": "A band, not a track" },
+          { "type": "t", "id": 42, "name": "Song", "band_name": "Artist" }
+        ]
+      }
+    }"#;
+    let tracks = parse_search_response(body).expect("a malformed row must not fail the batch");
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].track_id.as_str(), "42");
+}
+
+#[test]
 fn bandcamp_oembed_carries_the_tralbum_identity() {
     let ids = parse_tralbum_ids(BANDCAMP_OEMBED).expect("embed markup should parse");
     assert_eq!(ids.band_id, 3494667229);

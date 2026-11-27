@@ -1,7 +1,8 @@
 # NEXORA Security Review — 2026-11-22, updated 2026-11-27
 
-Scope: Phase 1-4 core, SDKs, deployment artifacts, cluster registry, plugin
-contract, and the M10 WASM runtime.
+Scope: Phase 1-4 core, deployment artifacts, cluster registry, plugin contract,
+and the M10 WASM runtime. The `sdks/` tree that this review originally covered
+was removed in commit `32208b4`; no SDK ships today.
 
 ## Checks passed
 
@@ -10,7 +11,8 @@ contract, and the M10 WASM runtime.
 - Source framework validates HTTP URLs and blocks loopback, private, link-local, and localhost targets before DNS (SSRF guard).
 - Local source adapter rejects path traversal.
 - Plugin manifests are validated; sandbox policy is restrictive by default (no network, no filesystem, 5 s / 64 MB limits).
-- SDKs use only documented endpoints and do not embed credentials.
+- No credentials are embedded in tracked client code; the only client example
+  (`examples/bot_poc.py`) uses documented `/api/v1` endpoints only.
 - Docker image does not copy `.env`, `config.json`, or local databases.
 
 ## Checks added with the WASM runtime (M10)
@@ -29,7 +31,7 @@ contract, and the M10 WASM runtime.
 - Lavalink client conformance is partial; more `/v4` endpoints should be tested against real clients.
 - Session state is in-memory and lost on restart; durable state needs authentication and encryption review.
 - Monitoring configs are examples only; no Prometheus exposition is wired.
-- Java/Go/C#/PHP SDK sources were not compiled because toolchains are unavailable on this host.
+- No SDK is shipped, so no SDK surface is covered by this review.
 - Credentialed live-provider flows for Spotify, Deezer, Apple Music and Tidal
   require the user's own authorized token and are not covered by this review.
 
