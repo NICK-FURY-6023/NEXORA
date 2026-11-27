@@ -23,7 +23,7 @@ NEXORA is built from scratch as an independent Rust alternative to hosted audio 
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Milestones M0-M10 are implemented and verified: the Lavalink v4 REST/WebSocket surface and session lifecycle, event delivery, audio filters, Discord voice RTP framing, session resume, eight wired source adapters, SDKs, deployment assets, and a real wasmi-based WASM plugin runtime with a sandboxed host interface. The honest compatibility statement is the [compatibility matrix](docs/COMPATIBILITY.md). Remaining work is production hardening, broader third-party client conformance, credentialed commercial sources, and repeatable benchmark publication.
+**Project status:** Milestones M0-M10 are implemented and verified: the Lavalink v4 REST/WebSocket surface and session lifecycle, event delivery, audio filters, Discord voice RTP framing, session resume, eight wired source adapters, deployment assets, and a real wasmi-based WASM plugin runtime with a sandboxed host interface. The honest compatibility statement is the [compatibility matrix](docs/COMPATIBILITY.md). Remaining work is production hardening, broader third-party client conformance, credentialed commercial sources, repeatable benchmark publication, and official SDKs (the `sdks/` tree was removed; `examples/bot_poc.py` calls `/api/v1` with the Python standard library only).
 
 **Start here:** the [documentation map](docs/README.md) routes users, operators, contributors, and agents to the authoritative doc for each question. The sections below remain the long-form product and architecture reference.
 
@@ -1071,7 +1071,7 @@ NEXORA/
 │   ├── nexora-server             # REST, event WS, audio WS, gRPC listener
 │   ├── nexora-gateway            # skeleton control-plane service
 │   └── nexora-audio-engine       # standalone batch transcode CLI
-├── sdks/                         # Python, Node.js, Java, Go, C#, PHP clients
+├── sdks/                         # (removed; no official SDK ships today)
 ├── deploy/                       # Docker Compose, env example, monitoring
 ├── examples/                     # Runnable proof-of-concept clients
 ├── assets/                       # Images and infographics
@@ -1294,7 +1294,7 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-At `6eb9ac0` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (357 tests, 0 failures); CI run `45980092519` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
+At `0602409` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (359 tests, 0 failures); CI run `45982738138` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
 | Area | Current status |
 |---|---|
@@ -1303,10 +1303,10 @@ At `6eb9ac0` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --
 | Rust technology stack | Pinned in `Cargo.toml` and compiled in CI on Linux and Windows |
 | Audio engine | Implemented: decode, resample, filters, PCM/Opus output, 20 ms packets |
 | Source adapters | Implemented: registry, ranking, SSRF validation, and eight wired adapters (archive, Bandcamp, SoundCloud, Apple Music, Deezer, Tidal, Spotify, YouTube) |
-| REST / WebSocket API | Implemented: `/api/v1` + Lavalink-compatible `/v4` + session resume + native audio WebSocket |
+| REST / WebSocket API | Implemented: `/api/v1` + Lavalink-v4-compatible routes under `/nexora/*` + session resume + native audio WebSocket |
 | Internal gRPC | Implemented (Phase 4b): `nexora.v1.SessionService` |
 | Voice transport | Implemented: one UDP socket per player, RTP framing and AES-128-CTR payloads; no voice gateway (client owns it) |
-| SDKs | Python + Node verified; Java/Go/C#/PHP source-only (toolchains unavailable) |
+| SDKs | Not shipped: the `sdks/` tree was removed; `examples/bot_poc.py` is a stdlib-only client of `/api/v1` |
 | Distributed cluster | Foundation implemented: registry + weighted scheduler |
 | Plugin runtime | Implemented (M10): wasmi execution, fuel/memory limits, `fetch`/`push` host effects, sandboxed manifest capabilities |
 | Performance benchmarks | Two Criterion microbenchmarks with methodology and variance: `docs/BENCHMARKS.md` |

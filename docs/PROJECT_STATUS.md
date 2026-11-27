@@ -2,7 +2,7 @@
 
 ## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `6eb9ac0` (2026-11-27). The
+Status: **implemented and verified** at commit `0602409` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
 Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
@@ -10,15 +10,16 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **357 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **359 passing
   tests, 0 failures**.
-- CI run `45980092519` is green on Linux and Windows. The docs site and
+- CI run `45982738138` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
   gapless transitions and the remaining events, M9 source adapters, M10 WASM
-  plugin runtime, plus worker routing, the SDK/deployment foundations, and two
-  reproducible Criterion microbenchmarks.
+  plugin runtime, plus worker routing, the deployment foundations, and two
+  reproducible Criterion microbenchmarks. No official SDK ships: the `sdks/`
+  tree was deleted in `32208b4` and its claims were removed from the docs.
 - Still not established: full third-party client conformance, credentialed
   commercial-source login flows, production hardening, and server-level
   capacity claims.
@@ -27,8 +28,9 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
   `GET /metrics` exposes the existing counters as Prometheus text with the same
   authorization as `/api/v1/metrics` (commit `8cb09a9`), and client-facing v4
   conformance smoke tests pin the seek→playerUpdate and partial-surface shapes
-  (commit `6eb9ac0`). The full backlog and execution plan live in
-  `docs/superpowers/plans/2026-11-27-remaining-work.md`.
+  (commit `6eb9ac0`), and session state can be snapshotted and restored without
+  auto-resuming playback (commit `0602409`). The full backlog and execution
+  plan live in `docs/superpowers/plans/2026-11-27-remaining-work.md`.
 
 ### Slice 1: real-time local playback (2026-11-22)
 
@@ -77,7 +79,10 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Implemented after Phase 4b
 
 - Runtime API counters exposed through `/api/v1/metrics` and `/nexora/stats`.
-- Python SDK (6 tests) and Node.js SDK (5 tests); Java/Go/C#/PHP SDK sources are provided but their toolchains are unavailable on this host, so they are unverified by compilers.
+- ~~Python SDK and Node.js SDK~~ — **removed**: the whole `sdks/` tree
+  (Python, Node.js, Java, Go, C#, PHP) was deleted in commit `32208b4`, so no
+  SDK is shipped today. `examples/bot_poc.py` now talks to `/api/v1` with the
+  Python standard library instead of importing the deleted Python SDK.
 - Docker/compose deployment artifacts, `.env.example`, and deployment docs.
 - `nexora-cluster` worker registry/scheduler and `nexora-plugin-api` manifest/sandbox contract.
 - ADR-015..020 and example monitoring configs.
@@ -363,14 +368,14 @@ Criterion benchmark `resample_44100_to_48000_8192_frames` (release, Rust 1.100.0
 
 ### Not implemented yet
 
-- Phase 3: source adapters, resolver, health checks, SSRF-safe URL handling.
-- Phase 4: REST, WebSocket events, gRPC, session lifecycle.
-- Phase 5-8: SDKs, distributed cluster, plugins, production hardening.
+- Official SDKs: the `sdks/` tree was removed; no language client is published.
+- Full third-party client conformance, credentialed commercial sources, durable
+  session store, and production hardening.
 
 ### Next milestone
 
-Remaining work: full Lavalink client conformance, WASM plugin runtime, durable session store, and production security review.
-Next milestone after that: Phase 5 SDKs.
+Remaining work: full Lavalink client conformance, durable session store, production security review, and re-introducing official SDKs.
+Next milestone after that: production hardening.
 
 ### Status policy
 

@@ -63,7 +63,7 @@ password, authorization is disabled for local use only. See
 │   ├── nexora-server             # REST, event WS, audio WS, gRPC listener
 │   ├── nexora-gateway            # skeleton control-plane service
 │   └── nexora-audio-engine       # standalone batch transcode CLI
-├── sdks/                         # Python, Node.js, Java, Go, C#, PHP clients
+├── sdks/                         # (removed; no official SDK ships today)
 ├── deploy/                       # Docker Compose, env example, monitoring
 ├── examples/                     # Runnable proof-of-concept clients
 ├── assets/                       # Images and infographics
@@ -94,7 +94,7 @@ and in the table below.
 | [README.md](../README.md) | Product vision and long-term architecture |
 | [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) | Implemented system design and invariants |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Current crate/service structure |
-| [API.md](API.md) | Native `/api/v1`, audio WS, and `/v4` API contracts |
+| [API.md](API.md) | Native `/api/v1`, audio WS, and the `/nexora/*` Lavalink-compatible contracts |
 | [PROTOCOL.md](PROTOCOL.md) | Implemented wire contract, auth, and error envelope |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | What is verified right now |
 | [LAVALINK_ANALYSIS.md](LAVALINK_ANALYSIS.md) | Lavalink protocol reference and boundaries |
@@ -122,6 +122,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Current verified baseline at `6eb9ac0`: 357 tests passing, 0 failures; `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` also pass. CI run `45980092519` is green. See
+Current verified baseline at `0602409`: 359 tests passing, 0 failures; `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` also pass. CI run `45982738138` is green. See
 [PROJECT_STATUS.md](PROJECT_STATUS.md) for the live runtime proof and
 [BENCHMARKS.md](BENCHMARKS.md) for measured microbenchmarks.

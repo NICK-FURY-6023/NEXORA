@@ -9,14 +9,14 @@ in [COMPATIBILITY.md](COMPATIBILITY.md).
 Evidence used: `README.md`, `docs/MASTER_AI_INSTRUCTIONS.md`,
 `docs/LAVALINK_ANALYSIS.md`, official Lavalink v4 REST/WebSocket docs, the
 current Rust sources cited below, and a fresh `cargo test --workspace` run
-(exit 0, 357 tests passed at commit `6eb9ac0`).
+(exit 0, 359 tests passed at commit `0602409`).
 
 ## Current verification baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`: exit 0.
 - `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
-- `cargo test --workspace`: exit 0, 357 tests passed, 0 failed.
-- CI run `45980092519`: green on Linux and Windows, including the docs site
+- `cargo test --workspace`: exit 0, 359 tests passed, 0 failed.
+- CI run `45982738138`: green on Linux and Windows, including the docs site
   and relative-link checks.
 
 ## 1. Product intent
@@ -25,7 +25,7 @@ NEXORA is a Rust, standalone audio node: one process, no JVM, no hosted Lavalink
 node, no scraper or third-party media service required to run. It exposes:
 
 - a native, language-independent `/api/v1` contract;
-- a Lavalink-compatible `/v4` adapter for client migration;
+- a Lavalink-v4-compatible adapter served under `/nexora/*` for client migration;
 - local/authorized stream sources behind one `AudioSource` abstraction;
 - an audio pipeline that decodes, resamples, remaps channels, and emits 20 ms
   Opus packets;
@@ -77,7 +77,7 @@ proprietary source extraction are deliberate non-goals
 | Audio pipeline | Whole-file decode to f32, Rubato resample, channel remap, clipping flag, WAV/Ogg Opus writers, 20 ms packet preparation, bounded PCM queue | `crates/nexora-audio-decode/src/lib.rs`, `crates/nexora-audio-pipeline/src/lib.rs`, `crates/nexora-audio-codec/src/lib.rs` |
 | `/api/v1/.../stream` | Resolves current local track, batch-transcodes the entire file into a temp Ogg file, returns bytes, deletes temp file | `services/nexora-server/src/lib.rs` |
 | Live playback | `play` resolves source, starts one paced task, emits raw Opus to `/ws/v1/sessions/{id}/audio`; controls use typed signals | `crates/nexora-session/src/lib.rs`, `services/nexora-server/src/lib.rs` |
-| `/v4` adapter | `info`, `stats`, `loadtracks`, `sessions`, `player`, WS events; real source IDs and honest `connected=false`, `ping=-1` | `services/nexora-server/src/lib.rs` |
+| `/nexora/*` adapter | `info`, `stats`, `loadtracks`, `sessions`, `players`, WS events; real source IDs and honest `connected=false`, `ping=-1` | `services/nexora-server/src/nexora.rs` |
 | Auth | Bearer token when password set, open when unset; REST and both WebSockets share it | `services/nexora-server/src/lib.rs` |
 | Tests | 357 passing in workspace; live audio WS proof recorded below | fresh `cargo test --workspace` + live smoke |
 
@@ -113,7 +113,7 @@ sender exists yet.
 7. **Authorization at the trust boundary.** Bearer token, local root containment,
    SSRF validation, no secrets in code/logs (`crates/nexora-source-framework/src/lib.rs:205-249,317-341`,
    `docs/ARCHITECTURE.md:77-83`).
-8. **Compatibility is an adapter.** `/v4` stays a translation layer; `/api/v1`
+8. **Compatibility is an adapter.** `/nexora/*` stays a translation layer; `/api/v1`
    remains the durable contract (`docs/adr/ADR-016-lavalink-compatible-surface.md`,
    `docs/LAVALINK_ANALYSIS.md:77-78`).
 9. **In-process state is acceptable for the first milestone; durability is a
@@ -127,7 +127,7 @@ Bot / app / SDK
   v
 nexora-server (standalone control + delivery host)
   |--- /api/v1 native contract
-  |--- /v4 compatibility adapter
+  |--- /nexora/* compatibility adapter
   |--- SessionManager (session/queue/status/volume/position)
   |--- SourceRegistry (resolve, search, scope checks)
   |--- PlaybackRegistry (per-session bounded Opus frame fanout)
@@ -171,7 +171,8 @@ In scope:
   index, pause/resume/stop as playback control;
 - `TrackStarted`, `TrackEnded`, `TrackFailed`, `PlaybackPaused`,
   `PlaybackResumed`, `PlaybackStopped`, `QueueUpdated`, `TrackPosition`;
-- `/v4` remains honest: no voice connection, so `connected=false`, `ping=-1`.
+- `/nexora/*` remains honest: no voice gateway, so `connected=false`, `ping=-1`
+  (the voice RTP transport itself is implemented).
 
 Out of scope for this slice:
 
@@ -225,7 +226,7 @@ Native delivery channel:
 
 Event channel remains `EventEnvelope` JSON text at `/ws/v1/sessions/{id}`.
 
-`/v4` adapter rules:
+`/nexora/*` adapter rules:
 
 - Keep lowercase `loadType`, v4 track shape, `cpu.lavalinkLoad`, 201 session
   create, numeric times, real source manager IDs.
