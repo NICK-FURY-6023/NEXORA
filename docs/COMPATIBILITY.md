@@ -21,7 +21,7 @@ Evidence ids: `rea: ev_…` are REA records, `ev_…` are craft-anything records
 | Lavalink audio engine | `lavaplayer-2.2.6.jar` + `lavaplayer-natives-2.2.6.jar` (27 MB native codecs for linux/win/darwin) | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
 | Lavalink filters | `lavadsp-0.7.8.jar`; `lavalink.server.player.filters` holds 15 classes | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
 | Lavalink JS filters | `rhino-1.7.14.jar` + `rhino-engine-1.7.14.jar` — a JavaScript engine is bundled | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
-| Lavalink DAVE | `tink-1.14.1.jar` bundled — DAVE's crypto library | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
+| Reference DAVE | `tink-1.14.1.jar` bundled — **INFERRED** to be DAVE's crypto library; the jar's runtime loading is unverified | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
 | Lavalink voice | `udpqueue-*` native jars + `natives-*` per platform | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
 | Lavalink plugin API | `plugin-api-4.2.2.jar` — a separate artifact plugins compile against | `ev_3cf63a973acdb1c36445797c6444946984a24f8f792fb7f13865c6dfc13471e5` |
 | NodeLink size | 686 files (337 TypeScript, 337 JavaScript), 185,577 TS LOC | craft-anything `app_source_import`, `E:\nodelink-src.dtcD` |
@@ -98,7 +98,10 @@ without opening the socket.
 | `/ws/v1/sessions/{id}` | `websocket_events` | partial | NEXORA's own per-session socket; the v4 shape is not served here |
 | `/nexora/websocket/voice` | — | not-targeted | NodeLink voice socket |
 | `/nexora/websocket/youtube/live` | — | not-targeted | NodeLink live-metadata socket |
-| voice transport | UDP socket per session + RTP framing + XSecret | implemented | One `UdpSocket` bound per session to `0.0.0.0:0`; every datagram is an RTP packet (version 2, Opus payload type 120, timestamp +960 per 20 ms frame) whose payload is AES-128-CTR encrypted (key from the voice token, nonce = the RTP sequence number) — `compat_nexora_voice_datagram_is_an_rtp_packet`, `compat_nexora_xsecret_voice_transport_round_trips` |
+| voice transport | UDP socket per player + RTP framing + XSecret | implemented | One `UdpSocket` bound per **player** to `0.0.0.0:0`, kept across a track change and closed with the player, as the reference keeps one media connection per player; every datagram is an RTP packet (version 2, Opus payload type 120, timestamp +960 per 20 ms frame) whose payload is AES-128-CTR encrypted (key from the voice token, nonce = the RTP sequence number) — `compat_nexora_voice_datagram_is_an_rtp_packet`, `compat_nexora_voice_socket_belongs_to_the_player`, `compat_nexora_xsecret_voice_transport_round_trips` |
+| XSecret key derivation | token truncation | partial | the key is the first 16 bytes of the client-supplied token, zero-padded — a shortcut, because the real derivation happens inside the reference's Koe library, whose internals were never inspected (`docs/research/lavalink-source-architecture.md` §10). Upgrade to a real KDF when the voice gateway carries a shared secret |
+| DAVE E2EE | — | — | not-targeted (the reference implements it in the native `libdave` bundle; the MLS protocol details are not observable from the shipped-artifact evidence in `docs/research/`, so there is nothing to reimplement against) |
+| UDP address advertisement | — | — | not-targeted (the reference's voice state carries only token, endpoint, session id and channel id; the voice transport's address exchange lives inside the uninspected Koe library) |
 
 ## Events
 
@@ -210,16 +213,14 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 18 rows.
 
 | Surface | implemented | partial | missing | not-targeted |
 |---|---|---|---|---|
-| NEXORA reference routes | 12 | 0 | 0 | 1 |
+| NEXORA reference routes | 13 | 0 | 0 | 1 |
 | NEXORA-only routes | 1 | 0 | 0 | 0 |
-| NodeLink extra routes | 0 | 4 | 2 | 4 |
-| WebSocket endpoints | 2 | 1 | 0 | 2 |
+| NodeLink extra routes | 2 | 3 | 1 | 4 |
+| WebSocket endpoints | 2 | 2 | 0 | 4 |
 | Events | 12 | 1 | 1 | 4 |
 | Track end reasons | 5 | 2 | 0 | 0 |
 | Filters | 4 | 0 | 1 | 2 |
 | Sources | 5 | 0 | 0 | 2 |
-| Track end reasons | 4 | 3 | 0 | 0 |
-| Filters | 4 | 0 | 1 | 2 |
 | Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is

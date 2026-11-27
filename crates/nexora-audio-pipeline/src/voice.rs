@@ -31,10 +31,24 @@ pub const DEFAULT_VOICE_PORT: u16 = 40100;
 
 /// Splits a voice endpoint into its host and UDP port.
 ///
-/// The endpoint a client hands over is the voice server's address; it may or
-/// may not carry an explicit port, so a bare host takes the default RTP port.
+/// The endpoint a client hands over is the voice server's address. Discord
+/// sends it as a websocket URL (`wss://voice-eu-west-1.discord.gg`), so the
+/// scheme and any path are stripped before the host is read. A bare host
+/// takes the default RTP port.
 pub fn parse_voice_endpoint(endpoint: &str) -> Option<(&str, u16)> {
     let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return None;
+    }
+    // Discord's voice endpoint carries a websocket scheme.
+    let endpoint = endpoint
+        .strip_prefix("wss://")
+        .or_else(|| endpoint.strip_prefix("ws://"))
+        .or_else(|| endpoint.strip_prefix("https://"))
+        .or_else(|| endpoint.strip_prefix("http://"))
+        .unwrap_or(endpoint);
+    // Any path belongs to the gateway, not to the RTP target.
+    let endpoint = endpoint.split(['/', '?', '#']).next().unwrap_or_default();
     if endpoint.is_empty() {
         return None;
     }
@@ -266,5 +280,27 @@ mod tests {
         assert_eq!(parse_voice_endpoint("   "), None);
         assert_eq!(parse_voice_endpoint("host:not-a-port"), None);
         assert_eq!(parse_voice_endpoint(":5000"), None);
+    }
+
+    #[test]
+    fn a_discord_websocket_endpoint_yields_its_host_and_port() {
+        // Discord hands the voice endpoint over as a websocket URL.
+        assert_eq!(
+            parse_voice_endpoint("wss://voice-eu-west-1.discord.gg"),
+            Some(("voice-eu-west-1.discord.gg", DEFAULT_VOICE_PORT))
+        );
+        assert_eq!(
+            parse_voice_endpoint("wss://voice.example.com:443"),
+            Some(("voice.example.com", 443))
+        );
+        assert_eq!(
+            parse_voice_endpoint("ws://voice.example.com"),
+            Some(("voice.example.com", DEFAULT_VOICE_PORT))
+        );
+        // A path belongs to the gateway, not to the RTP target.
+        assert_eq!(
+            parse_voice_endpoint("wss://voice.example.com/?v=4"),
+            Some(("voice.example.com", DEFAULT_VOICE_PORT))
+        );
     }
 }

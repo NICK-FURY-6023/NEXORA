@@ -87,6 +87,50 @@ pub struct AppState {
     pub password: Option<String>,
     pub metrics: Arc<RuntimeMetrics>,
     pub audio: AudioChannels,
+    /// The UDP voice sockets, one per player.
+    ///
+    /// The reference holds one media connection per player, so a track change
+    /// keeps the socket and only the player's destruction closes it.
+    pub voice_sockets: VoiceSockets,
+}
+
+/// The UDP voice sockets, keyed by session id and guild id.
+pub type VoiceSockets =
+    Arc<tokio::sync::RwLock<HashMap<(String, String), Arc<tokio::net::UdpSocket>>>>;
+
+/// Returns the player's voice socket, binding one the first time.
+///
+/// A bind failure leaves the player without a socket: the audio still plays,
+/// it just cannot reach the voice gateway.
+async fn voice_socket_for(
+    state: &AppState,
+    session_id: &str,
+    guild_id: &str,
+) -> Option<Arc<tokio::net::UdpSocket>> {
+    let key = (session_id.to_owned(), guild_id.to_owned());
+    if let Some(socket) = state.voice_sockets.read().await.get(&key) {
+        return Some(Arc::clone(socket));
+    }
+    let socket = Arc::new(tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok()?);
+    let mut sockets = state.voice_sockets.write().await;
+    // Another task may have bound one while this one waited for the lock.
+    if let Some(existing) = sockets.get(&key) {
+        return Some(Arc::clone(existing));
+    }
+    sockets.insert(key, Arc::clone(&socket));
+    Some(socket)
+}
+
+/// Closes the player's voice socket.
+///
+/// The socket is dropped once the last holder lets go of it, which is what
+/// closes the port.
+pub async fn close_voice_socket(state: &AppState, session_id: &str, guild_id: &str) {
+    state
+        .voice_sockets
+        .write()
+        .await
+        .remove(&(session_id.to_owned(), guild_id.to_owned()));
 }
 
 pub type AudioChannels = Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::Sender<OpusFrame>>>>;
@@ -473,11 +517,14 @@ pub(crate) async fn start_playback(
     let metrics = Arc::clone(&state.metrics);
     let sources = Arc::clone(&state.sources);
     let nexora_sessions = Arc::clone(&state.nexora_sessions);
-    // M5: one UDP voice socket per session, bound to an ephemeral port.
-    // M5: one UDP voice socket per session, bound to an ephemeral port.
-    // If the bind fails, voice transport is unavailable but audio still plays.
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok();
     let player = nexora_player_for(&nexora_sessions, session_id, track_id).await;
+    // M5: the UDP voice socket belongs to the player, not to the track. The
+    // reference holds one media connection per player and closes it when the
+    // player is destroyed, so a track change keeps the same socket.
+    let socket = match player.as_ref().map(|player| player.guild_id.clone()) {
+        Some(guild_id) => voice_socket_for(state, session_id.as_str(), &guild_id).await,
+        None => None,
+    };
     let filters = player
         .as_ref()
         .map(|p| p.filters.clone())
@@ -583,6 +630,14 @@ fn start_player_updates(
                 },
                 guild_id: guild_id.clone(),
             });
+            // The player record carries the position too, so the player
+            // endpoints report where the track actually is — and a resumed
+            // session picks that position up.
+            nexora_sessions
+                .update_player(session_id.as_str(), &guild_id, |player| {
+                    player.position_ms = state.position_ms;
+                })
+                .await;
         }
     })
 }
@@ -660,7 +715,7 @@ struct PlaybackContext {
     /// The session's UDP voice socket, if one could be bound.
     ///
     /// The socket is dropped when the playback task ends, closing the port.
-    voice_socket: Option<tokio::net::UdpSocket>,
+    voice_socket: Option<Arc<tokio::net::UdpSocket>>,
     /// The Discord voice gateway endpoint to send Opus packets to, if any.
     voice_endpoint: Option<String>,
     /// The XSecret key derived from the voice session token, if any.
@@ -672,11 +727,24 @@ struct PlaybackContext {
 /// The lookup happens once per playback task: a DNS lookup per packet would
 /// dominate the cost of sending a 20 ms frame.
 async fn resolve_voice_target(endpoint: Option<&str>) -> Option<std::net::SocketAddr> {
-    let (host, port) = parse_voice_endpoint(endpoint?)?;
-    tokio::net::lookup_host((host, port))
-        .await
-        .ok()
-        .and_then(|mut addresses| addresses.next())
+    let endpoint = endpoint?;
+    let Some((host, port)) = parse_voice_endpoint(endpoint) else {
+        tracing::warn!(%endpoint, "the voice endpoint is not a usable address");
+        return None;
+    };
+    let addresses = tokio::net::lookup_host((host, port)).await;
+    match addresses {
+        Ok(mut addresses) => addresses.next().or_else(|| {
+            tracing::warn!(%host, %port, "the voice host has no address");
+            None
+        }),
+        Err(error) => {
+            // A voice target that cannot be resolved means no packet is ever
+            // sent, so it has to be visible.
+            tracing::warn!(%host, %port, %error, "the voice host cannot be resolved");
+            None
+        }
+    }
 }
 
 async fn run_playback(

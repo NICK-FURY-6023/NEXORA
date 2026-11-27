@@ -14,7 +14,6 @@ use axum::body::Body;
 use axum::http::Request;
 use futures_util::SinkExt;
 use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
-use nexora_common::SessionId;
 use nexora_protocol::NexoraEventMessage;
 use nexora_protocol::NexoraOp;
 use nexora_protocol::NexoraTrack;
@@ -103,6 +102,7 @@ fn app(root: &PathBuf) -> axum::Router {
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     })
 }
 
@@ -542,6 +542,38 @@ async fn compat_nexora_session_resume_restores_the_player_state() {
     .await;
     assert_eq!(body["volume"], 80);
     assert_eq!(body["guildId"], "1234");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: session resume — a session that did not opt into resume is not
+/// picked up by a reconnect; the reconnect gets a fresh session instead.
+#[tokio::test]
+async fn compat_nexora_session_without_resuming_is_not_resumed() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    // The session explicitly does not resume.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}"),
+        Some(r#"{"resuming":false}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let address = serve(app.clone()).await;
+    let (mut stream, headers) = handshake_with_session(&address, "1234", Some(&session_id))
+        .await
+        .unwrap();
+    assert_eq!(headers.get("Session-Resumed").unwrap(), "false");
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+    assert_eq!(ready["resumed"], false);
+    // The reconnect is a different session, so the old one is not picked up.
+    assert_ne!(ready["sessionId"], session_id);
 
     let _ = fs::remove_dir_all(&root);
 }
@@ -1124,18 +1156,92 @@ async fn compat_nexora_voice_datagram_is_an_rtp_packet() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// Row: voice socket — one UDP socket is bound per session and keyed by session id.
+/// Row: voice socket — one UDP socket per player, kept across a track change
+/// and closed with the player.
 #[tokio::test]
-async fn compat_nexora_voice_socket_is_keyed_by_session_id() {
-    let session_id = SessionId::new("abcdef0123456789").unwrap();
-    let sockets: Arc<tokio::sync::Mutex<HashMap<SessionId, tokio::net::UdpSocket>>> =
-        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    assert_ne!(socket.local_addr().unwrap().port(), 0);
-    sockets.lock().await.insert(session_id.clone(), socket);
-    assert!(sockets.lock().await.contains_key(&session_id));
-    sockets.lock().await.remove(&session_id);
-    assert!(!sockets.lock().await.contains_key(&session_id));
+async fn compat_nexora_voice_socket_belongs_to_the_player() {
+    let root = media_root();
+    let sources = SourceRegistry::new();
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let state = AppState {
+        sessions: Arc::new(SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
+        sources: Arc::new(sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    };
+    let app = build_router(state.clone());
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+
+    // The player gets its voice socket when it starts playing.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let port = async {
+        state
+            .voice_sockets
+            .read()
+            .await
+            .get(&(session_id.clone(), "1234".to_owned()))
+            .map(|socket| socket.local_addr().unwrap().port())
+    }
+    .await;
+    let port = port.expect("the player has a voice socket");
+    assert_ne!(port, 0, "the socket is bound to a real port");
+
+    // A track change keeps the same socket, because it belongs to the player.
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+    let same_port = state
+        .voice_sockets
+        .read()
+        .await
+        .get(&(session_id.clone(), "1234".to_owned()))
+        .map(|socket| socket.local_addr().unwrap().port());
+    assert_eq!(same_port, Some(port), "a track change keeps the socket");
+
+    // Destroying the player closes it.
+    let (status, _) = request(
+        app.clone(),
+        "DELETE",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 204);
+    assert!(
+        state
+            .voice_sockets
+            .read()
+            .await
+            .get(&(session_id.clone(), "1234".to_owned()))
+            .is_none(),
+        "the player's socket is closed with the player"
+    );
+
+    let _ = fs::remove_dir_all(&root);
 }
 
 /// Row: XSecret voice transport — Opus packets are encrypted with AES-128-CTR
@@ -1373,6 +1479,7 @@ async fn compat_nexora_websocket_handshake_refuses_a_wrong_password() {
         password: Some("secret".to_owned()),
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     }))
     .await;
 

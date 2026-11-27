@@ -97,6 +97,7 @@ async fn main() -> NexoraResult<()> {
         password,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
 
     let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)

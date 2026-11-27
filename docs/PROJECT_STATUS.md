@@ -159,10 +159,21 @@ Workspace total is now 153 passing Rust tests.
 - Destroying a player ends its track with the `cleanup` reason and stops the
   playback task, so the audio does not outlive the player —
   `compat_nexora_destroying_a_player_ends_the_track_with_cleanup`.
-- DAVE E2EE is not targeted: the reference implements it in the native
-  `libdave` bundle, and the MLS protocol details are not observable from the
+- DAVE E2EE is not targeted. The reference bundles a native `libdave` and the
+  `tink` crypto jar, which is an **inference** from the bundling: neither the
+  MLS protocol text nor the jars' runtime loading is observable from the
   shipped-artifact evidence in `docs/research/`, so there is nothing to
   reimplement against. NEXORA's voice path stops at XSecret.
+- The XSecret key is the first 16 bytes of the client-supplied token,
+  zero-padded — a documented shortcut, because the real derivation happens
+  inside the reference's Koe library, whose internals were never inspected.
+  The matrix carries the caveat rather than calling it implemented outright.
+- The voice endpoint is Discord's websocket URL (`wss://voice-...`), so the
+  parser strips the scheme and the path before reading the host; a target
+  that cannot be resolved is logged instead of failing silently.
+- The UDP socket belongs to the player, not to the track: it survives a track
+  change and is closed with the player, as the reference keeps one media
+  connection per player — `compat_nexora_voice_socket_belongs_to_the_player`.
 - Verification: `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace` all exit 0.
 
@@ -174,6 +185,15 @@ Workspace total is now 153 passing Rust tests.
   playback task removes the file when the track ends.
 - The same path serves `/nexora/trackstream/{encodedTrack}`.
 - `fetching_an_http_source_refuses_a_private_target` covers the SSRF gate.
+
+### Session resume fixes (M6)
+
+- The `resuming` flag is now consulted on the reconnect path: a session that
+  did not opt in is not picked up by a reconnect, which gets a fresh session
+  instead — `compat_nexora_session_without_resuming_is_not_resumed`.
+- The player record's position is kept in step with the playback, so the
+  player endpoints report where the track actually is and a resumed session
+  picks that position up.
 
 ### Session resume (M6)
 

@@ -21,6 +21,7 @@ fn test_state() -> AppState {
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     }
 }
 
@@ -138,6 +139,7 @@ async fn nexora_session_create_and_play_contract() {
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
     let app = build_router(state);
     let create = app
@@ -193,6 +195,7 @@ async fn playback_advances_to_the_next_queued_track() {
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
     let app = build_router(state);
 
@@ -421,6 +424,7 @@ async fn nexora_loadtracks_returns_nexora_track_shape() {
         password: None,
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
     let response = build_router(state)
         .oneshot(

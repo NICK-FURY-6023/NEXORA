@@ -600,6 +600,9 @@ async fn delete_player(
         state.sessions.abort_playback_task(&native).await;
         let _ = state.sessions.stop(&native).await;
     }
+    // The reference closes the player's media connection when the player is
+    // destroyed, so the voice socket goes with it.
+    crate::close_voice_socket(&state, &id, &guild).await;
     state
         .nexora_sessions
         .emit(NexoraEventMessage::PlayerDestroyed {
@@ -937,15 +940,22 @@ async fn websocket(
         .get("Session-Id")
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let existing = match &requested {
-        Some(id) => state.nexora_sessions.session(id).await.is_some(),
-        None => false,
+    // A session is only resumed when it exists AND asked to be resumed; a
+    // session that did not opt in is not picked up by a reconnect.
+    let resumed_session = match &requested {
+        Some(id) => state
+            .nexora_sessions
+            .session(id)
+            .await
+            .filter(|session| session.resuming)
+            .map(|session| session.session_id),
+        None => None,
     };
-    let session_id = match requested {
-        Some(id) if state.nexora_sessions.session(&id).await.is_some() => id,
-        _ => state.nexora_sessions.create_session().await,
+    let resumed = resumed_session.is_some();
+    let session_id = match resumed_session {
+        Some(id) => id,
+        None => state.nexora_sessions.create_session().await,
     };
-    let resumed = existing;
     // The socket is counted, so the session's resume window only starts once
     // its last connection is gone.
     state.nexora_sessions.open_socket(&session_id).await;
