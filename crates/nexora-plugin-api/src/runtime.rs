@@ -13,6 +13,12 @@ const HOST_MODULE: &str = "host";
 /// Fuel charged for each unit of work, so a time limit maps onto fuel.
 const FUEL_PER_MS: u64 = 2_000;
 
+/// The most strings one call may push back to the host.
+///
+/// The sandbox bounds the module's own memory, but the strings it pushes live
+/// in the host, so the host needs a bound of its own.
+pub const MAX_PUSHED_STRINGS: usize = 1_024;
+
 /// What a plugin call hands back to the host: its exported `i32` results and
 /// the strings it pushed through `host.push`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -196,6 +202,9 @@ fn install_host_functions(linker: &mut Linker<HostState>) -> NexoraResult<()> {
                 if length < 0 || length as usize > 1024 * 1024 {
                     return Err(wasmi::Error::new("host.push string is too large"));
                 }
+                if caller.data().strings.len() >= MAX_PUSHED_STRINGS {
+                    return Err(wasmi::Error::new("host.push string limit reached"));
+                }
                 let memory = match caller.get_export("memory") {
                     Some(Extern::Memory(memory)) => memory,
                     _ => return Err(wasmi::Error::new("plugin has no memory to read")),
@@ -282,6 +291,11 @@ fn map_error(error: wasmi::Error) -> NexoraError {
     }
     match error.kind() {
         wasmi::errors::ErrorKind::Fuel(_) => {
+            NexoraError::service("plugin sandbox denied the operation")
+        }
+        // A host function that refused the effect is a policy denial, not a
+        // broken module.
+        wasmi::errors::ErrorKind::Host(_) | wasmi::errors::ErrorKind::Message(_) => {
             NexoraError::service("plugin sandbox denied the operation")
         }
         _ => NexoraError::internal("plugin module failed to run"),

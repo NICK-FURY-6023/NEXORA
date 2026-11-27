@@ -120,13 +120,25 @@ let results = runtime.call(&manifest, &module_bytes, "answer", &[])?;
 The arguments are the strings the host hands the module. A module receives
 each one as the `i32` index of its place in the call, so it never has to own
 the bytes: the host keeps them, and the host function the module calls reads
-the one it was given. The results are the module's own `i32` values, which is
-the only type a plugin may exchange with the host.
+the one it was given.
+
+A module hands strings back the same way. It calls `host.push(offset, len)`
+with the range of its own memory that holds the text; the host reads the
+bytes and keeps them, and the call returns the index the string was given.
+The results are the module's own `i32` values plus the strings it pushed:
+
+```rust
+let call = runtime.call(&manifest, &module_bytes, "answer", &[])?;
+call.results; // the module's i32 results
+call.strings; // the strings it pushed, in the order it pushed them
+```
 
 The time limit is enforced as fuel: the interpreter charges for each unit of
 work and the module stops when the fuel is spent, so a module that never
 returns is stopped rather than hung. The memory limit is enforced by the
-interpreter's own memory limiter.
+interpreter's own memory limiter. The strings a module pushes live in the
+host, so they have a limit of their own: a call may push at most
+`MAX_PUSHED_STRINGS` strings, and a module that pushes past that is refused.
 
 A module that asks for an effect the policy refuses is told the effect did
 not happen, and the host sees the refusal after the call.
