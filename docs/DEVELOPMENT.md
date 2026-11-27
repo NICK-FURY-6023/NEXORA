@@ -13,9 +13,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Current baseline at commit `8cb09a9`: all four commands pass; `cargo test
---workspace` reports 355 tests, 0 failures. CI runs the same gates on Linux
-and Windows (green run `45977831795`).
+Current baseline at commit `6eb9ac0`: all four commands pass; `cargo test
+--workspace` reports 357 tests, 0 failures. CI runs the same gates on Linux
+and Windows (green run `45980092519`).
 
 ## Running the gateway skeleton
 
