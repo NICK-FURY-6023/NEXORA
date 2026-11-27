@@ -1,9 +1,9 @@
 # NEXORA plugin API
 
-`nexora-plugin-api` is the contract a plugin is compiled against and the
-sandbox the host runs it in. It has no plugin engine dependency of its own:
-the manifest, the capability set and the policy checks live here so the host
-and the plugin agree on one contract.
+`nexora-plugin-api` is the contract a plugin is compiled against, the sandbox
+the host runs it in, and the runtime that executes a module under that
+sandbox. The manifest, the capability set and the policy checks live here so
+the host and the plugin agree on one contract.
 
 ## Manifest
 
