@@ -238,9 +238,7 @@ pub enum NexoraEventMessage {
         length_ms: u64,
     },
     #[serde(rename = "SourceHealthSnapshotEvent")]
-    SourceHealthSnapshot {
-        sources: Vec<SourceHealth>,
-    },
+    SourceHealthSnapshot { sources: Vec<SourceHealth> },
     #[serde(rename = "SourceHealthChangeEvent")]
     SourceHealthChange {
         #[serde(rename = "sourceId")]
@@ -279,6 +277,9 @@ impl NexoraEventMessage {
             NexoraEventMessage::PlayerCreated { .. } => "PlayerCreatedEvent",
             NexoraEventMessage::PlayerDestroyed { .. } => "PlayerDestroyedEvent",
             NexoraEventMessage::VoiceStateUpdate { .. } => "VoiceStateUpdate",
+            NexoraEventMessage::StreamMetadata { .. } => "StreamMetadataEvent",
+            NexoraEventMessage::SourceHealthSnapshot { .. } => "SourceHealthSnapshotEvent",
+            NexoraEventMessage::SourceHealthChange { .. } => "SourceHealthChangeEvent",
         }
     }
 
