@@ -59,9 +59,30 @@ repetitions.
 - The filter run's high outliers are consistent with scheduler noise on a
   4-logical-processor development host. The median is reported alongside the
   mean so that the outliers are visible.
-- No throughput or capacity claim for `nexora-server` follows from these
-  numbers. A production claim needs a representative host, stable CPU
-  frequency, repeated runs, and a server-level workload.
+- The server-level harness below adds an in-process HTTP workload, but it is
+  still one host and one session-create route, not a distributed capacity
+  claim.
+
+## Server-level HTTP workload
+
+Same host and toolchain as above. The harness starts a fresh in-process Axum
+router and issues 100 `POST /nexora/sessions` requests per iteration through
+`tower::ServiceExt::oneshot`, asserting each response is 201. Warm-up was 3 s,
+100 samples were collected in an estimated 7.22 s measurement window, and each
+sample ran 15,000 iterations of the 100-request batch.
+
+```bash
+cargo bench -p nexora-server --bench server_load
+```
+
+| Benchmark | Slope (95% CI) | Mean (95% CI) | Median (95% CI) | Outliers |
+|---|---|---|---|---|
+| `create_100_sessions_through_the_router` | 462,785 ns (456,881–471,064) | 463,592 ns (459,187–468,834) | 458,114 ns (455,321–459,430) | 10/100 (4 mild, 6 severe) |
+
+This is a per-batch measurement: divide by 100 for an approximate per-request
+cost only as a rough indicator. It does not include network sockets, WebSocket
+audio delivery, disk persistence, or concurrent clients, so it is not a
+production capacity figure.
 
 ## Reproduce
 

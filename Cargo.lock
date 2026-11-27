@@ -518,6 +518,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 
@@ -1497,6 +1498,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "clap",
+ "criterion",
  "futures-util",
  "nexora-audio-pipeline",
  "nexora-audio-types",

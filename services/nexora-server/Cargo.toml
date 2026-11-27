@@ -35,3 +35,8 @@ sysinfo = "=0.40.4"
 tower = "=0.5.3"
 tokio-tungstenite = "=0.29.0"
 futures-util = "=0.3.34"
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[[bench]]
+name = "server_load"
+harness = false
