@@ -195,6 +195,15 @@ Workspace total is now 153 passing Rust tests.
   player endpoints report where the track actually is and a resumed session
   picks that position up.
 
+### Raw PCM streaming (M8)
+
+- `GET /nexora/loadstream?identifier=…` resolves a track and streams its
+  decoded audio as raw PCM, in a WAV container. The endpoint is gated by the
+  `audio.raw_streaming` configuration flag, because it hands the whole decoded
+  audio to the client; with the gate off it answers 404.
+- `compat_nexora_loadstream_is_gated_by_configuration` covers both the gate
+  and the payload.
+
 ### Real stats figures (M8)
 
 - `/nexora/stats` reported placeholder zeros for `memory` and `cpu` while the

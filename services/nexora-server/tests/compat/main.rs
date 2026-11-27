@@ -103,6 +103,7 @@ fn app(root: &PathBuf) -> axum::Router {
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
     })
 }
 
@@ -481,6 +482,64 @@ async fn handshake(
             }
         }
     }
+}
+
+/// Row: `/nexora/loadstream` — raw PCM streaming, gated by configuration.
+#[tokio::test]
+async fn compat_nexora_loadstream_is_gated_by_configuration() {
+    let root = media_root();
+    let sources = Arc::new(SourceRegistry::new());
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let state = |raw_streaming: bool| AppState {
+        sessions: Arc::new(SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
+        sources: Arc::clone(&sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming,
+    };
+
+    // With the gate off the endpoint does not exist.
+    let response = build_router(state(false))
+        .oneshot(
+            Request::builder()
+                .uri("/nexora/loadstream?identifier=sample.wav")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 404);
+
+    // With the gate on it streams the decoded audio as PCM.
+    let response = build_router(state(true))
+        .oneshot(
+            Request::builder()
+                .uri("/nexora/loadstream?identifier=sample.wav")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .unwrap(),
+        "audio/wav"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(&body[..4], b"RIFF", "the body is a PCM wave");
+    assert_eq!(&body[8..12], b"WAVE");
+
+    let _ = fs::remove_dir_all(&root);
 }
 
 /// Row: `/nexora/sources/health` — a health snapshot of every source.
@@ -1187,6 +1246,7 @@ async fn compat_nexora_voice_socket_belongs_to_the_player() {
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
     };
     let app = build_router(state.clone());
     let (app, session_id) = create_session_over_http(app).await;
@@ -1494,6 +1554,7 @@ async fn compat_nexora_websocket_handshake_refuses_a_wrong_password() {
         metrics: Arc::new(RuntimeMetrics::default()),
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
     }))
     .await;
 

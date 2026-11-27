@@ -83,7 +83,7 @@ without opening the socket.
 | `/nexora/loadchapters` | GET | `load_chapters` | partial | answers `[]`; NEXORA has no chapters source |
 | `/nexora/connection` | GET | `connection` | partial | reports the reference's disabled payload; NEXORA has no voice gateway |
 | `/nexora/trackstream/{encodedTrack}` | GET | `trackstream` | implemented | transcodes a local file or an HTTP source to Opus — `fetching_an_http_source_refuses_a_private_target` |
-| `/nexora/loadstream` | GET | — | missing | M8; raw PCM streaming, gated by config |
+| `/nexora/loadstream` | GET | `loadstream` | implemented | the resolved track's audio as raw PCM, gated by the `audio.raw_streaming` configuration flag; with the gate off it answers 404 — `compat_nexora_loadstream_is_gated_by_configuration` |
 | `/nexora/hls/*` | GET | — | not-targeted | HLS serving is a NodeLink feature, not Lavalink's |
 | `/nexora/profiler*` | GET | — | not-targeted | NodeLink profiling endpoints |
 | `/nexora/sources/health` | GET | `sources_health` | implemented | every registered source with its health, detail and check time — `compat_nexora_sources_health_reports_every_source` |

@@ -73,6 +73,11 @@ pub struct AudioConfig {
     pub sample_rate: u32,
     /// Number of audio channels.
     pub channels: u16,
+    /// Whether the raw PCM streaming endpoint is served.
+    ///
+    /// The endpoint hands the decoded audio to the client, which is a lot of
+    /// bandwidth, so it stays off unless it is asked for.
+    pub raw_streaming: bool,
 }
 
 impl Default for AudioConfig {
@@ -81,6 +86,7 @@ impl Default for AudioConfig {
             default_codec: "opus".to_owned(),
             sample_rate: 48_000,
             channels: 2,
+            raw_streaming: false,
         }
     }
 }

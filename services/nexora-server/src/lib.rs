@@ -92,6 +92,8 @@ pub struct AppState {
     /// The reference holds one media connection per player, so a track change
     /// keeps the socket and only the player's destruction closes it.
     pub voice_sockets: VoiceSockets,
+    /// Whether the raw PCM streaming endpoint is served.
+    pub raw_streaming: bool,
 }
 
 /// The UDP voice sockets, keyed by session id and guild id.

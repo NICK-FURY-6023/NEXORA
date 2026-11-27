@@ -183,6 +183,117 @@ pub fn router() -> Router<AppState> {
         .route("/nexora/loadlyrics", get(load_lyrics))
         .route("/nexora/loadchapters", get(load_chapters))
         .route("/nexora/trackstream/{encoded}", get(trackstream))
+        .route("/nexora/loadstream", get(loadstream))
+}
+
+/// `GET /nexora/loadstream` — the resolved track's audio as raw PCM.
+///
+/// The endpoint is gated by configuration, because it hands the whole decoded
+/// audio to the client. When the gate is off it answers 404, so a client
+/// cannot tell it apart from an endpoint that does not exist.
+async fn loadstream(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Response, NexoraApiError> {
+    authorize(&headers, &state)?;
+    if !state.raw_streaming {
+        return Err(NexoraApiError::not_found("Not Found", "/nexora/loadstream"));
+    }
+    let results = state
+        .sources
+        .search(&query.identifier, &internal_auth())
+        .await
+        .map_err(|error| {
+            NexoraApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+                "/nexora/loadstream",
+            )
+        })?;
+    let metadata = results.first().ok_or_else(|| {
+        NexoraApiError::bad_request("No matches found for identifier", "/nexora/loadstream")
+    })?;
+    let track_id = TrackId::new(metadata.track_id.as_str()).map_err(|_| {
+        NexoraApiError::bad_request("invalid track identifier", "/nexora/loadstream")
+    })?;
+    let resolved = state
+        .sources
+        .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
+        .await
+        .map_err(|error| {
+            NexoraApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                error.to_string(),
+                "/nexora/loadstream",
+            )
+        })?;
+    // A local file plays from disk; an HTTP source is fetched into a
+    // temporary file first, so the decoder reads it the same way.
+    let (path, downloaded) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, false),
+        ResolvedSource::Stream { url } => (
+            crate::download_source_to_temp(&url)
+                .await
+                .map_err(|error| {
+                    NexoraApiError::new(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        error.to_string(),
+                        "/nexora/loadstream",
+                    )
+                })?,
+            true,
+        ),
+    };
+
+    let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Pcm);
+    let output = std::env::temp_dir().join(format!(
+        "nexora-loadstream-{}.wav",
+        nexora_common::TimestampMs::now().as_millis()
+    ));
+    let input = path.clone();
+    let output_path = output.clone();
+    tokio::task::spawn_blocking(move || {
+        nexora_audio_pipeline::process_file(
+            &input,
+            &output_path,
+            format.sample_rate,
+            format.channels,
+            nexora_audio_pipeline::OutputCodec::Pcm,
+        )
+    })
+    .await
+    .map_err(|_| {
+        NexoraApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "stream task failed",
+            "/nexora/loadstream",
+        )
+    })?
+    .map_err(|error| {
+        NexoraApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+            "/nexora/loadstream",
+        )
+    })?;
+    let bytes = tokio::fs::read(&output).await.map_err(|_| {
+        NexoraApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "stream output is unreadable",
+            "/nexora/loadstream",
+        )
+    })?;
+    let _ = tokio::fs::remove_file(&output).await;
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+    Ok((
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "audio/wav")],
+        axum::body::Body::from(bytes),
+    )
+        .into_response())
 }
 
 /// `GET /version` — the bare version string as plain text.
