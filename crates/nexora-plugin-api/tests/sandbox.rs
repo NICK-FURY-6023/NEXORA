@@ -88,6 +88,27 @@ fn userinfo_cannot_decide_the_host() {
     assert_eq!(error.code(), ErrorCode::Service);
 }
 
+#[test]
+fn a_backslash_cannot_decide_the_host() {
+    // A backslash ends the authority for an http(s) URL, so the host is what
+    // precedes it. A guard that reads the whole authority would see the
+    // allowed name and let the URL through to a host the fetcher never
+    // reaches. The URL is malformed, so it is refused as invalid input.
+    for url in [
+        r"https://evil.example.org\@api.example.com/track",
+        r"https://evil.example.org\api.example.com/track",
+    ] {
+        let error = network_sandbox()
+            .check_network(url)
+            .expect_err("the backslash must not decide the host");
+        assert_eq!(
+            error.code(),
+            ErrorCode::InvalidInput,
+            "{url} must be denied"
+        );
+    }
+}
+
 fn loopback_sandbox(host: &str) -> PluginSandbox {
     PluginSandbox::from_manifest(&manifest_with(vec![PluginCapability::Network(
         host.to_owned(),
@@ -200,6 +221,55 @@ fn grants_refuses_a_traversing_filesystem_path() {
 }
 
 #[test]
+fn the_exposed_capability_set_follows_the_effective_policy() {
+    let mut approved = SandboxPolicy::deny_all();
+    approved.network = true;
+    approved.allowed_hosts = vec!["api.example.com".to_owned()];
+    approved.time_limit_ms = 1_000;
+    approved.memory_limit_mb = 16;
+
+    let manifest = manifest_with(vec![
+        PluginCapability::AudioDecode,
+        PluginCapability::Network("api.example.com".to_owned()),
+        PluginCapability::Network("evil.example.org".to_owned()),
+    ]);
+    let sandbox =
+        PluginSandbox::from_manifest_with(&manifest, &approved).expect("manifest should be valid");
+
+    // The host dropped one host, so the plugin must not be shown a capability
+    // for it: a consumer that reads the exposed set would otherwise hand out
+    // access the sandbox refuses.
+    assert!(
+        sandbox
+            .capabilities()
+            .contains(&PluginCapability::Network("api.example.com".to_owned()))
+    );
+    assert!(
+        !sandbox
+            .capabilities()
+            .contains(&PluginCapability::Network("evil.example.org".to_owned()))
+    );
+    assert!(
+        sandbox
+            .capabilities()
+            .contains(&PluginCapability::AudioDecode)
+    );
+}
+
+#[test]
+fn a_private_host_is_never_granted_or_exposed() {
+    let manifest = manifest_with(vec![PluginCapability::Network("127.0.0.1".to_owned())]);
+    let sandbox = PluginSandbox::from_manifest(&manifest).expect("manifest should be valid");
+
+    assert!(!sandbox.grants(&PluginCapability::Network("127.0.0.1".to_owned())));
+    assert!(
+        !sandbox
+            .capabilities()
+            .contains(&PluginCapability::Network("127.0.0.1".to_owned()))
+    );
+}
+
+#[test]
 fn a_limit_cannot_be_raised_after_the_sandbox_is_built() {
     let mut policy = SandboxPolicy::deny_all();
     policy.memory_limit_mb = 1;
@@ -224,11 +294,16 @@ fn the_time_limit_cannot_be_raised_after_the_sandbox_is_built() {
     assert_eq!(error.code(), ErrorCode::Service);
 }
 
+/// The eight-byte header of a WebAssembly module: the magic and version 1.
+fn wasm_header() -> &'static [u8] {
+    b"\0asm\x01\x00\x00\x00"
+}
+
 #[test]
 fn loading_a_module_resolves_the_entrypoint_inside_the_root() {
     let root = std::env::temp_dir().join(format!("nexora-plugin-load-{}", std::process::id()));
     fs::create_dir_all(&root).expect("temp root should exist");
-    fs::write(root.join("plugin.wasm"), b"\0asm").expect("module should be written");
+    fs::write(root.join("plugin.wasm"), wasm_header()).expect("module should be written");
 
     let manifest = manifest_with(vec![PluginCapability::FileSystem("data".to_owned())]);
     let module = PluginSandbox::from_manifest(&manifest)
@@ -237,6 +312,42 @@ fn loading_a_module_resolves_the_entrypoint_inside_the_root() {
         .expect("module should load");
     let expected = std::fs::canonicalize(root.join("plugin.wasm")).expect("canonical path");
     assert_eq!(module.entrypoint(), expected);
+    assert_eq!(module.bytes(), wasm_header());
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn loading_a_module_rejects_a_file_that_is_not_webassembly() {
+    let root = std::env::temp_dir().join(format!("nexora-plugin-notwasm-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("temp root should exist");
+    fs::write(root.join("plugin.wasm"), b"not a wasm module at all")
+        .expect("module should be written");
+
+    let manifest = manifest_with(vec![]);
+    let error = PluginSandbox::from_manifest(&manifest)
+        .expect("manifest should be valid")
+        .load(&root, &manifest)
+        .expect_err("a file that is not webassembly must be rejected");
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn loading_a_module_rejects_an_unsupported_webassembly_version() {
+    let root = std::env::temp_dir().join(format!("nexora-plugin-version-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("temp root should exist");
+    let mut header = wasm_header().to_vec();
+    header[4] = 2;
+    fs::write(root.join("plugin.wasm"), &header).expect("module should be written");
+
+    let manifest = manifest_with(vec![]);
+    let error = PluginSandbox::from_manifest(&manifest)
+        .expect("manifest should be valid")
+        .load(&root, &manifest)
+        .expect_err("an unsupported wasm version must be rejected");
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 
     fs::remove_dir_all(&root).ok();
 }
@@ -247,7 +358,7 @@ fn loading_a_module_rejects_a_symlink_out_of_the_root() {
     fs::create_dir_all(&root).expect("temp root should exist");
     let outside =
         std::env::temp_dir().join(format!("nexora-plugin-outside-{}.wasm", std::process::id()));
-    fs::write(&outside, b"\0asm").expect("module should be written");
+    fs::write(&outside, wasm_header()).expect("module should be written");
 
     if symlink_file(&outside, &root.join("plugin.wasm")).is_err() {
         // The platform does not let this user create symlinks.

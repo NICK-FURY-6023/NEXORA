@@ -22,8 +22,16 @@ capability and a capability with an empty host or path target.
 
 The entrypoint is a path relative to the plugin root. `PluginSandbox::load`
 resolves it through symlinks, rejects an absolute, traversing or
-out-of-root entrypoint, and refuses a module larger than the sandbox memory
-limit.
+out-of-root entrypoint, refuses a module larger than the sandbox memory
+limit, and refuses a file that is not a WebAssembly module: the bytes must
+start with the magic and version 1 (`\0asm\x01\x00\x00\x00`). The loaded
+bytes are on the module, so the host hands the engine exactly what it
+checked.
+
+```rust
+let module = sandbox.load(&root, &manifest)?;
+assert_eq!(module.bytes(), b"\0asm\x01\x00\x00\x00");
+```
 
 ## Capabilities
 
@@ -68,6 +76,12 @@ let sandbox = PluginSandbox::from_manifest_with(&manifest, &host_policy)?;
 The allow lists name hosts, not ports: approving `api.example.com` approves
 that host on any port.
 
+The capability set the sandbox exposes (`PluginSandbox::capabilities`) is the
+set the effective policy actually grants. A host the host did not approve, a
+host that points at the local network and a path outside the declared roots
+are dropped from it, so a plugin is never shown a capability the sandbox
+would refuse.
+
 What each check refuses:
 
 - **Network** — no network capability, a host outside the allow list, a
@@ -83,10 +97,42 @@ What each check refuses:
 A denied operation returns a `NexoraError`: `ErrorCode::InvalidInput` for a
 malformed argument, `ErrorCode::Service` for a policy denial.
 
+## Running a module
+
+`PluginRuntime` executes a WebAssembly module under a policy. The module is
+run by an interpreter that has no ambient authority: it reaches the network,
+the filesystem and its own memory only through the host functions the runtime
+installs, and every one of them is checked against the policy first.
+
+```rust
+use nexora_plugin_api::{PluginManifest, PluginRuntime, SandboxPolicy};
+
+let mut policy = SandboxPolicy::deny_all();
+policy.network = true;
+policy.allowed_hosts = vec!["api.example.com".to_owned()];
+policy.time_limit_ms = 1_000;
+
+let runtime = PluginRuntime::with_policy(policy)?;
+let manifest = PluginManifest::new("my-plugin", "0.1.0", "plugin.wasm");
+let results = runtime.call(&manifest, &module_bytes, "answer", &[])?;
+```
+
+The arguments are the strings the host hands the module. A module receives
+each one as the `i32` index of its place in the call, so it never has to own
+the bytes: the host keeps them, and the host function the module calls reads
+the one it was given. The results are the module's own `i32` values, which is
+the only type a plugin may exchange with the host.
+
+The time limit is enforced as fuel: the interpreter charges for each unit of
+work and the module stops when the fuel is spent, so a module that never
+returns is stopped rather than hung. The memory limit is enforced by the
+interpreter's own memory limiter.
+
+A module that asks for an effect the policy refuses is told the effect did
+not happen, and the host sees the refusal after the call.
+
 ## Not wired yet
 
-The sandbox is the enforcement half of the runtime. The interpreter that
-executes a WebAssembly module against it is not part of this crate yet: it
-needs a pinned WebAssembly engine (wasmtime), which the shared tree does not
-vendor. Until that lands, `PluginSandbox` guards the effects a plugin asks
-for, and the host calls the plugin's entry point itself.
+`nexora-plugin-api` has no dependents: the server cannot load a plugin yet.
+The runtime is ready for it to do so.
+

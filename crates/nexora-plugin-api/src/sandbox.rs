@@ -12,6 +12,7 @@ pub struct PluginModule {
     manifest: PluginManifest,
     policy: SandboxPolicy,
     entrypoint: PathBuf,
+    bytes: Vec<u8>,
 }
 
 impl PluginModule {
@@ -28,6 +29,11 @@ impl PluginModule {
     /// The resolved entrypoint path.
     pub fn entrypoint(&self) -> PathBuf {
         self.entrypoint.clone()
+    }
+
+    /// The module bytes, already read and checked against the policy.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
@@ -46,7 +52,14 @@ pub struct PluginSandbox {
 
 impl PluginSandbox {
     /// Creates a sandbox for an explicit policy and capability set.
+    ///
+    /// The exposed capability set is what the policy actually grants: a
+    /// capability the policy refuses is not handed to the plugin.
     pub fn new(policy: SandboxPolicy, capabilities: Vec<PluginCapability>) -> Self {
+        let capabilities = capabilities
+            .into_iter()
+            .filter(|capability| granted_by(&policy, capability))
+            .collect();
         Self {
             policy,
             capabilities,
@@ -119,24 +132,8 @@ impl PluginSandbox {
     /// Reports whether the plugin holds a capability.
     pub fn grants(&self, capability: &PluginCapability) -> bool {
         match capability {
-            PluginCapability::Network(host) => {
-                self.policy.network
-                    && self
-                        .policy
-                        .allowed_hosts
-                        .iter()
-                        .any(|allowed| host_matches(allowed, host))
-            }
-            PluginCapability::FileSystem(path) => {
-                self.policy.filesystem
-                    && Path::new(path)
-                        .components()
-                        .all(|component| matches!(component, Component::Normal(_)))
-                    && self
-                        .policy
-                        .allowed_paths
-                        .iter()
-                        .any(|allowed| path_matches(allowed, path))
+            PluginCapability::Network(_) | PluginCapability::FileSystem(_) => {
+                granted_by(&self.policy, capability)
             }
             _ => self.capabilities.contains(capability),
         }
@@ -257,19 +254,67 @@ impl PluginSandbox {
         if metadata.len() > limit {
             return Err(NexoraError::service("plugin sandbox denied the module"));
         }
+        let bytes = std::fs::read(&resolved)
+            .map_err(|_| NexoraError::invalid_input("plugin entrypoint is missing"))?;
+        if !is_webassembly(&bytes) {
+            return Err(NexoraError::invalid_input(
+                "plugin entrypoint is not a webassembly module",
+            ));
+        }
         Ok(PluginModule {
             manifest: manifest.clone(),
             policy: self.policy.clone(),
             entrypoint: resolved,
+            bytes,
         })
     }
 }
 
-fn host_of(url: &str) -> Option<String> {
+/// True when the bytes start with the WebAssembly header: the magic and
+/// version 1. A file that is not a module never reaches an engine.
+fn is_webassembly(bytes: &[u8]) -> bool {
+    bytes.len() >= 8 && bytes.starts_with(b"\0asm\x01\x00\x00\x00")
+}
+
+/// Reports whether the effective policy grants a capability.
+///
+/// The network and filesystem rules are the ones the checks apply, so a
+/// capability the sandbox would refuse is never granted or exposed.
+fn granted_by(policy: &SandboxPolicy, capability: &PluginCapability) -> bool {
+    match capability {
+        PluginCapability::Network(host) => {
+            policy.network
+                && !is_private_host(host)
+                && policy
+                    .allowed_hosts
+                    .iter()
+                    .any(|allowed| host_matches(allowed, host))
+        }
+        PluginCapability::FileSystem(path) => {
+            policy.filesystem
+                && Path::new(path)
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_)))
+                && policy
+                    .allowed_paths
+                    .iter()
+                    .any(|allowed| path_matches(allowed, path))
+        }
+        _ => true,
+    }
+}
+
+pub(crate) fn host_of(url: &str) -> Option<String> {
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // A backslash ends the authority for an http(s) URL, so the host is what
+    // precedes it. Reading the whole authority would see an allowed name
+    // where the request would go somewhere else entirely.
+    if authority.contains('\\') {
+        return None;
+    }
     let hostport = authority.rsplit('@').next().unwrap_or("");
     let host = match hostport.strip_prefix('[') {
         Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
@@ -283,7 +328,7 @@ fn host_of(url: &str) -> Option<String> {
     }
 }
 
-fn host_matches(allowed: &str, host: &str) -> bool {
+pub(crate) fn host_matches(allowed: &str, host: &str) -> bool {
     let allowed = allowed.trim().to_ascii_lowercase();
     let host = host.trim().to_ascii_lowercase();
     if allowed.is_empty() || host.is_empty() {
@@ -383,7 +428,7 @@ fn is_private_address(address: IpAddr) -> bool {
 }
 
 /// Reports whether a host points at the local network.
-fn is_private_host(host: &str) -> bool {
+pub(crate) fn is_private_host(host: &str) -> bool {
     let host = host.trim_end_matches('.');
     if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") {
         return true;
