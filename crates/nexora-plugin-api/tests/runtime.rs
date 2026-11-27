@@ -5,6 +5,23 @@ fn manifest() -> PluginManifest {
     PluginManifest::new("test-plugin", "0.1.0", "plugin.wasm")
 }
 
+/// A module that exports `greet`, which hands the string "hello" back to the
+/// host through `host.push` and returns the index it was given.
+const GREET_MODULE: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
+    0x01, 0x0b, 0x02, // type section: two types
+    0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, // (i32, i32) -> i32
+    0x60, 0x00, 0x01, 0x7f, // () -> i32
+    0x02, 0x0d, 0x01, // import section: host.push
+    0x04, b'h', b'o', b's', b't', 0x04, b'p', b'u', b's', b'h', 0x00, 0x00, 0x03, 0x02, 0x01,
+    0x01, // function section: one function of type 1
+    0x05, 0x03, 0x01, 0x00, 0x01, // memory section: one page
+    0x07, 0x12, 0x02, // export section: memory and greet
+    0x06, b'm', b'e', b'm', b'o', b'r', b'y', 0x02, 0x00, 0x05, b'g', b'r', b'e', b'e', b't', 0x00,
+    0x01, 0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x00, 0x41, 0x05, 0x10, 0x00, 0x0b, // code
+    0x0b, 0x0b, 0x01, 0x00, 0x41, 0x00, 0x0b, 0x05, b'h', b'e', b'l', b'l', b'o', // data
+];
+
 /// A module that exports `answer`, which returns the i32 constant 42.
 const ANSWER_MODULE: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
@@ -20,7 +37,17 @@ fn a_module_runs_its_exported_function() {
     let result = runtime
         .call(&manifest(), ANSWER_MODULE, "answer", &[])
         .expect("the module should run");
-    assert_eq!(result, vec![42]);
+    assert_eq!(result.results, vec![42]);
+}
+
+#[test]
+fn a_module_hands_a_string_back_to_the_host() {
+    let runtime = PluginRuntime::new().expect("runtime should start");
+    let result = runtime
+        .call(&manifest(), GREET_MODULE, "greet", &[])
+        .expect("the module should run");
+    assert_eq!(result.strings, vec!["hello".to_owned()]);
+    assert_eq!(result.results, vec![1]);
 }
 
 #[test]

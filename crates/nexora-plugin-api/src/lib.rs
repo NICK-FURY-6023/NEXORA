@@ -3,7 +3,7 @@ use nexora_error::{NexoraError, NexoraResult};
 mod runtime;
 mod sandbox;
 
-pub use runtime::PluginRuntime;
+pub use runtime::{PluginCall, PluginRuntime};
 pub use sandbox::{PluginModule, PluginSandbox};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

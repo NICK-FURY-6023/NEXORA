@@ -1,5 +1,6 @@
 use wasmi::{
-    Config, Engine, FuncType, Linker, Module, Store, StoreLimits, StoreLimitsBuilder, Val, ValType,
+    Config, Engine, Extern, FuncType, Linker, Module, Store, StoreLimits, StoreLimitsBuilder, Val,
+    ValType,
 };
 
 use nexora_error::{NexoraError, NexoraResult};
@@ -11,6 +12,14 @@ const HOST_MODULE: &str = "host";
 
 /// Fuel charged for each unit of work, so a time limit maps onto fuel.
 const FUEL_PER_MS: u64 = 2_000;
+
+/// What a plugin call hands back to the host: its exported `i32` results and
+/// the strings it pushed through `host.push`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PluginCall {
+    pub strings: Vec<String>,
+    pub results: Vec<i32>,
+}
 
 /// Runs a plugin module under a [`SandboxPolicy`].
 ///
@@ -70,7 +79,7 @@ impl PluginRuntime {
         wasm: &[u8],
         export: &str,
         args: &[&str],
-    ) -> NexoraResult<Vec<i32>> {
+    ) -> NexoraResult<PluginCall> {
         crate::validate_manifest(manifest)?;
         let mut config = Config::default();
         config.consume_fuel(true);
@@ -87,6 +96,7 @@ impl PluginRuntime {
                 policy: self.policy.clone(),
                 limits: limits.clone(),
                 arguments: args.iter().map(|arg| (*arg).to_owned()).collect(),
+                strings: Vec::new(),
                 denied: None,
             },
         );
@@ -105,14 +115,14 @@ impl PluginRuntime {
             .get_func(&store, export)
             .ok_or_else(|| NexoraError::invalid_input("plugin module has no such export"))?;
         let ty = function.ty(&store);
-        if ty.params().len() != args.len() {
+        if ty.params().len() < args.len() {
             return Err(NexoraError::invalid_input(
-                "plugin export takes a different number of arguments",
+                "plugin export takes fewer arguments than the host supplied",
             ));
         }
 
-        let params = (0..args.len())
-            .map(|index| Val::I32(index as i32))
+        let params = (0..ty.params().len())
+            .map(|index| Val::I32(args.get(index).map(|_| index as i32).unwrap_or(0)))
             .collect::<Vec<_>>();
         let mut results = vec![Val::I32(0); ty.results().len()];
         function
@@ -124,13 +134,16 @@ impl PluginRuntime {
         if let Some(reason) = store.data().denied.clone() {
             return Err(NexoraError::service(reason));
         }
-        Ok(results
-            .into_iter()
-            .map(|value| match value {
-                Val::I32(number) => number,
-                _ => 0,
-            })
-            .collect())
+        Ok(PluginCall {
+            strings: store.data().strings.clone(),
+            results: results
+                .into_iter()
+                .map(|value| match value {
+                    Val::I32(number) => number,
+                    _ => 0,
+                })
+                .collect(),
+        })
     }
 }
 
@@ -160,6 +173,7 @@ struct HostState {
     policy: SandboxPolicy,
     limits: StoreLimits,
     arguments: Vec<String>,
+    strings: Vec<String>,
     denied: Option<String>,
 }
 
@@ -168,6 +182,40 @@ struct HostState {
 /// Each one checks the policy before the effect happens, so a module cannot
 /// reach a host the sandbox refuses.
 fn install_host_functions(linker: &mut Linker<HostState>) -> NexoraResult<()> {
+    let push_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32]);
+    linker
+        .func_new(
+            HOST_MODULE,
+            "push",
+            push_type,
+            |mut caller, args, results| {
+                let (pointer, length) = match (args.first(), args.get(1)) {
+                    (Some(Val::I32(pointer)), Some(Val::I32(length))) => (*pointer, *length),
+                    _ => return Err(wasmi::Error::new("host.push needs a pointer and a length")),
+                };
+                if length < 0 || length as usize > 1024 * 1024 {
+                    return Err(wasmi::Error::new("host.push string is too large"));
+                }
+                let memory = match caller.get_export("memory") {
+                    Some(Extern::Memory(memory)) => memory,
+                    _ => return Err(wasmi::Error::new("plugin has no memory to read")),
+                };
+                let mut bytes = vec![0u8; length as usize];
+                if memory
+                    .read(&caller, pointer.max(0) as usize, &mut bytes)
+                    .is_err()
+                {
+                    return Err(wasmi::Error::new("host.push pointer is out of bounds"));
+                }
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                let state = caller.data_mut();
+                state.strings.push(text);
+                results[0] = Val::I32(state.strings.len() as i32);
+                Ok(())
+            },
+        )
+        .map_err(|_| NexoraError::service("plugin sandbox denied the operation"))?;
+
     let network_type = FuncType::new([ValType::I32], [ValType::I32]);
     linker
         .func_new(

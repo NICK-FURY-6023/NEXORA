@@ -253,7 +253,10 @@ async fn plugin_call(
                 format!("/nexora/plugins/{name}/call"),
             )
         })?;
-    Ok(Json(json!({ "results": results })))
+    Ok(Json(json!({
+        "results": results.results,
+        "strings": results.strings,
+    })))
 }
 
 /// `GET /nexora/loadstream` — the resolved track's audio as raw PCM.

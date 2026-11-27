@@ -225,6 +225,29 @@ pub enum NexoraEventMessage {
         guild_id: String,
     },
     /// Discord's voice state update: `{guildId, userId, channelId, selfDeaf, selfMute}`.
+    #[serde(rename = "StreamMetadataEvent")]
+    StreamMetadata {
+        #[serde(rename = "guildId")]
+        guild_id: String,
+        #[serde(rename = "trackId")]
+        track_id: String,
+        title: String,
+        #[serde(rename = "sourceName")]
+        source_name: String,
+        #[serde(rename = "lengthMs")]
+        length_ms: u64,
+    },
+    #[serde(rename = "SourceHealthSnapshotEvent")]
+    SourceHealthSnapshot {
+        sources: Vec<SourceHealth>,
+    },
+    #[serde(rename = "SourceHealthChangeEvent")]
+    SourceHealthChange {
+        #[serde(rename = "sourceId")]
+        source_id: String,
+        healthy: bool,
+        detail: String,
+    },
     #[serde(rename = "VoiceStateUpdate")]
     VoiceStateUpdate {
         #[serde(rename = "guildId")]
