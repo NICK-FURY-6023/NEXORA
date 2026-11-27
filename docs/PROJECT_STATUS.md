@@ -2,7 +2,7 @@
 
 ## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `52f0b95` (2026-11-27). The
+Status: **implemented and verified** at commit `8cb09a9` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
 Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
@@ -10,9 +10,9 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **354 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **355 passing
   tests, 0 failures**.
-- CI run `45974612022` is green on Linux and Windows. The docs site and
+- CI run `45977831795` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
@@ -23,8 +23,10 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
   commercial-source login flows, production hardening, and server-level
   capacity claims.
 - Closed from the remaining-work plan: plugin manifest capabilities are now
-  enforced by the runtime (commit `52f0b95`, seven capability tests). The full
-  backlog and execution plan live in
+  enforced by the runtime (commit `52f0b95`, seven capability tests), and
+  `GET /metrics` exposes the existing counters as Prometheus text with the same
+  authorization as `/api/v1/metrics` (commit `8cb09a9`). The full backlog and
+  execution plan live in
   `docs/superpowers/plans/2026-11-27-remaining-work.md`.
 
 ### Slice 1: real-time local playback (2026-11-22)

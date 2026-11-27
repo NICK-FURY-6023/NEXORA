@@ -36,7 +36,9 @@ The event WebSocket at `/ws/v1/sessions/{id}` stays text-only.
 The native contract is live under `/api/v1/`: health/info, sources, search,
 resolve, sessions, playback controls, filters, queue, raw PCM stream and
 metrics. The compatibility surface adds `/nexora/*` v4 routes, session resume,
-the plugin endpoints, and the voice RTP transport. See
+the plugin endpoints, and the voice RTP transport. `GET /metrics` serves the
+same real counters as `/api/v1/metrics` in Prometheus text format
+(`text/plain; version=0.0.4`) under the same authorization. See
 [COMPATIBILITY.md](COMPATIBILITY.md) for the exact per-route status.
 
 ## Implemented event types
