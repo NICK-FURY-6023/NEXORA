@@ -14,6 +14,7 @@ use serde_json::json;
 use tokio::sync::{RwLock, broadcast, watch};
 use tokio::task::JoinHandle;
 
+pub mod durable;
 pub mod nexora;
 
 pub use nexora::{
