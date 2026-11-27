@@ -9,14 +9,14 @@ in [COMPATIBILITY.md](COMPATIBILITY.md).
 Evidence used: `README.md`, `docs/MASTER_AI_INSTRUCTIONS.md`,
 `docs/LAVALINK_ANALYSIS.md`, official Lavalink v4 REST/WebSocket docs, the
 current Rust sources cited below, and a fresh `cargo test --workspace` run
-(exit 0, 347 tests passed at commit `ed22756`).
+(exit 0, 354 tests passed at commit `52f0b95`).
 
 ## Current verification baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`: exit 0.
 - `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
-- `cargo test --workspace`: exit 0, 347 tests passed, 0 failed.
-- CI run `45967064156`: green on Linux and Windows, including the docs site
+- `cargo test --workspace`: exit 0, 354 tests passed, 0 failed.
+- CI run `45974612022`: green on Linux and Windows, including the docs site
   and relative-link checks.
 
 ## 1. Product intent
@@ -79,7 +79,7 @@ proprietary source extraction are deliberate non-goals
 | Live playback | `play` resolves source, starts one paced task, emits raw Opus to `/ws/v1/sessions/{id}/audio`; controls use typed signals | `crates/nexora-session/src/lib.rs`, `services/nexora-server/src/lib.rs` |
 | `/v4` adapter | `info`, `stats`, `loadtracks`, `sessions`, `player`, WS events; real source IDs and honest `connected=false`, `ping=-1` | `services/nexora-server/src/lib.rs` |
 | Auth | Bearer token when password set, open when unset; REST and both WebSockets share it | `services/nexora-server/src/lib.rs` |
-| Tests | 347 passing in workspace; live audio WS proof recorded below | fresh `cargo test --workspace` + live smoke |
+| Tests | 354 passing in workspace; live audio WS proof recorded below | fresh `cargo test --workspace` + live smoke |
 
 Slice 1 closed the original playback gap: `play` now resolves before mutating
 session state, produces paced 20 ms Opus packets, advances position, and emits

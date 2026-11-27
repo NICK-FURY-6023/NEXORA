@@ -122,6 +122,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Current verified baseline at `ed22756`: 347 tests passing, 0 failures; `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` also pass. CI run `45967064156` is green. See
+Current verified baseline at `52f0b95`: 354 tests passing, 0 failures; `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` also pass. CI run `45974612022` is green. See
 [PROJECT_STATUS.md](PROJECT_STATUS.md) for the live runtime proof and
 [BENCHMARKS.md](BENCHMARKS.md) for measured microbenchmarks.

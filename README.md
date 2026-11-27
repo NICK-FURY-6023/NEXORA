@@ -1294,7 +1294,7 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-At `ed22756` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (347 tests, 0 failures); CI run `45967064156` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
+At `52f0b95` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (354 tests, 0 failures); CI run `45974612022` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
 | Area | Current status |
 |---|---|
