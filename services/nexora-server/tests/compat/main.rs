@@ -14,6 +14,8 @@ use axum::body::Body;
 use axum::http::Request;
 use futures_util::SinkExt;
 use nexora_audio_pipeline::filters::{xsecret_crypt, xsecret_key};
+use nexora_audio_types::AudioFormat;
+use nexora_common::{SessionId, TrackId};
 use nexora_protocol::NexoraEventMessage;
 use nexora_protocol::NexoraOp;
 use nexora_protocol::NexoraTrack;
@@ -1867,4 +1869,77 @@ async fn compat_metrics_exposes_real_counters_in_prometheus_text() {
     assert!(text.contains("nexora_active_sessions 0"));
     assert!(text.contains("nexora_stream_bytes_total 0"));
     let _ = fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn compat_sessions_survive_a_restart_without_auto_resuming() {
+    let root = media_root();
+    let path = root.join("sessions.json");
+    let manager = SessionManager::new();
+    let id = SessionId::new("restart-session").unwrap();
+    manager
+        .create_with_id(
+            id.clone(),
+            AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus),
+        )
+        .await
+        .unwrap();
+    manager.set_volume(&id, 77).await.unwrap();
+    manager
+        .enqueue(&id, TrackId::new("restart-track").unwrap())
+        .await
+        .unwrap();
+
+    nexora_server::save_sessions(&path, &manager)
+        .await
+        .expect("the snapshot should be written");
+    let restored = nexora_server::load_sessions(&path)
+        .await
+        .expect("the snapshot should load");
+
+    let state = restored.get(&id).await.unwrap();
+    assert_eq!(state.volume, 77);
+    assert_eq!(restored.queue(&id).await.unwrap().len(), 1);
+    assert_ne!(state.status, "playing");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn compat_metrics_requires_bearer_when_password_is_set() {
+    let router = build_router(AppState {
+        sessions: Arc::new(SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
+        sources: Arc::new(SourceRegistry::new()),
+        password: Some("secret".to_owned()),
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    });
+
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), 401);
+
+    let authenticated = router
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .header("Authorization", "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authenticated.status(), 200);
 }

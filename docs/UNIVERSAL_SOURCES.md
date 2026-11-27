@@ -52,5 +52,6 @@ They are ignored by default; set `NEXORA_LIVE_SPOTIFY_TOKEN`,
 `NEXORA_LIVE_DEEZER_TOKEN`, `NEXORA_LIVE_APPLE_TOKEN` or
 `NEXORA_LIVE_TIDAL_TOKEN` to the user's own token and run
 `cargo test -p nexora-source-universal --test live_providers -- --ignored`.
-No token value is stored in the repository, and a run without credentials
-reports four ignored tests and zero failures.
+No token value is stored in the repository. A plain run reports four ignored
+tests; with `--ignored`, a test with no token skips early and a test with a
+token must return at least one parseable result.

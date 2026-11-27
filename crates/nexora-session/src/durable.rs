@@ -81,8 +81,15 @@ pub fn restore_snapshot(snapshot: SessionSnapshot) -> NexoraResult<SessionManage
             .into_iter()
             .map(|id| TrackId::new(id).map_err(|_| NexoraError::invalid_input("invalid queue id")))
             .collect::<NexoraResult<Vec<_>>>()?;
+        // A restored session has no playback task attached, so it must not
+        // claim to be playing. Pause it at the saved position instead.
+        let status = if entry.status == "playing" {
+            "paused".to_owned()
+        } else {
+            entry.status
+        };
         let record = SessionRecord {
-            status: entry.status,
+            status,
             current_track,
             position_ms: entry.position_ms,
             volume: entry.volume,

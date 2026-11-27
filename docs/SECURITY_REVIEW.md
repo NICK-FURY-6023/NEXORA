@@ -28,9 +28,9 @@ was removed in commit `32208b4`; no SDK ships today.
 
 ## Remaining risks / deferred work
 
-- Lavalink client conformance is partial; more `/v4` endpoints should be tested against real clients.
-- Session state is in-memory and lost on restart; durable state needs authentication and encryption review.
-- Monitoring configs are examples only; no Prometheus exposition is wired.
+- Lavalink client conformance is partial; more `/nexora/*` endpoints should be tested against real clients.
+- Session snapshots are opt-in via `--session-snapshot` and store no credentials; the snapshot file is not encrypted, so host filesystem access control is required.
+- Authenticated Prometheus exposition exists at `GET /metrics`; alerting rules and long-term storage are not configured.
 - No SDK is shipped, so no SDK surface is covered by this review.
 - Credentialed live-provider flows for Spotify, Deezer, Apple Music and Tidal
   require the user's own authorized token and are not covered by this review.

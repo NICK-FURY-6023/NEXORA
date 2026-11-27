@@ -10,8 +10,10 @@ use nexora_config::NexoraConfig;
 use nexora_error::NexoraResult;
 use nexora_grpc::NexoraGrpcService;
 use nexora_grpc::nexora::session_service_server::SessionServiceServer;
-use nexora_server::{AppState, RuntimeMetrics, build_router, register_builtin_sources};
-use nexora_session::{NexoraSessionManager, SessionManager};
+use nexora_server::{
+    AppState, RuntimeMetrics, build_router, load_sessions, register_builtin_sources, save_sessions,
+};
+use nexora_session::NexoraSessionManager;
 use nexora_source_framework::{
     AuthorizedHttpAdapter, LocalMediaAdapter, PublicRadioAdapter, RadioStation, SourceRegistry,
 };
@@ -41,6 +43,9 @@ struct Args {
 
     #[arg(long)]
     media_root: Option<PathBuf>,
+
+    #[arg(long)]
+    session_snapshot: Option<PathBuf>,
 
     #[arg(long, default_value = "info")]
     log_filter: String,
@@ -89,7 +94,10 @@ async fn main() -> NexoraResult<()> {
         .or_else(|| env::var("NEXORA_SERVER_PASSWORD").ok())
         .filter(|value| !value.is_empty());
 
-    let sessions = Arc::new(SessionManager::new());
+    let sessions = match args.session_snapshot.as_deref() {
+        Some(path) => load_sessions(path).await?,
+        None => Arc::new(nexora_session::SessionManager::new()),
+    };
     // The plugins live in a configured directory: a `<name>.wasm` module with
     // a `<name>.json` manifest beside it.
     let mut plugins: HashMap<String, nexora_server::LoadedPlugin> = HashMap::new();
@@ -146,10 +154,15 @@ async fn main() -> NexoraResult<()> {
         })?;
 
     tracing::info!(%address, %grpc_address, codec = %AudioCodec::Opus, "nexora server listening");
-    axum::serve(listener, build_router(state))
+    axum::serve(listener, build_router(state.clone()))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await
-        .map_err(|error| nexora_error::NexoraError::service_with_source("server failed", error))
+        .map_err(|error| nexora_error::NexoraError::service_with_source("server failed", error))?;
+
+    if let Some(path) = args.session_snapshot.as_deref() {
+        save_sessions(path, &state.sessions).await?;
+    }
+    Ok(())
 }

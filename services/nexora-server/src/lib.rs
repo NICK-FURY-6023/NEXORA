@@ -413,6 +413,21 @@ pub fn register_builtin_sources(
     let _ = sources.register(Box::new(TidalSource::new(std::sync::Arc::clone(&tokens))));
 }
 
+/// Loads session state from a snapshot, or starts empty when no snapshot exists.
+pub async fn load_sessions(path: &FsPath) -> NexoraResult<Arc<SessionManager>> {
+    if !path.exists() {
+        return Ok(Arc::new(SessionManager::new()));
+    }
+    Ok(Arc::new(
+        nexora_session::durable::load_from_file(path).await?,
+    ))
+}
+
+/// Writes the current session state to a snapshot file.
+pub async fn save_sessions(path: &FsPath, sessions: &SessionManager) -> NexoraResult<()> {
+    nexora_session::durable::save_to_file(sessions, path).await
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))

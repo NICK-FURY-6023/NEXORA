@@ -29,6 +29,7 @@
 - [M1 — version and the WebSocket](superpowers/plans/2026-11-24-nexora-m1-websocket.md)
 - [M2 — v4 session lifecycle](superpowers/plans/2026-11-24-nexora-m2-session-lifecycle.md)
 - [Community and documentation site](superpowers/plans/2026-11-24-nexora-community-and-site.md)
+- [Remaining work](superpowers/plans/2026-11-27-remaining-work.md)
 
 # Decisions
 
