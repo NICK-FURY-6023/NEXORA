@@ -430,6 +430,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/{id}/queue", get(get_queue).post(enqueue))
         .route("/api/v1/sessions/{id}/stream", get(stream_audio))
         .route("/api/v1/metrics", get(metrics))
+        .route("/metrics", get(prometheus_metrics))
         .route("/ws/v1/sessions/{id}", get(websocket_events))
         .route("/ws/v1/sessions/{id}/audio", get(websocket_audio))
         .merge(nexora::router())
@@ -1202,6 +1203,35 @@ async fn metrics(
         "nexora_stream_bytes_total": state.metrics.stream_bytes.load(Ordering::Relaxed),
         "nexora_api_errors_total": state.metrics.errors.load(Ordering::Relaxed)
     })))
+}
+
+async fn prometheus_metrics(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Response, ApiError> {
+    authorize(&headers, &state)?;
+    let body = format!(
+        "# TYPE nexora_active_sessions gauge\n\
+nexora_active_sessions {}\n\
+# TYPE nexora_api_requests_total counter\n\
+nexora_api_requests_total {}\n\
+# TYPE nexora_search_requests_total counter\n\
+nexora_search_requests_total {}\n\
+# TYPE nexora_stream_bytes_total counter\n\
+nexora_stream_bytes_total {}\n\
+# TYPE nexora_api_errors_total counter\n\
+nexora_api_errors_total {}\n",
+        state.metrics.active_sessions(),
+        state.metrics.api_requests.load(Ordering::Relaxed),
+        state.metrics.search_requests.load(Ordering::Relaxed),
+        state.metrics.stream_bytes.load(Ordering::Relaxed),
+        state.metrics.errors.load(Ordering::Relaxed),
+    );
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "text/plain; version=0.0.4")
+        .body(Body::from(body))
+        .unwrap())
 }
 
 async fn websocket_events(

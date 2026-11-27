@@ -1839,3 +1839,30 @@ async fn compat_protocol_op_codes_are_the_reference_values() {
         "WebSocketClosedEvent"
     );
 }
+
+#[tokio::test]
+async fn compat_metrics_exposes_real_counters_in_prometheus_text() {
+    let root = media_root();
+    let response = app(&root)
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.headers().get("content-type").unwrap(),
+        "text/plain; version=0.0.4"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(text.contains("# TYPE nexora_api_requests_total counter"));
+    assert!(text.contains("nexora_active_sessions 0"));
+    assert!(text.contains("nexora_stream_bytes_total 0"));
+    let _ = fs::remove_dir_all(&root);
+}
