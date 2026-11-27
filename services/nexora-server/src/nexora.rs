@@ -222,28 +222,79 @@ async fn info(State(state): State<AppState>) -> Json<Value> {
 
 /// The stats payload the reference serves.
 fn stats_payload(state: &AppState) -> NexoraStatsFrame {
+    let (memory, cpu) = process_stats();
     NexoraStatsFrame {
+        // The reference computes `frameStats` only for the WebSocket event;
+        // the REST payload never carries it.
         frame_stats: None,
         players: state.metrics.active_sessions() as i64,
         playing_players: state.metrics.active_sessions() as i64,
         uptime: crate::process_uptime_ms() as i64,
-        memory: json!({
-            "free": 0,
-            "used": 0,
-            "allocated": 0,
-            "reservable": 0,
-        }),
-        cpu: json!({
-            "cores": std::thread::available_parallelism()
-                .map(|value| value.get() as i64)
-                .unwrap_or(1),
-            "systemLoad": 0.0,
-            // The wire field name is part of the stats contract a client
-            // reads; it keeps the reference's name even though the value is
-            // NEXORA's own load.
-            "lavalinkLoad": 0.0,
-        }),
+        memory,
+        cpu,
     }
+}
+
+/// The process's real memory and CPU figures.
+///
+/// The reference reports the JVM's heap, because it runs on a JVM. NEXORA has
+/// no JVM, so it reports the process's own resident and virtual memory and
+/// the system's load instead — the figures are real either way.
+fn process_stats() -> (Value, Value) {
+    // A system that cannot be read still reports a well-formed block.
+    let Ok(mut system) = sysinfo::System::new() else {
+        return (
+            json!({ "free": 0, "used": 0, "allocated": 0, "reservable": 0 }),
+            json!({
+                "cores": std::thread::available_parallelism()
+                    .map(|value| value.get() as i64)
+                    .unwrap_or(1),
+                "systemLoad": 0.0,
+                "lavalinkLoad": 0.0,
+            }),
+        );
+    };
+    let pid = sysinfo::Pid::from_u32(std::process::id());
+    // The system-wide memory figures only appear after a refresh.
+    system.refresh_memory();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[pid]),
+        true,
+        sysinfo::ProcessRefreshKind::everything(),
+    );
+    let process = system.process(pid);
+    let used = process.map(sysinfo::Process::memory).unwrap_or(0);
+    // On Windows the virtual figure is the private commit, which can sit
+    // below the resident set because the resident set counts shared pages.
+    let virtual_memory = process.map(sysinfo::Process::virtual_memory).unwrap_or(0);
+    let allocated = virtual_memory.max(used);
+    let process_load = process.map(sysinfo::Process::cpu_usage).unwrap_or(0.0);
+    let available = system.available_memory();
+    // The load average is a Unix figure; elsewhere the process's own load is
+    // the closest thing the platform offers.
+    let system_load = sysinfo::System::load_average()
+        .map(|load| load.one)
+        .unwrap_or_else(|_| f64::from(process_load) / 100.0);
+
+    let mebibyte = 1024.0 * 1024.0;
+    let to_mib = |bytes: u64| (bytes as f64 / mebibyte) as i64;
+    let memory = json!({
+        "free": to_mib(available),
+        "used": to_mib(used),
+        "allocated": to_mib(allocated),
+        "reservable": to_mib(allocated.saturating_sub(used)),
+    });
+    let cpu = json!({
+        "cores": std::thread::available_parallelism()
+            .map(|value| value.get() as i64)
+            .unwrap_or(1),
+        "systemLoad": system_load,
+        // The wire field name is part of the stats contract a client reads;
+        // it keeps the reference's name even though the value is NEXORA's own
+        // load.
+        "lavalinkLoad": f64::from(process_load) / 100.0,
+    });
+    (memory, cpu)
 }
 
 /// `GET /nexora/stats` — the reference's stats block.

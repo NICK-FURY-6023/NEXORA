@@ -11,11 +11,11 @@ and to push the result to GitHub.
 
 ## Intent
 
-A Lavalink client drives a music bot over `/v4/websocket`. It sends commands
+A Lavalink client drives a music bot over `/nexora/websocket`. It sends commands
 over REST and learns what happened over the socket: a track started, a track
 ended, the player's position moved. Without those frames a client cannot
 advance its own queue, cannot show a progress bar, and cannot tell a user why
-a track failed. M3 is the milestone that makes the v4 surface usable by a real
+a track failed. M3 is the milestone that makes the nexora surface usable by a real
 client.
 
 **Why now:** M0–M2 made the protocol types, the socket and the session routes
@@ -26,7 +26,7 @@ before a client can play a track end to end.
 
 ## Goals
 
-- Every frame the reference sends on `/v4/websocket` is sent by NEXORA, with
+- Every frame the reference sends on `/nexora/websocket` is sent by NEXORA, with
   the same envelope, the same field names, the same values and the same
   ordering.
 - A client that reads `TrackEndEvent.reason` can decide whether to advance its
@@ -98,47 +98,47 @@ or from NodeLink's analysed source tree at `E:\nodelink-src.dtcD`.
 Three ways to get the frames out of NEXORA's playback pipeline were
 considered.
 
-### A. A single broadcast bus in the v4 session manager
+### A. A single broadcast bus in the nexora session manager
 
-The v4 session manager owns one `broadcast::Sender<V4EventMessage>`; every
+The nexora session manager owns one `broadcast::Sender<NexoraEventMessage>`; every
 producer — the playback task, the player routes — sends into it; every
 connected socket subscribes and forwards.
 
 - **For:** one queue, one ordering, no plumbing between the native session
-  manager and the v4 surface. The v4 session manager already exists and
+  manager and the nexora surface. The nexora session manager already exists and
   already owns the players, so the players' state lives next to the events
   that describe it.
-- **Against:** the native `SessionManager` and the v4 `V4SessionManager` are
+- **Against:** the native `SessionManager` and the nexora `NexoraSessionManager` are
   separate stores, so the playback task would have to publish to both.
 
 ### B. Extend the native session manager's event channel
 
 The native `SessionManager` already broadcasts `Op` events (playback state
-changes) to its own subscribers. M3 would add the v4 frames to that channel
+changes) to its own subscribers. M3 would add the nexora frames to that channel
 and translate them at the socket.
 
 - **For:** one channel for the whole server; the playback task already
   publishes there.
 - **Against:** the native channel's `Op` type is a native-shaped enum, and
-  the v4 frames need a guild id, a v4 track and a v4 reason — none of which
+  the nexora frames need a guild id, a nexora track and a nexora reason — none of which
   the native events carry. Every translation would need a lookup back into
-  the v4 session manager, which is the coupling this option was meant to
+  the nexora session manager, which is the coupling this option was meant to
   avoid.
 
-### C. A dedicated v4 event bus keyed by session
+### C. A dedicated nexora event bus keyed by session
 
-A new `V4EventBus` owns the channel; the v4 session manager and the playback
+A new `NexoraSessionManager` owns the channel; the nexora session manager and the playback
 task both publish to it.
 
 - **For:** explicit about who owns the events.
-- **Against:** a third place to look for "where do v4 frames come from", for
+- **Against:** a third place to look for "where do nexora frames come from", for
   a surface that already has a session manager holding exactly the state the
   frames describe.
 
 ### Chosen: A
 
-One broadcast channel inside the v4 session manager, and the playback task
-publishes into it through the `AppState`. The v4 session manager already owns
+One broadcast channel inside the nexora session manager, and the playback task
+publishes into it through the `AppState`. The nexora session manager already owns
 the players, so the state a frame describes and the frame itself live
 together. A single channel gives a single ordering for free — the property
 the reference gets from its single WebSocket channel — and it makes the
@@ -156,7 +156,7 @@ socket, but the frames originate in the player.
 
 ### The channel
 
-`V4SessionManager` keeps one `broadcast::Sender<V4EventMessage>`. It is
+`NexoraSessionManager` keeps one `broadcast::Sender<NexoraEventMessage>`. It is
 already there. `emit` and `subscribe` stay as they are.
 
 **Bound:** `broadcast::channel(256)` keeps 256 frames. A slow socket that
@@ -234,21 +234,21 @@ which NEXORA does not signal over the wire.
 
 ### The queue
 
-The reference's v4 protocol has **no** queue surface: the queue lives in the
+The reference's nexora protocol has **no** queue surface: the queue lives in the
 client. The reference's `TrackEndEvent` tells the client whether it should
 advance (`finished` and `loadFailed`), and the client then sends the next
 track.
 
 NEXORA keeps its own queue in the native session manager, because NEXORA
 drives the audio itself. So NEXORA does both: it advances its own queue when a
-track ends, and it publishes `TrackEndEvent` with the reason so a v4 client
+track ends, and it publishes `TrackEndEvent` with the reason so a nexora client
 that also keeps a queue can advance its own. The reference's `finished` and
 `loadFailed` are exactly the reasons that mean "advance".
 
 ### The NodeLink extras
 
-The six extras are typed as one `V4EventMessage` family with their
-NodeLink payloads, and they are emitted from the v4 player routes, which are
+The six extras are typed as one `NexoraEventMessage` family with their
+NodeLink payloads, and they are emitted from the nexora player routes, which are
 where a client changes volume, filters, position or the pause state.
 
 `PlayerCreatedEvent` carries the player object; `PlayerDestroyedEvent`
@@ -260,10 +260,10 @@ carries only the guild id, because NodeLink's own payload is exactly that.
 
 | File | Change |
 |---|---|
-| `crates/nexora-protocol/src/v4/messages.rs` | add the six NodeLink event variants and the `gapless`/`crossfading` reasons |
-| `crates/nexora-protocol/src/v4/player.rs` | expose the player's live position so a frame can carry it |
-| `crates/nexora-session/src/v4.rs` | own the per-player update task; publish the frames |
-| `services/nexora-server/src/lavalink.rs` | emit the extras from the player routes; stop the update task on track end |
+| `crates/nexora-protocol/src/nexora/messages.rs` | add the six NodeLink event variants and the `gapless`/`crossfading` reasons |
+| `crates/nexora-protocol/src/nexora/player.rs` | expose the player's live position so a frame can carry it |
+| `crates/nexora-session/src/nexora.rs` | own the per-player update task; publish the frames |
+| `services/nexora-server/src/nexora.rs` | emit the extras from the player routes; stop the update task on track end |
 | `services/nexora-server/src/lib.rs` | publish `TrackStartEvent`, `TrackEndEvent` and `TrackExceptionEvent` from the playback task |
 | `services/nexora-server/tests/compat/main.rs` | the ordering tests |
 | `docs/COMPATIBILITY.md` | the M3 rows move to `implemented` with their proof names |
@@ -279,22 +279,22 @@ is: the ordering and the payloads are asserted against the recorded reference
 behaviour — the bytecode facts above — by tests that read the real frames off
 a real socket.
 
-1. `compat_v4_event_order_track_start_update_end` — a client that plays a
+1. `compat_nexora_event_order_track_start_update_end` — a client that plays a
    track sees the player-created event, then `TrackStartEvent`, then a
    `playerUpdate` immediately.
-2. `compat_v4_track_start_event_carries_the_track` — the `TrackStartEvent`
+2. `compat_nexora_track_start_event_carries_the_track` — the `TrackStartEvent`
    carries the track the client asked for.
-3. `compat_v4_player_update_state_shape` — the `playerUpdate` frame carries
+3. `compat_nexora_player_update_state_shape` — the `playerUpdate` frame carries
    `state{time, position, connected, ping}` and a `guildId`.
-4. `compat_v4_track_end_event_carries_the_reason` — stopping a player
+4. `compat_nexora_track_end_event_carries_the_reason` — stopping a player
    produces a `TrackEndEvent` with the reason `stopped` and the track that
    was playing.
-5. `compat_v4_track_exception_carries_the_cause` — a track that cannot be
+5. `compat_nexora_track_exception_carries_the_cause` — a track that cannot be
    decoded produces a `TrackExceptionEvent` with the exception's message,
    severity and cause.
-6. `compat_v4_paused_player_sends_no_player_update` — a paused player
+6. `compat_nexora_paused_player_sends_no_player_update` — a paused player
    produces no `playerUpdate`.
-7. `compat_v4_player_events_report_the_change` — the NodeLink extras carry
+7. `compat_nexora_player_events_report_the_change` — the NodeLink extras carry
    their NodeLink payloads.
 
 ---

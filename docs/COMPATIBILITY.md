@@ -59,7 +59,7 @@ Reference inventory: `spec:` `docs/research/lavalink-source-architecture.md`
 | Session resume | — | `NexoraSessionManager::open_socket`/`close_socket` | implemented (M6) | a reconnect with the `Session-Id` header resumes the session, its players and their positions; a session is held for its resume timeout once its last socket is gone — `compat_nexora_session_resume_restores_the_player_state` |
 | `/nexora/info` | GET | `info` | implemented | `plugins` is an object, not a bare array — `compat_nexora_info_shape` |
 | `/version` | GET | `version` | implemented | plain text, no JSON quotes — `compat_version_endpoint_returns_the_plain_version` |
-| `/nexora/stats` | GET | `stats` | implemented | the REST payload has no `op`; only the WebSocket `stats` frame carries one — `compat_nexora_stats_shape` |
+| `/nexora/stats` | GET | `stats` | implemented | the REST payload has no `op`; only the WebSocket `stats` frame carries one. The memory and cpu figures are real measurements of the process and the system — the reference reports the JVM heap, NEXORA has no JVM — `compat_nexora_stats_shape` |
 | `/nexora/routeplanner/status` | GET | `routeplanner_status` | implemented | 204 when no planner is configured — `compat_nexora_routeplanner_status_is_no_content` |
 | `/nexora/routeplanner/free/address` | POST | `routeplanner_free_address` | implemented | 204; NEXORA has no route planner |
 | `/nexora/routeplanner/free/all` | POST | `routeplanner_free_all` | implemented | 204; NEXORA has no route planner |

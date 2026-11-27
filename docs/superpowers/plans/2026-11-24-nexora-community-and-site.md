@@ -93,7 +93,7 @@ git commit -m "docs: add the code of conduct"
 
 - [ ] **Step 1: Write the bug report form**
 
-YAML form with: **What happened** (textarea, "the track, the endpoint or the command, and what you expected instead"), **Version** (input, "the `version` from `/v4/info` or the commit sha"), **Environment** (dropdown: OS, plus "NEXORA version"), **Steps to reproduce** (textarea), **Logs** (textarea with the warning *"Redact tokens, passwords and personal data before pasting"* and a default of "none"), and a **Severity** dropdown (blocker, major, minor, question).
+YAML form with: **What happened** (textarea, "the track, the endpoint or the command, and what you expected instead"), **Version** (input, "the `version` from `/nexora/info` or the commit sha"), **Environment** (dropdown: OS, plus "NEXORA version"), **Steps to reproduce** (textarea), **Logs** (textarea with the warning *"Redact tokens, passwords and personal data before pasting"* and a default of "none"), and a **Severity** dropdown (blocker, major, minor, question).
 
 - [ ] **Step 2: Write the feature request form**
 
@@ -133,7 +133,7 @@ git commit -m "docs: add issue and pull-request templates"
 
 `src/` must live where mdbook expects it: create `docs/src/SUMMARY.md` and `docs/src/index.md`, and point `book.toml`'s `src` at `docs/src`. The summary lists the chapters by section — Start, Architecture, API, Protocol, Compatibility, ADRs, Research, Contributing — and every entry must point at a file that exists in `docs/`.
 
-`docs/src/index.md` is the landing page: what NEXORA is, the three commands to get running (quick start, the v4 compatibility matrix, the roadmap), and the "not yet" list (no voice sender, no WASM plugins, no commercial providers) so a first-time reader is not misled.
+`docs/src/index.md` is the landing page: what NEXORA is, the three commands to get running (quick start, the nexora compatibility matrix, the roadmap), and the "not yet" list (no voice sender, no WASM plugins, no commercial providers) so a first-time reader is not misled.
 
 - [ ] **Step 3: Build the book locally**
 

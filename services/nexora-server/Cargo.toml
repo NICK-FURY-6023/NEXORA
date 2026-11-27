@@ -28,6 +28,7 @@ nexora-source-universal = { path = "../../crates/nexora-source-universal" }
 nexora-session = { path = "../../crates/nexora-session" }
 nexora-grpc = { path = "../../crates/nexora-grpc" }
 nexora-audio-pipeline = { path = "../../crates/nexora-audio-pipeline" }
+sysinfo = "=0.40.4"
 
 [dev-dependencies]
 tower = "=0.5.3"

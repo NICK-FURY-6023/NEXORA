@@ -16,13 +16,14 @@ them.
 | Migrate from Lavalink | [Lavalink analysis](LAVALINK_ANALYSIS.md) → [v4 surface](API.md) |
 | Understand implemented architecture | [Implemented structure](ARCHITECTURE.md) |
 | Understand the full-parity rebuild plan | [Full-parity design](superpowers/specs/2026-11-24-nexora-full-parity-design.md) → [M3 events design](superpowers/specs/2026-11-25-nexora-m3-events-design.md) |
-| Follow a milestone plan | [M0 protocol core plan](superpowers/plans/2026-11-24-nexora-m0-protocol-core.md) → [M1 v4 websocket plan](superpowers/plans/2026-11-24-nexora-m1-v4-websocket.md) → [M2 session lifecycle plan](superpowers/plans/2026-11-24-nexora-m2-session-lifecycle.md) → [community and site plan](superpowers/plans/2026-11-24-nexora-community-and-site.md) |
+| Follow a milestone plan | [M0 protocol core plan](superpowers/plans/2026-11-24-nexora-m0-protocol-core.md) → [M1 WebSocket plan](superpowers/plans/2026-11-24-nexora-m1-websocket.md) → [M2 session lifecycle plan](superpowers/plans/2026-11-24-nexora-m2-session-lifecycle.md) → [community and site plan](superpowers/plans/2026-11-24-nexora-community-and-site.md) |
 | Understand why decisions were made | [ADR index](adr/README.md) → [ADR-022 playback pipeline](adr/ADR-022-playback-pipeline-architecture.md) → [ADR-023 queue auto-advance](adr/ADR-023-queue-auto-advance.md) |
 | Understand why decisions were made | [ADR index](adr/README.md) |
 | Develop or review code | [Development](DEVELOPMENT.md) → [Detailed contributing guide](CONTRIBUTING.md) → [Root checklist](../CONTRIBUTING.md) |
 | Check current truth/status | [Project status](PROJECT_STATUS.md) → [Changelog](../CHANGELOG.md) → [Today's schedule](TODAY_SCHEDULE.md) |
 | Review security posture | [Security review](SECURITY_REVIEW.md) |
 | Study reference evidence | [Research index](#research-and-reference-evidence) |
+| Write or review a plugin | [Plugin API](../crates/nexora-plugin-api/README.md) — the manifest, the capability set and the sandbox policy |
 | See a bot-shaped example | [Bot PoC](BOT_POC.md) and [example script](../examples/bot_poc.py) |
 
 ## Quick start
@@ -79,6 +80,7 @@ and in the table below.
 | New REST or WS route | `services/nexora-server/src/lib.rs` | `services/nexora-server/tests/http.rs` |
 | Session/queue/playback invariant | `crates/nexora-session` | `crates/nexora-session/tests/session.rs` |
 | Source adapter or SSRF rule | `crates/nexora-source-framework` | `crates/nexora-source-framework/tests/framework.rs` |
+| Plugin manifest or sandbox rule | `crates/nexora-plugin-api` | `crates/nexora-plugin-api/tests/sandbox.rs` |
 | Decode/resample/encode behavior | `crates/nexora-audio-*` | crate tests + `cargo bench` where relevant |
 | Public DTO shape | `crates/nexora-protocol` | round-trip tests + [API.md](API.md) |
 | Lavalink wire compatibility | `/v4` handler in `nexora-server` | contract test + [LAVALINK_ANALYSIS.md](LAVALINK_ANALYSIS.md) |

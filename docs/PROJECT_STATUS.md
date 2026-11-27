@@ -195,6 +195,16 @@ Workspace total is now 153 passing Rust tests.
   player endpoints report where the track actually is and a resumed session
   picks that position up.
 
+### Real stats figures (M8)
+
+- `/nexora/stats` reported placeholder zeros for `memory` and `cpu` while the
+  matrix called the row implemented. The figures are now measurements: the
+  process's resident and virtual memory, the system's free memory, and the
+  process's CPU load with the system's load average where the platform has
+  one.
+- The reference computes `frameStats` only for the WebSocket event and never
+  for the REST payload, so the REST payload leaves it out.
+
 ### Session resume (M6)
 
 - The session manager counts the live WebSocket connections per session, so a

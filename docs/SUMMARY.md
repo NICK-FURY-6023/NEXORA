@@ -25,7 +25,7 @@
 
 - [Full-parity design](superpowers/specs/2026-11-24-nexora-full-parity-design.md)
 - [M0 — v4 protocol core](superpowers/plans/2026-11-24-nexora-m0-protocol-core.md)
-- [M1 — version and the v4 WebSocket](superpowers/plans/2026-11-24-nexora-m1-v4-websocket.md)
+- [M1 — version and the WebSocket](superpowers/plans/2026-11-24-nexora-m1-websocket.md)
 - [M2 — v4 session lifecycle](superpowers/plans/2026-11-24-nexora-m2-session-lifecycle.md)
 - [Community and documentation site](superpowers/plans/2026-11-24-nexora-community-and-site.md)
 

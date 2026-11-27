@@ -194,6 +194,20 @@ async fn compat_nexora_stats_shape() {
     assert!(value["cpu"]["cores"].is_u64());
     assert!(value["cpu"]["systemLoad"].is_number());
     assert!(value["cpu"]["lavalinkLoad"].is_number());
+    // The figures are real, not placeholders: the process has a resident
+    // size and the system has free memory.
+    assert!(
+        value["memory"]["used"].as_u64().unwrap() > 0,
+        "the process reports a resident size"
+    );
+    assert!(
+        value["memory"]["free"].as_u64().unwrap() > 0,
+        "the system reports free memory"
+    );
+    assert!(
+        value["memory"]["allocated"].as_u64().unwrap() >= value["memory"]["used"].as_u64().unwrap(),
+        "the reservation is at least the resident size"
+    );
     let _ = fs::remove_dir_all(&root);
 }
 

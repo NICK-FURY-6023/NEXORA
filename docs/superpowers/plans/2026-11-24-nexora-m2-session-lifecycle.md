@@ -1,12 +1,12 @@
-# NEXORA M2 — v4 session lifecycle — Implementation Plan
+# NEXORA M2 — nexora session lifecycle — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete the Lavalink v4 session surface — `GET /v4/sessions/{id}` returning the Session object, `PATCH /v4/sessions/{id}` applying resume settings, and the v4 session state that a real client reads.
+**Goal:** Complete the Lavalink v4 session surface — `GET /nexora/sessions/{id}` returning the Session object, `PATCH /nexora/sessions/{id}` applying resume settings, and the nexora session state that a real client reads.
 
-**Architecture:** The v4 session DTOs live in `crates/nexora-protocol/src/v4/`; the resumable state lives in `nexora-session` next to the rest of the per-session record; the server maps between them. The v4 session routes stop serving a WebSocket there — that moves to `/v4/websocket` in M1.
+**Architecture:** The nexora session DTOs live in `crates/nexora-protocol/src/nexora/`; the resumable state lives in `nexora-session` next to the rest of the per-session record; the server maps between them. The nexora session routes stop serving a WebSocket there — that moves to `/nexora/websocket` in M1.
 
-**Tech Stack:** Rust 2024, axum, serde, `nexora-protocol` v4 types, `nexora-session` state.
+**Tech Stack:** Rust 2024, axum, serde, `nexora-protocol` nexora types, `nexora-session` state.
 
 **Spec:** `docs/superpowers/specs/2026-11-24-nexora-full-parity-design.md` (M2 row) and `docs/COMPATIBILITY.md`. Reference evidence: `docs/research/lavalink-source-architecture.md` §4.8 and the shipped `Lavalink.jar` (`SessionRestHandler.kt:13-25`).
 
@@ -22,11 +22,11 @@
 
 ## Review Focus
 
-1. `GET /v4/sessions/{id}` must return the **Session object** (`resumable`, `resumeTimeout`), not a WebSocket — a Lavalink client that GETs the session expects that JSON and currently gets a socket.
-2. `PATCH /v4/sessions/{id}` with an absent `resuming` or `timeout` must leave the stored value untouched; a present value must replace it.
+1. `GET /nexora/sessions/{id}` must return the **Session object** (`resumable`, `resumeTimeout`), not a WebSocket — a Lavalink client that GETs the session expects that JSON and currently gets a socket.
+2. `PATCH /nexora/sessions/{id}` with an absent `resuming` or `timeout` must leave the stored value untouched; a present value must replace it.
 3. `timeout` is a duration in **milliseconds** on the wire but stored in **seconds** — a `timeout: 5000` must be stored as 5 and echoed as 5000.
 4. A PATCH for a session that does not exist must be a 404, not a 500 and not a silent success.
-5. The native `/api/v1` session surface must keep working unchanged — the v4 route change must not touch `/api/v1/sessions/{id}`.
+5. The native `/api/v1` session surface must keep working unchanged — the nexora route change must not touch `/api/v1/sessions/{id}`.
 
 ---
 
@@ -34,47 +34,47 @@
 
 | Fact | Value | Source |
 |---|---|---|
-| `PATCH /v4/sessions/{id}` body | `{ "resuming": <bool?>, "timeout": <duration?> }` | `spec:` §4.8 (`SessionRestHandler.kt:13-25`) |
-| `PATCH /v4/sessions/{id}` effect | `resuming` sets `context.resumable`; `timeout` sets `context.resumeTimeout` in **seconds** | `spec:` §4.8 |
-| `PATCH /v4/sessions/{id}` response | the `Session` object | `spec:` §4.8 |
+| `PATCH /nexora/sessions/{id}` body | `{ "resuming": <bool?>, "timeout": <duration?> }` | `spec:` §4.8 (`SessionRestHandler.kt:13-25`) |
+| `PATCH /nexora/sessions/{id}` effect | `resuming` sets `context.resumable`; `timeout` sets `context.resumeTimeout` in **seconds** | `spec:` §4.8 |
+| `PATCH /nexora/sessions/{id}` response | the `Session` object | `spec:` §4.8 |
 | Session object | `{ "resumable": <bool>, "resumeTimeout": <duration> }` | `spec:` §4.8 |
-| v4 route inventory | `PATCH /v4/sessions/{sessionId}` is a v4 route; there is **no** `GET /v4/sessions/{id}` in the inventory | `spec:` §4.1 |
+| nexora route inventory | `PATCH /nexora/sessions/{sessionId}` is a nexora route; there is **no** `GET /nexora/sessions/{id}` in the inventory | `spec:` §4.1 |
 
-**Note on the shape:** NEXORA currently serves `GET /v4/sessions/{id}` as an event WebSocket (`services/nexora-server/src/lib.rs`). The reference's session object is what a v4 client reads from the session route, and the reference's event socket is `/v4/websocket` (M1). This plan moves the session route to the reference's meaning and leaves the native `/ws/v1/sessions/{id}` socket as it is.
+**Note on the shape:** NEXORA currently serves `GET /nexora/sessions/{id}` as an event WebSocket (`services/nexora-server/src/lib.rs`). The reference's session object is what a nexora client reads from the session route, and the reference's event socket is `/nexora/websocket` (M1). This plan moves the session route to the reference's meaning and leaves the native `/ws/v1/sessions/{id}` socket as it is.
 
 ---
 
 ## File structure
 
 ```
-crates/nexora-protocol/src/v4/session.rs  # NEW: V4Session, V4SessionUpdate
+crates/nexora-protocol/src/nexora/session.rs  # NEW: NexoraSession, NexoraSessionUpdate
 crates/nexora-session/src/lib.rs          # MODIFIED: resumable + resume timeout in the record
-services/nexora-server/src/lib.rs         # MODIFIED: GET and PATCH /v4/sessions/{id}
+services/nexora-server/src/lib.rs         # MODIFIED: GET and PATCH /nexora/sessions/{id}
 services/nexora-server/tests/compat/main.rs  # MODIFIED: session lifecycle tests
 docs/COMPATIBILITY.md                     # MODIFIED: the session rows
 ```
 
 ---
 
-### Task 1: the v4 session DTOs
+### Task 1: the nexora session DTOs
 
 **Files:**
-- Create: `crates/nexora-protocol/src/v4/session.rs`
-- Modify: `crates/nexora-protocol/src/v4/mod.rs`, `crates/nexora-protocol/src/lib.rs`
-- Test: `crates/nexora-protocol/src/v4/session.rs` (inline tests)
+- Create: `crates/nexora-protocol/src/nexora/session.rs`
+- Modify: `crates/nexora-protocol/src/nexora/mod.rs`, `crates/nexora-protocol/src/lib.rs`
+- Test: `crates/nexora-protocol/src/nexora/session.rs` (inline tests)
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces:
-  - `pub struct V4Session { pub resumable: bool, pub resume_timeout_ms: u64 }` — wire keys `resumable`, `resumeTimeout`.
-  - `pub struct V4SessionUpdate { pub resuming: Option<bool>, pub timeout_ms: Option<u64> }` — wire keys `resuming`, `timeout`; absent means "leave unchanged".
+  - `pub struct NexoraSession { pub resumable: bool, pub resume_timeout_ms: u64 }` — wire keys `resumable`, `resumeTimeout`.
+  - `pub struct NexoraSessionUpdate { pub resuming: Option<bool>, pub timeout_ms: Option<u64> }` — wire keys `resuming`, `timeout`; absent means "leave unchanged".
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
 fn session_serialises_the_reference_shape() {
-    let session = V4Session { resumable: true, resume_timeout_ms: 60_000 };
+    let session = NexoraSession { resumable: true, resume_timeout_ms: 60_000 };
     let value = serde_json::to_value(&session).unwrap();
     assert_eq!(value["resumable"], true);
     assert_eq!(value["resumeTimeout"], 60_000);
@@ -82,10 +82,10 @@ fn session_serialises_the_reference_shape() {
 
 #[test]
 fn session_update_distinguishes_absent_from_present() {
-    let empty: V4SessionUpdate = serde_json::from_str("{}").unwrap();
+    let empty: NexoraSessionUpdate = serde_json::from_str("{}").unwrap();
     assert_eq!(empty.resuming, None);
     assert_eq!(empty.timeout_ms, None);
-    let set: V4SessionUpdate =
+    let set: NexoraSessionUpdate =
         serde_json::from_str(r#"{"resuming": true, "timeout": 5000}"#).unwrap();
     assert_eq!(set.resuming, Some(true));
     assert_eq!(set.timeout_ms, Some(5000));
@@ -94,21 +94,21 @@ fn session_update_distinguishes_absent_from_present() {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-protocol v4::session`
-Expected: FAIL with "cannot find type `V4Session`".
+Run: `cargo test -p nexora-protocol nexora::session`
+Expected: FAIL with "cannot find type `NexoraSession`".
 
-- [ ] **Step 3: Implement `v4/session.rs`**
+- [ ] **Step 3: Implement `nexora/session.rs`**
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4Session {
+pub struct NexoraSession {
     pub resumable: bool,
     #[serde(rename = "resumeTimeout")]
     pub resume_timeout_ms: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct V4SessionUpdate {
+pub struct NexoraSessionUpdate {
     #[serde(default)]
     pub resuming: Option<bool>,
     #[serde(default, rename = "timeout")]
@@ -118,14 +118,14 @@ pub struct V4SessionUpdate {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cargo test -p nexora-protocol v4::session`
+Run: `cargo test -p nexora-protocol nexora::session`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexora-protocol/src/v4/session.rs crates/nexora-protocol/src/v4/mod.rs crates/nexora-protocol/src/lib.rs
-git commit -m "feat(protocol): add v4 session DTOs"
+git add crates/nexora-protocol/src/nexora/session.rs crates/nexora-protocol/src/nexora/mod.rs crates/nexora-protocol/src/lib.rs
+git commit -m "feat(protocol): add nexora session DTOs"
 ```
 
 ---
@@ -184,30 +184,30 @@ git commit -m "feat(session): track resumable session settings"
 
 ---
 
-### Task 3: the v4 session routes
+### Task 3: the nexora session routes
 
 **Files:**
 - Modify: `services/nexora-server/src/lib.rs`
 - Test: `services/nexora-server/tests/compat/main.rs`
 
 **Interfaces:**
-- Consumes: `V4Session`, `V4SessionUpdate` from Task 1; the session methods from Task 2.
+- Consumes: `NexoraSession`, `NexoraSessionUpdate` from Task 1; the session methods from Task 2.
 - Produces:
-  - `GET /v4/sessions/{id}` → the `V4Session` object as JSON.
-  - `PATCH /v4/sessions/{id}` → applies `resuming` and `timeout`, then returns the `V4Session` object.
+  - `GET /nexora/sessions/{id}` → the `NexoraSession` object as JSON.
+  - `PATCH /nexora/sessions/{id}` → applies `resuming` and `timeout`, then returns the `NexoraSession` object.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
-/// Row: `/v4/sessions/{id}` — the session object.
+/// Row: `/nexora/sessions/{id}` — the session object.
 #[tokio::test]
-async fn compat_v4_session_endpoint_returns_the_session_object() {
+async fn compat_nexora_session_endpoint_returns_the_session_object() {
     // create a session, GET it, assert { resumable, resumeTimeout }
 }
 
-/// Row: `PATCH /v4/sessions/{id}` — resume settings round-trip.
+/// Row: `PATCH /nexora/sessions/{id}` — resume settings round-trip.
 #[tokio::test]
-async fn compat_v4_session_patch_applies_resume_settings() {
+async fn compat_nexora_session_patch_applies_resume_settings() {
     // create a session, PATCH { "resuming": true, "timeout": 5000 },
     // assert the response has resumable=true and resumeTimeout=5000
 }
@@ -215,12 +215,12 @@ async fn compat_v4_session_patch_applies_resume_settings() {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-server --test compat compat_v4_session`
+Run: `cargo test -p nexora-server --test compat compat_nexora_session`
 Expected: FAIL — the route returns a WebSocket upgrade, not the session object.
 
 - [ ] **Step 3: Implement the routes**
 
-Replace the `GET /v4/sessions/{id}` route with the session object and add the PATCH:
+Replace the `GET /nexora/sessions/{id}` route with the session object and add the PATCH:
 
 ```rust
 async fn lavalink_session(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
@@ -235,7 +235,7 @@ async fn lavalink_session(State(state): State<AppState>, Path(id): Path<String>)
 async fn lavalink_patch_session(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(update): Json<V4SessionUpdate>,
+    Json(update): Json<NexoraSessionUpdate>,
 ) -> Result<Json<Value>, ApiError> {
     let session_id = parse_session_id(&id)?;
     if let Some(resuming) = update.resuming {
@@ -248,18 +248,18 @@ async fn lavalink_patch_session(
 }
 ```
 
-The event WebSocket that used to live on `GET /v4/sessions/{id}` moves to `/v4/websocket` in M1 — until M1 lands, keep the existing per-session socket at `/ws/v1/sessions/{id}` (it already exists) and make sure the native surface is unchanged.
+The event WebSocket that used to live on `GET /nexora/sessions/{id}` moves to `/nexora/websocket` in M1 — until M1 lands, keep the existing per-session socket at `/ws/v1/sessions/{id}` (it already exists) and make sure the native surface is unchanged.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cargo test -p nexora-server`
-Expected: PASS — including the pre-existing `lavalink_player_matches_documented_v4_shape` test, which uses `/v4/sessions/{id}/player` and must not change.
+Expected: PASS — including the pre-existing `lavalink_player_matches_documented_nexora_shape` test, which uses `/nexora/sessions/{id}/player` and must not change.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add services/nexora-server/src/lib.rs services/nexora-server/tests/compat/main.rs
-git commit -m "feat(server): serve and patch the v4 session resource"
+git commit -m "feat(server): serve and patch the nexora session resource"
 ```
 
 ---
@@ -276,7 +276,7 @@ git commit -m "feat(server): serve and patch the v4 session resource"
 
 - [ ] **Step 1: Update the matrix rows**
 
-`PATCH /v4/sessions/{id}` moves from `missing` to `implemented` with proof `compat_v4_session_patch_applies_resume_settings`. Add a row for the session object with proof `compat_v4_session_endpoint_returns_the_session_object`.
+`PATCH /nexora/sessions/{id}` moves from `missing` to `implemented` with proof `compat_nexora_session_patch_applies_resume_settings`. Add a row for the session object with proof `compat_nexora_session_endpoint_returns_the_session_object`.
 
 - [ ] **Step 2: Run the whole workspace**
 
@@ -287,18 +287,18 @@ Expected: all three exit 0; state the exact test count in the commit.
 
 ```bash
 git add docs/COMPATIBILITY.md docs/PROJECT_STATUS.md
-git commit -m "docs: record the M2 v4 session milestone"
+git commit -m "docs: record the M2 nexora session milestone"
 ```
 
 ---
 
 ## Self-review
 
-**Spec coverage.** The M2 row names create (exists), `loadTracks` (exists), play/pause/stop/seek/volume (exist on the native surface; the v4 player routes are M7), and `PATCH /v4/sessions/{id}` (Task 3). The exit proof "real client play/pause/resume; matrix rows green" is covered by the compat tests plus the matrix update.
+**Spec coverage.** The M2 row names create (exists), `loadTracks` (exists), play/pause/stop/seek/volume (exist on the native surface; the nexora player routes are M7), and `PATCH /nexora/sessions/{id}` (Task 3). The exit proof "real client play/pause/resume; matrix rows green" is covered by the compat tests plus the matrix update.
 
 **Step scan.** Every step names a file, a signature or a test name, and a command with an expected result.
 
-**Type consistency.** `V4Session` and `V4SessionUpdate` are defined in Task 1 and used by name in Task 3; `resume_settings`, `set_resumable` and `set_resume_timeout` are defined in Task 2 and used by the same names in Task 3.
+**Type consistency.** `NexoraSession` and `NexoraSessionUpdate` are defined in Task 1 and used by name in Task 3; `resume_settings`, `set_resumable` and `set_resume_timeout` are defined in Task 2 and used by the same names in Task 3.
 
 **Review Focus.** All five lines have an owning task: the session object replacing the socket (Task 3), absent values leaving state untouched (Task 3), the millisecond/second conversion (Tasks 2 and 3), 404 for an unknown session (Task 2's error contract, Task 3's handler), and the native surface staying unchanged (Task 3's test run covers the pre-existing suite).
 

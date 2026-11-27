@@ -71,8 +71,8 @@ mostly exist already, under the project's `nexora-` naming and the
 
 | Target | NEXORA today | Action |
 |---|---|---|
-| `crates/protocol` | `crates/nexora-protocol` | keep; add v4 op codes, version negotiation |
-| `crates/server` | `services/nexora-server` | keep; add missing v4 routes and `WS /v4/websocket` |
+| `crates/protocol` | `crates/nexora-protocol` | keep; add nexora op codes, version negotiation |
+| `crates/server` | `services/nexora-server` | keep; add missing nexora routes and `WS /nexora/websocket` |
 | `crates/player` | `crates/nexora-session` + the pacing task in the server | keep; split the pacing task into `crates/nexora-player` when the state machine grows |
 | `crates/sources` | `crates/nexora-source-api`, `crates/nexora-source-framework` | keep |
 | `crates/audio` | `crates/nexora-audio-{types,decode,codec,pipeline}` | keep; add the filter chain |
@@ -103,14 +103,14 @@ counts as done only when `gate` passes.
 
 | # | Milestone | Exit proof |
 |---|---|---|
-| M0 | Protocol core: v4 op codes, error envelope, version negotiation, track encoding | protocol contract tests; encoding round-trip fixtures |
-| M1 | Server skeleton: `/health`, `/v4/info`, `/version`, auth, `/v4/websocket` handshake | real Lavalink client connects; matrix row green |
-| M2 | Session lifecycle: create, `loadTracks`, play, pause, stop, seek, volume, `PATCH /v4/sessions/{id}` | real client play/pause/resume; matrix rows green |
+| M0 | Protocol core: nexora op codes, error envelope, version negotiation, track encoding | protocol contract tests; encoding round-trip fixtures |
+| M1 | Server skeleton: `/health`, `/nexora/info`, `/version`, auth, `/nexora/websocket` handshake | real Lavalink client connects; matrix row green |
+| M2 | Session lifecycle: create, `loadTracks`, play, pause, stop, seek, volume, `PATCH /nexora/sessions/{id}` | real client play/pause/resume; matrix rows green |
 | M3 | Events: `playerUpdate`, `TrackStart/End/Exception`, queue events | event ordering tests against recorded Lavalink behaviour |
 | M4 | Filters: Lavalink's ten built-ins (`volume`, `equalizer`, `karaoke`, `timescale`, `tremolo`, `vibrato`, `distortion`, `rotation`, `channelMix`, `lowPass`) plus the NodeLink extras, applied to PCM before encoding | filter unit tests + parity diff |
 | M5 | Discord voice: gateway voice update, UDP, encryption, DAVE E2EE | live voice test against a disposable voice server or a documented harness |
 | M6 | Session resume: reconnect restores player state and position | reconnect/resume test |
-| M7 | Missing v4 surface: `/v4/decodetrack`, `/v4/decodetracks`, `/v4/sessions/{id}/players[/guildId]`, route-planner free endpoints | matrix rows green |
+| M7 | Missing nexora surface: `/nexora/decodetrack`, `/nexora/decodetracks`, `/nexora/sessions/{id}/players[/guildId]`, route-planner free endpoints | matrix rows green |
 | M8 | NodeLink extras: `loadlyrics`, `loadchapters`, `connection`, `trackstream`, detailed stats | matrix rows green; sources for lyrics/chapters documented |
 | M9 | Source framework: local, HTTP, radio, plus a source-manager extension point | source contract tests; SSRF rules re-verified |
 | M10 | WASM plugin runtime (contract exists; execution deferred until here) | sandbox tests; plugin API doc |
@@ -123,7 +123,7 @@ counts as done only when `gate` passes.
 - Parity is proved by recording the original's behaviour and diffing the Rust
   output. Where the original cannot be run on this host, the row states the
   evidence type instead of claiming parity.
-- `/v4/info` keeps NEXORA's own identity but reports the compatibility
+- `/nexora/info` keeps NEXORA's own identity but reports the compatibility
   surface truthfully.
 
 ## Skill workflow gates

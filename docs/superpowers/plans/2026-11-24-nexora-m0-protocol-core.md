@@ -1,10 +1,10 @@
-# NEXORA M0 — v4 protocol core — Implementation Plan
+# NEXORA M0 — nexora protocol core — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn NEXORA's Lavalink v4 wire surface from hand-built `json!` values into typed, round-trippable protocol DTOs — op codes, the event envelope, the error envelope, track encoding and version negotiation — each proven against the shipped reference.
 
-**Architecture:** A new `v4` module inside `crates/nexora-protocol` owns every Lavalink v4 wire type. The server keeps owning HTTP; it stops building v4 payloads by hand and serialises the typed structs instead. Nothing else in the workspace changes shape.
+**Architecture:** A new `nexora` module inside `crates/nexora-protocol` owns every Lavalink v4 wire type. The server keeps owning HTTP; it stops building nexora payloads by hand and serialises the typed structs instead. Nothing else in the workspace changes shape.
 
 **Tech Stack:** Rust 2024, serde + serde_json (already pinned in the workspace), base64 (already pinned), `nexora-error` for error mapping.
 
@@ -22,11 +22,11 @@
 
 ## Review Focus
 
-1. A client sends an unknown `op` value or an unknown event `type` — the server must answer with the v4 error envelope, never panic and never silently drop the message.
+1. A client sends an unknown `op` value or an unknown event `type` — the server must answer with the nexora error envelope, never panic and never silently drop the message.
 2. A malformed `encoded` track (bad base64, non-UTF-8 payload, missing fields) must produce the error envelope; `encode → decode` must be lossless for every valid track.
 3. A track with no duration and no artist must still decode into a `TrackInfo` with documented defaults (`length: 0`, `author: "unknown"`), because real sources omit them.
-4. `/v4/info` must report `filters` truthfully: an empty list means "no filters implemented", and the same value must appear in the compatibility matrix.
-5. A client that negotiates a v4 version newer than NEXORA's must get a documented error, not a silently different payload shape.
+4. `/nexora/info` must report `filters` truthfully: an empty list means "no filters implemented", and the same value must appear in the compatibility matrix.
+5. A client that negotiates a nexora version newer than NEXORA's must get a documented error, not a silently different payload shape.
 
 ---
 
@@ -34,13 +34,13 @@
 
 | Fact | Value | Source |
 |---|---|---|
-| v4 op codes | `Ready` → `"ready"`, `Stats` → `"stats"`, `PlayerUpdate` → `"playerUpdate"`, `Event` → `"event"` (string values, ordinals 0-3) | craft-anything `java_class_show` on `dev.arbjerg.lavalink.protocol.v4.Message$Op` from the shipped `protocol-jvm-4.2.2.jar` |
-| v4 message kinds | `EmittedEvent`, `Op`, `PlayerUpdateEvent`, `ReadyEvent`, `StatsEvent`, `Serializer` | craft-anything `java_class_show` on `dev.arbjerg.lavalink.protocol.v4.Message` |
+| nexora op codes | `Ready` → `"ready"`, `Stats` → `"stats"`, `PlayerUpdate` → `"playerUpdate"`, `Event` → `"event"` (string values, ordinals 0-3) | craft-anything `java_class_show` on `dev.arbjerg.lavalink.protocol.v4.Message$Op` from the shipped `protocol-jvm-4.2.2.jar` |
+| nexora message kinds | `EmittedEvent`, `Op`, `PlayerUpdateEvent`, `ReadyEvent`, `StatsEvent`, `Serializer` | craft-anything `java_class_show` on `dev.arbjerg.lavalink.protocol.v4.Message` |
 | exception severity | `COMMON` (0), `SUSPICIOUS` (1), `FAULT` (2) — the name is `FAULT`, not `FATAL` | craft-anything `java_class_show` on `dev.arbjerg.lavalink.protocol.v4.Exception$Severity` |
-| v4 protocol module layout | `messages.kt`, `player.kt`, `loadResult.kt`, `filters.kt`, `info.kt`, `session.kt`, `stats.kt`, `omissible.kt`, `mapper.kt`, `routeplanner.kt`, `error.kt` | `spec:` §1.4 |
+| nexora protocol module layout | `messages.kt`, `player.kt`, `loadResult.kt`, `filters.kt`, `info.kt`, `session.kt`, `stats.kt`, `omissible.kt`, `mapper.kt`, `routeplanner.kt`, `error.kt` | `spec:` §1.4 |
 | load result kinds | `TRACK_LOADED`, `PLAYLIST_LOADED`, `SEARCH_RESULT`, `NONE`, `LOAD_FAILED` (Kotlin variant names; NEXORA's wire values are the lowercase forms already covered by `services/nexora-server/tests/http.rs`) | `spec:` §4.4 |
 | encoded track | semantically equivalent is enough: identifier + info + opaque source payload; byte-compatibility with Lavaplayer is not required | `docs/LAVALINK_DEEP_DIVE.md` §3 |
-| current NEXORA behaviour | `/v4/info` builds a `json!` value with `filters: []`; `/v4/loadtracks` builds each track with `json!` and base64-encodes a compact JSON payload of `{track_id, source_id, title, duration_ms}` | `services/nexora-server/src/lib.rs` `lavalink_info`, `lavalink_track` |
+| current NEXORA behaviour | `/nexora/info` builds a `json!` value with `filters: []`; `/nexora/loadtracks` builds each track with `json!` and base64-encodes a compact JSON payload of `{track_id, source_id, title, duration_ms}` | `services/nexora-server/src/lib.rs` `lavalink_info`, `lavalink_track` |
 
 ### Deviation from the design doc (recorded here deliberately)
 
@@ -55,13 +55,13 @@ are updated to match in Task 6.
 
 ```
 crates/nexora-protocol/src/
-  lib.rs                     # existing native DTOs; gains `pub mod v4;`
-  v4/mod.rs                  # NEW: module root, re-exports the four submodules
-  v4/op.rs                   # NEW: Op, EmittedEvent, V4EventType
-  v4/error.rs                # NEW: V4Error, V4ErrorSeverity, V4ErrorCode
-  v4/track.rs                # NEW: V4Track, V4TrackInfo, encode_track, decode_track
-  v4/info.rs                 # NEW: V4Info, V4Version, V4Git, V4Plugin
-services/nexora-server/src/lib.rs            # MODIFIED: v4 handlers serialise typed DTOs
+  lib.rs                     # existing native DTOs; gains `pub mod nexora;`
+  nexora/mod.rs                  # NEW: module root, re-exports the four submodules
+  nexora/op.rs                   # NEW: Op, EmittedEvent, NexoraEventMessage
+  nexora/error.rs                # NEW: NexoraError, NexoraErrorSeverity, NexoraErrorEnvelope
+  nexora/track.rs                # NEW: NexoraTrack, NexoraTrackInfo, encode_track, decode_track
+  nexora/info.rs                 # NEW: NexoraInfo, NexoraVersion, NexoraGit, NexoraPlugin
+services/nexora-server/src/lib.rs            # MODIFIED: nexora handlers serialise typed DTOs
 services/nexora-server/tests/compat/main.rs  # NEW: matrix-driven compatibility tests
 docs/COMPATIBILITY.md                       # MODIFIED: M0 rows become implemented
 docs/superpowers/specs/2026-11-24-nexora-full-parity-design.md  # MODIFIED: tests/compat path
@@ -69,98 +69,98 @@ docs/superpowers/specs/2026-11-24-nexora-full-parity-design.md  # MODIFIED: test
 
 ---
 
-### Task 1: v4 op codes and the event envelope
+### Task 1: nexora op codes and the event envelope
 
 **Files:**
-- Create: `crates/nexora-protocol/src/v4/op.rs`
-- Modify: `crates/nexora-protocol/src/lib.rs` (add `pub mod v4;` and `pub use v4::...` re-exports)
-- Test: `crates/nexora-protocol/src/v4/op.rs` (inline `#[cfg(test)] mod tests`)
+- Create: `crates/nexora-protocol/src/nexora/op.rs`
+- Modify: `crates/nexora-protocol/src/lib.rs` (add `pub mod nexora;` and `pub use nexora::...` re-exports)
+- Test: `crates/nexora-protocol/src/nexora/op.rs` (inline `#[cfg(test)] mod tests`)
 
 **Interfaces:**
 - Consumes: nothing (first task).
 - Produces:
-  - `pub enum V4Op { Ready, Stats, PlayerUpdate, Event }` with explicit `#[serde(rename = "...")]` per variant — wire values must be exactly `"ready"`, `"stats"`, `"playerUpdate"`, `"event"`. Implement `V4Op::as_str(&self) -> &'static str` and `V4Op::from_wire(&str) -> Option<V4Op>`.
-  - `pub enum V4EventType { TrackStart, TrackEnd, TrackException, PlayerUpdate, WebSocketClosed }` with wire values `"TrackStartEvent"`, `"TrackEndEvent"`, `"TrackExceptionEvent"`, `"playerUpdate"`, `"WebSocketClosedEvent"`, plus `V4EventType::as_str` and `V4EventType::from_wire`.
-  - `pub struct V4EmittedEvent { pub op: V4Op, pub event: Option<V4EventType>, pub data: serde_json::Value }` — serialises `op` always; `event` is omitted when `None`; `data` is the payload.
+  - `pub enum NexoraOp { Ready, Stats, PlayerUpdate, Event }` with explicit `#[serde(rename = "...")]` per variant — wire values must be exactly `"ready"`, `"stats"`, `"playerUpdate"`, `"event"`. Implement `NexoraOp::as_str(&self) -> &'static str` and `NexoraOp::from_wire(&str) -> Option<NexoraOp>`.
+  - `pub enum NexoraEventMessage { TrackStart, TrackEnd, TrackException, PlayerUpdate, WebSocketClosed }` with wire values `"TrackStartEvent"`, `"TrackEndEvent"`, `"TrackExceptionEvent"`, `"playerUpdate"`, `"WebSocketClosedEvent"`, plus `NexoraEventMessage::as_str` and `NexoraEventMessage::from_wire`.
+  - `pub struct NexoraEventMessage { pub op: NexoraOp, pub event: Option<NexoraEventMessage>, pub data: serde_json::Value }` — serialises `op` always; `event` is omitted when `None`; `data` is the payload.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
 fn op_wire_values_match_the_shipped_reference() {
-    assert_eq!(V4Op::Ready.as_str(), "ready");
-    assert_eq!(V4Op::Stats.as_str(), "stats");
-    assert_eq!(V4Op::PlayerUpdate.as_str(), "playerUpdate");
-    assert_eq!(V4Op::Event.as_str(), "event");
-    assert_eq!(V4Op::from_wire("playerUpdate"), Some(V4Op::PlayerUpdate));
-    assert_eq!(V4Op::from_wire("nope"), None);
+    assert_eq!(NexoraOp::Ready.as_str(), "ready");
+    assert_eq!(NexoraOp::Stats.as_str(), "stats");
+    assert_eq!(NexoraOp::PlayerUpdate.as_str(), "playerUpdate");
+    assert_eq!(NexoraOp::Event.as_str(), "event");
+    assert_eq!(NexoraOp::from_wire("playerUpdate"), Some(NexoraOp::PlayerUpdate));
+    assert_eq!(NexoraOp::from_wire("nope"), None);
 }
 
 #[test]
 fn emitted_event_serialises_op_and_omits_absent_event() {
-    let event = V4EmittedEvent { op: V4Op::Event, event: Some(V4EventType::TrackStart), data: json!({"track": {}}) };
+    let event = NexoraEventMessage { op: NexoraOp::Event, event: Some(NexoraEventMessage::TrackStart), data: json!({"track": {}}) };
     let value = serde_json::to_value(&event).unwrap();
     assert_eq!(value["op"], "event");
     assert_eq!(value["event"], "TrackStartEvent");
-    let no_event = V4EmittedEvent { op: V4Op::Ready, event: None, data: json!({}) };
+    let no_event = NexoraEventMessage { op: NexoraOp::Ready, event: None, data: json!({}) };
     assert!(serde_json::to_value(&no_event).unwrap().get("event").is_none());
 }
 
 #[test]
 fn event_type_wire_values_match_the_reference() {
-    assert_eq!(V4EventType::TrackStart.as_str(), "TrackStartEvent");
-    assert_eq!(V4EventType::TrackEnd.as_str(), "TrackEndEvent");
-    assert_eq!(V4EventType::TrackException.as_str(), "TrackExceptionEvent");
-    assert_eq!(V4EventType::PlayerUpdate.as_str(), "playerUpdate");
-    assert_eq!(V4EventType::WebSocketClosed.as_str(), "WebSocketClosedEvent");
+    assert_eq!(NexoraEventMessage::TrackStart.as_str(), "TrackStartEvent");
+    assert_eq!(NexoraEventMessage::TrackEnd.as_str(), "TrackEndEvent");
+    assert_eq!(NexoraEventMessage::TrackException.as_str(), "TrackExceptionEvent");
+    assert_eq!(NexoraEventMessage::PlayerUpdate.as_str(), "playerUpdate");
+    assert_eq!(NexoraEventMessage::WebSocketClosed.as_str(), "WebSocketClosedEvent");
 }
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-protocol v4::op`
-Expected: FAIL with "cannot find type `V4Op`".
+Run: `cargo test -p nexora-protocol nexora::op`
+Expected: FAIL with "cannot find type `NexoraOp`".
 
-- [ ] **Step 3: Implement `v4/op.rs`**
+- [ ] **Step 3: Implement `nexora/op.rs`**
 
-Define the two enums with explicit `#[serde(rename = "...")]` per variant (do not rely on a blanket rename rule: `"playerUpdate"` and `"TrackStartEvent"` do not share one casing rule). `V4Op::from_wire` matches on the exact string and returns `None` for anything else — no case folding, no numeric fallback. `V4EmittedEvent` derives `Serialize, Deserialize, Debug, Clone, PartialEq`; `event` carries `#[serde(skip_serializing_if = "Option::is_none")]`.
+Define the two enums with explicit `#[serde(rename = "...")]` per variant (do not rely on a blanket rename rule: `"playerUpdate"` and `"TrackStartEvent"` do not share one casing rule). `NexoraOp::from_wire` matches on the exact string and returns `None` for anything else — no case folding, no numeric fallback. `NexoraEventMessage` derives `Serialize, Deserialize, Debug, Clone, PartialEq`; `event` carries `#[serde(skip_serializing_if = "Option::is_none")]`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cargo test -p nexora-protocol v4::op`
+Run: `cargo test -p nexora-protocol nexora::op`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexora-protocol/src/lib.rs crates/nexora-protocol/src/v4/op.rs crates/nexora-protocol/src/v4/mod.rs
-git commit -m "feat(protocol): add v4 op codes and event envelope"
+git add crates/nexora-protocol/src/lib.rs crates/nexora-protocol/src/nexora/op.rs crates/nexora-protocol/src/nexora/mod.rs
+git commit -m "feat(protocol): add nexora op codes and event envelope"
 ```
 
 ---
 
-### Task 2: v4 error envelope
+### Task 2: nexora error envelope
 
 **Files:**
-- Create: `crates/nexora-protocol/src/v4/error.rs`
-- Modify: `crates/nexora-protocol/src/v4/mod.rs`
-- Test: `crates/nexora-protocol/src/v4/error.rs` (inline tests)
+- Create: `crates/nexora-protocol/src/nexora/error.rs`
+- Modify: `crates/nexora-protocol/src/nexora/mod.rs`
+- Test: `crates/nexora-protocol/src/nexora/error.rs` (inline tests)
 
 **Interfaces:**
 - Consumes: nothing from Task 1.
 - Produces:
-  - `pub enum V4ErrorSeverity { Common, Suspicious, Fault }` — wire values `"COMMON"`, `"SUSPICIOUS"`, `"FAULT"`.
-  - `pub struct V4Error { pub code: String, pub message: String, pub severity: V4ErrorSeverity, pub cause: Option<String> }`.
-  - `pub struct V4ErrorEnvelope { pub timestamp: i64, pub error: V4Error }` — the whole HTTP body.
-  - `impl V4ErrorEnvelope { pub fn new(code: impl Into<String>, message: impl Into<String>, severity: V4ErrorSeverity) -> Self }` — stamps `timestamp` with the current unix time in milliseconds.
-  - `impl V4ErrorSeverity { pub fn as_str(&self) -> &'static str }`.
+  - `pub enum NexoraErrorSeverity { Common, Suspicious, Fault }` — wire values `"COMMON"`, `"SUSPICIOUS"`, `"FAULT"`.
+  - `pub struct NexoraError { pub code: String, pub message: String, pub severity: NexoraErrorSeverity, pub cause: Option<String> }`.
+  - `pub struct NexoraErrorEnvelope { pub timestamp: i64, pub error: NexoraError }` — the whole HTTP body.
+  - `impl NexoraErrorEnvelope { pub fn new(code: impl Into<String>, message: impl Into<String>, severity: NexoraErrorSeverity) -> Self }` — stamps `timestamp` with the current unix time in milliseconds.
+  - `impl NexoraErrorSeverity { pub fn as_str(&self) -> &'static str }`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
 fn error_envelope_shape_is_code_message_severity_cause() {
-    let envelope = V4ErrorEnvelope::new("TRACK_NOT_FOUND", "no such track", V4ErrorSeverity::Common);
+    let envelope = NexoraErrorEnvelope::new("TRACK_NOT_FOUND", "no such track", NexoraErrorSeverity::Common);
     let value = serde_json::to_value(&envelope).unwrap();
     assert_eq!(value["error"]["code"], "TRACK_NOT_FOUND");
     assert_eq!(value["error"]["message"], "no such track");
@@ -171,31 +171,31 @@ fn error_envelope_shape_is_code_message_severity_cause() {
 
 #[test]
 fn severity_names_match_the_shipped_reference() {
-    assert_eq!(V4ErrorSeverity::Common.as_str(), "COMMON");
-    assert_eq!(V4ErrorSeverity::Suspicious.as_str(), "SUSPICIOUS");
-    assert_eq!(V4ErrorSeverity::Fault.as_str(), "FAULT");
+    assert_eq!(NexoraErrorSeverity::Common.as_str(), "COMMON");
+    assert_eq!(NexoraErrorSeverity::Suspicious.as_str(), "SUSPICIOUS");
+    assert_eq!(NexoraErrorSeverity::Fault.as_str(), "FAULT");
 }
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-protocol v4::error`
-Expected: FAIL with "cannot find type `V4ErrorEnvelope`".
+Run: `cargo test -p nexora-protocol nexora::error`
+Expected: FAIL with "cannot find type `NexoraErrorEnvelope`".
 
-- [ ] **Step 3: Implement `v4/error.rs`**
+- [ ] **Step 3: Implement `nexora/error.rs`**
 
-`V4ErrorSeverity` uses explicit `#[serde(rename = "COMMON")]`-style attributes per variant. `V4Error.cause` is `Option<String>` and is serialised as `null` when absent (the reference always emits the key). `V4ErrorEnvelope::new` uses `std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)` and maps the error to `0` rather than panicking.
+`NexoraErrorSeverity` uses explicit `#[serde(rename = "COMMON")]`-style attributes per variant. `NexoraError.cause` is `Option<String>` and is serialised as `null` when absent (the reference always emits the key). `NexoraErrorEnvelope::new` uses `std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)` and maps the error to `0` rather than panicking.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cargo test -p nexora-protocol v4::error`
+Run: `cargo test -p nexora-protocol nexora::error`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexora-protocol/src/v4/error.rs crates/nexora-protocol/src/v4/mod.rs
-git commit -m "feat(protocol): add v4 error envelope and severity"
+git add crates/nexora-protocol/src/nexora/error.rs crates/nexora-protocol/src/nexora/mod.rs
+git commit -m "feat(protocol): add nexora error envelope and severity"
 ```
 
 ---
@@ -203,25 +203,25 @@ git commit -m "feat(protocol): add v4 error envelope and severity"
 ### Task 3: typed track and the encoded-track container
 
 **Files:**
-- Create: `crates/nexora-protocol/src/v4/track.rs`
-- Modify: `crates/nexora-protocol/src/v4/mod.rs`
+- Create: `crates/nexora-protocol/src/nexora/track.rs`
+- Modify: `crates/nexora-protocol/src/nexora/mod.rs`
 - Modify: `crates/nexora-protocol/Cargo.toml` (add `base64` if absent)
-- Test: `crates/nexora-protocol/src/v4/track.rs` (inline tests)
+- Test: `crates/nexora-protocol/src/nexora/track.rs` (inline tests)
 
 **Interfaces:**
 - Consumes: nothing from Tasks 1-2.
 - Produces:
-  - `pub struct V4TrackInfo { pub identifier: String, pub is_seekable: bool, pub author: String, pub length: u64, pub is_stream: bool, pub position: u64, pub title: String, pub uri: Option<String>, pub artwork_url: Option<String>, pub isrc: Option<String>, pub source_name: String }` — wire keys `identifier`, `isSeekable`, `author`, `length`, `isStream`, `position`, `title`, `uri`, `artworkUrl`, `isrc`, `sourceName`.
-  - `pub struct V4Track { pub encoded: String, pub info: V4TrackInfo, pub plugin_info: serde_json::Value, pub user_data: serde_json::Value }` — wire keys `encoded`, `info`, `pluginInfo`, `userData`.
-  - `pub fn encode_track(info: &V4TrackInfo, source_payload: &serde_json::Value) -> Result<String, nexora_error::NexoraError>` — base64 of the compact JSON payload `{"track_id":…,"source_id":…,"title":…,"duration_ms":…}` (the exact keys the current server already writes, so existing encoded tracks stay decodable).
-  - `pub fn decode_track(encoded: &str) -> Result<V4TrackInfo, nexora_error::NexoraError>` — base64-decode, UTF-8 decode, JSON parse, then build `V4TrackInfo`: `identifier` from `track_id`, `source_name` from `source_id`, `title` from `title`, `length` from `duration_ms` (0 when absent), `author` from `artist` (falling back to `"unknown"`), `is_seekable` true when `duration_ms` is present, `is_stream` false, `position` 0, and `uri`/`artwork_url`/`isrc` `None`.
+  - `pub struct NexoraTrackInfo { pub identifier: String, pub is_seekable: bool, pub author: String, pub length: u64, pub is_stream: bool, pub position: u64, pub title: String, pub uri: Option<String>, pub artwork_url: Option<String>, pub isrc: Option<String>, pub source_name: String }` — wire keys `identifier`, `isSeekable`, `author`, `length`, `isStream`, `position`, `title`, `uri`, `artworkUrl`, `isrc`, `sourceName`.
+  - `pub struct NexoraTrack { pub encoded: String, pub info: NexoraTrackInfo, pub plugin_info: serde_json::Value, pub user_data: serde_json::Value }` — wire keys `encoded`, `info`, `pluginInfo`, `userData`.
+  - `pub fn encode_track(info: &NexoraTrackInfo, source_payload: &serde_json::Value) -> Result<String, nexora_error::NexoraError>` — base64 of the compact JSON payload `{"track_id":…,"source_id":…,"title":…,"duration_ms":…}` (the exact keys the current server already writes, so existing encoded tracks stay decodable).
+  - `pub fn decode_track(encoded: &str) -> Result<NexoraTrackInfo, nexora_error::NexoraError>` — base64-decode, UTF-8 decode, JSON parse, then build `NexoraTrackInfo`: `identifier` from `track_id`, `source_name` from `source_id`, `title` from `title`, `length` from `duration_ms` (0 when absent), `author` from `artist` (falling back to `"unknown"`), `is_seekable` true when `duration_ms` is present, `is_stream` false, `position` 0, and `uri`/`artwork_url`/`isrc` `None`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
 fn encode_decode_round_trip_is_lossless() {
-    let info = V4TrackInfo { identifier: "tone.wav".into(), is_seekable: true, author: "artist".into(), length: 100, is_stream: false, position: 0, title: "Tone".into(), uri: None, artwork_url: None, isrc: None, source_name: "local".into() };
+    let info = NexoraTrackInfo { identifier: "tone.wav".into(), is_seekable: true, author: "artist".into(), length: 100, is_stream: false, position: 0, title: "Tone".into(), uri: None, artwork_url: None, isrc: None, source_name: "local".into() };
     let encoded = encode_track(&info, &json!({"source_id": "local"})).unwrap();
     let decoded = decode_track(&encoded).unwrap();
     assert_eq!(decoded.identifier, "tone.wav");
@@ -252,23 +252,23 @@ fn decode_track_rejects_malformed_input() {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-protocol v4::track`
+Run: `cargo test -p nexora-protocol nexora::track`
 Expected: FAIL with "cannot find function `encode_track`".
 
-- [ ] **Step 3: Implement `v4/track.rs`**
+- [ ] **Step 3: Implement `nexora/track.rs`**
 
 Use `base64::engine::general_purpose::STANDARD` and `base64::Engine` (already a workspace dependency; add `base64` to `crates/nexora-protocol/Cargo.toml` if it is not already there). Every failure path returns `NexoraError::invalid_input("…")` — no `unwrap`, no `expect`. `decode_track` must not panic on a payload whose fields have unexpected types: use `serde_json::Value::get` and `as_str`/`as_u64` with `unwrap_or` defaults rather than typed deserialization that could reject a valid-but-sparse payload.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cargo test -p nexora-protocol v4::track`
+Run: `cargo test -p nexora-protocol nexora::track`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexora-protocol/src/v4/track.rs crates/nexora-protocol/src/v4/mod.rs crates/nexora-protocol/Cargo.toml
-git commit -m "feat(protocol): add typed v4 track and encoded-track codec"
+git add crates/nexora-protocol/src/nexora/track.rs crates/nexora-protocol/src/nexora/mod.rs crates/nexora-protocol/Cargo.toml
+git commit -m "feat(protocol): add typed nexora track and encoded-track codec"
 ```
 
 ---
@@ -276,28 +276,28 @@ git commit -m "feat(protocol): add typed v4 track and encoded-track codec"
 ### Task 4: version, info and version negotiation
 
 **Files:**
-- Create: `crates/nexora-protocol/src/v4/info.rs`
-- Modify: `crates/nexora-protocol/src/v4/mod.rs`
-- Modify: `crates/nexora-protocol/src/v4/op.rs` (add `V4Ready { version: V4Version }`)
-- Test: `crates/nexora-protocol/src/v4/info.rs` (inline tests)
+- Create: `crates/nexora-protocol/src/nexora/info.rs`
+- Modify: `crates/nexora-protocol/src/nexora/mod.rs`
+- Modify: `crates/nexora-protocol/src/nexora/op.rs` (add `NexoraReady { version: NexoraVersion }`)
+- Test: `crates/nexora-protocol/src/nexora/info.rs` (inline tests)
 
 **Interfaces:**
-- Consumes: nothing from Tasks 1-3 (the `V4Ready` addition in `op.rs` consumes `V4Version` from this task).
+- Consumes: nothing from Tasks 1-3 (the `NexoraReady` addition in `op.rs` consumes `NexoraVersion` from this task).
 - Produces:
-  - `pub struct V4Version { pub semver: String, pub major: u32, pub minor: u32, pub patch: u32, pub pre_release: Option<String>, pub build: Option<String> }` — wire keys `semver`, `major`, `minor`, `patch`, `preRelease`, `build`.
-  - `pub const LAVALINK_V4_PROTOCOL_VERSION: &str = "4.0.0";` — the v4 contract NEXORA targets.
-  - `impl V4Version { pub fn nexora() -> Self }` — semver `env!("CARGO_PKG_VERSION")` of the protocol crate, major/minor/patch parsed from it, `pre_release`/`build` `None`.
-  - `pub struct V4Git { pub branch: String, pub commit: String, pub commit_time: i64 }`.
-  - `pub struct V4Plugin { pub name: String, pub path: String, pub version: String }`.
-  - `pub struct V4Info { pub name: String, pub version: V4Version, pub build_time: i64, pub git: V4Git, pub jvm: Option<String>, pub lavaplayer: Option<String>, pub source_managers: Vec<String>, pub filters: Vec<String>, pub plugins: Vec<V4Plugin> }` — wire keys `name`, `version`, `buildTime`, `git`, `jvm`, `lavaplayer`, `sourceManagers`, `filters`, `plugins`.
+  - `pub struct NexoraVersion { pub semver: String, pub major: u32, pub minor: u32, pub patch: u32, pub pre_release: Option<String>, pub build: Option<String> }` — wire keys `semver`, `major`, `minor`, `patch`, `preRelease`, `build`.
+  - `pub const NEXORA_PROTOCOL_VERSION: &str = "4.0.0";` — the nexora contract NEXORA targets.
+  - `impl NexoraVersion { pub fn nexora() -> Self }` — semver `env!("CARGO_PKG_VERSION")` of the protocol crate, major/minor/patch parsed from it, `pre_release`/`build` `None`.
+  - `pub struct NexoraGit { pub branch: String, pub commit: String, pub commit_time: i64 }`.
+  - `pub struct NexoraPlugin { pub name: String, pub path: String, pub version: String }`.
+  - `pub struct NexoraInfo { pub name: String, pub version: NexoraVersion, pub build_time: i64, pub git: NexoraGit, pub jvm: Option<String>, pub lavaplayer: Option<String>, pub source_managers: Vec<String>, pub filters: Vec<String>, pub plugins: Vec<NexoraPlugin> }` — wire keys `name`, `version`, `buildTime`, `git`, `jvm`, `lavaplayer`, `sourceManagers`, `filters`, `plugins`.
   - `pub fn check_protocol_version(requested: &str) -> Result<(), nexora_error::NexoraError>` — accepts `"4"` and any `4.x.y` whose major is 4; returns `NexoraError::invalid_input("unsupported Lavalink protocol version")` otherwise. A `4.0.0` request is accepted; `3.0.0` and `5.0.0` are rejected.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
-fn info_serialises_the_v4_shape() {
-    let info = V4Info { name: "NEXORA".into(), version: V4Version::nexora(), build_time: 1, git: V4Git { branch: "main".into(), commit: "abc".into(), commit_time: 1 }, jvm: None, lavaplayer: Some("nexora-audio-engine".into()), source_managers: vec!["local".into()], filters: Vec::new(), plugins: Vec::new() };
+fn info_serialises_the_nexora_shape() {
+    let info = NexoraInfo { name: "NEXORA".into(), version: NexoraVersion::nexora(), build_time: 1, git: NexoraGit { branch: "main".into(), commit: "abc".into(), commit_time: 1 }, jvm: None, lavaplayer: Some("nexora-audio-engine".into()), source_managers: vec!["local".into()], filters: Vec::new(), plugins: Vec::new() };
     let value = serde_json::to_value(&info).unwrap();
     assert_eq!(value["name"], "NEXORA");
     assert!(value["version"]["semver"].is_string());
@@ -307,7 +307,7 @@ fn info_serialises_the_v4_shape() {
 }
 
 #[test]
-fn version_negotiation_accepts_v4_and_rejects_others() {
+fn version_negotiation_accepts_nexora_and_rejects_others() {
     assert!(check_protocol_version("4").is_ok());
     assert!(check_protocol_version("4.0.0").is_ok());
     assert!(check_protocol_version("4.9.9").is_ok());
@@ -319,36 +319,36 @@ fn version_negotiation_accepts_v4_and_rejects_others() {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cargo test -p nexora-protocol v4::info`
+Run: `cargo test -p nexora-protocol nexora::info`
 Expected: FAIL with "cannot find function `check_protocol_version`".
 
-- [ ] **Step 3: Implement `v4/info.rs`**
+- [ ] **Step 3: Implement `nexora/info.rs`**
 
-`V4Version::nexora()` parses `env!("CARGO_PKG_VERSION")` on the first two dots; a crate version without a patch component falls back to `0`. `check_protocol_version` compares the major component only (`"4"` and `"4.x.y"` both have major `4`); a string with no numeric major is rejected. Add `V4Ready { pub version: V4Version }` to `op.rs`; the envelope adds `op`, the payload does not.
+`NexoraVersion::nexora()` parses `env!("CARGO_PKG_VERSION")` on the first two dots; a crate version without a patch component falls back to `0`. `check_protocol_version` compares the major component only (`"4"` and `"4.x.y"` both have major `4`); a string with no numeric major is rejected. Add `NexoraReady { pub version: NexoraVersion }` to `op.rs`; the envelope adds `op`, the payload does not.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cargo test -p nexora-protocol v4::info`
+Run: `cargo test -p nexora-protocol nexora::info`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexora-protocol/src/v4/info.rs crates/nexora-protocol/src/v4/op.rs crates/nexora-protocol/src/v4/mod.rs
-git commit -m "feat(protocol): add v4 info, version and protocol negotiation"
+git add crates/nexora-protocol/src/nexora/info.rs crates/nexora-protocol/src/nexora/op.rs crates/nexora-protocol/src/nexora/mod.rs
+git commit -m "feat(protocol): add nexora info, version and protocol negotiation"
 ```
 
 ---
 
-### Task 5: the server serves typed v4 payloads
+### Task 5: the server serves typed nexora payloads
 
 **Files:**
 - Modify: `services/nexora-server/src/lib.rs` (`lavalink_info`, `lavalink_track`)
 - Test: `services/nexora-server/tests/http.rs`
 
 **Interfaces:**
-- Consumes: `nexora_protocol::v4::{V4Info, V4Version, V4Git, V4Track, V4TrackInfo, encode_track}`, `nexora_protocol::v4::info::LAVALINK_V4_PROTOCOL_VERSION`.
-- Produces: the existing handler signatures, unchanged; `/v4/info` and `/v4/loadtracks` responses keep their current wire shape (the existing tests must keep passing unchanged).
+- Consumes: `nexora_protocol::nexora::{NexoraInfo, NexoraVersion, NexoraGit, NexoraTrack, NexoraTrackInfo, encode_track}`, `nexora_protocol::nexora::info::NEXORA_PROTOCOL_VERSION`.
+- Produces: the existing handler signatures, unchanged; `/nexora/info` and `/nexora/loadtracks` responses keep their current wire shape (the existing tests must keep passing unchanged).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -356,9 +356,9 @@ Add to `services/nexora-server/tests/http.rs`:
 
 ```rust
 #[tokio::test]
-async fn lavalink_info_reports_the_typed_v4_shape() {
+async fn lavalink_info_reports_the_typed_nexora_shape() {
     let response = test_app()
-        .oneshot(Request::builder().uri("/v4/info").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/nexora/info").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -375,25 +375,25 @@ async fn lavalink_info_reports_the_typed_v4_shape() {
 
 - [ ] **Step 2: Run the test to verify it fails or passes honestly**
 
-Run: `cargo test -p nexora-server lavalink_info_reports_the_typed_v4_shape`
+Run: `cargo test -p nexora-server lavalink_info_reports_the_typed_nexora_shape`
 Expected: this test may pass against the hand-built JSON — that is acceptable, because the point of this task is that the server stops *building* the payload by hand. If it passes, keep it and continue; the change is verified by the existing tests still passing plus the new one.
 
 - [ ] **Step 3: Replace the hand-built payloads**
 
-In `lavalink_info`, build a `V4Info` and return `Json(serde_json::to_value(info).unwrap_or_else(|_| json!({})))` — the handler keeps returning `Json<Value>`, so no signature change. `filters` must stay `Vec::new()` (NEXORA implements no filters yet) and `source_managers` must keep coming from `state.sources.source_ids()`.
+In `lavalink_info`, build a `NexoraInfo` and return `Json(serde_json::to_value(info).unwrap_or_else(|_| json!({})))` — the handler keeps returning `Json<Value>`, so no signature change. `filters` must stay `Vec::new()` (NEXORA implements no filters yet) and `source_managers` must keep coming from `state.sources.source_ids()`.
 
-In `lavalink_track`, build a `V4TrackInfo` from the `TrackMetadata`, call `encode_track(&info, &json!({"source_id": metadata.source_id}))`, and build a `V4Track` with `plugin_info: json!({})` and `user_data: json!({})`. The encoded payload's keys stay exactly `track_id`, `source_id`, `title`, `duration_ms` so existing encoded tracks remain decodable by `decode_track`.
+In `lavalink_track`, build a `NexoraTrackInfo` from the `TrackMetadata`, call `encode_track(&info, &json!({"source_id": metadata.source_id}))`, and build a `NexoraTrack` with `plugin_info: json!({})` and `user_data: json!({})`. The encoded payload's keys stay exactly `track_id`, `source_id`, `title`, `duration_ms` so existing encoded tracks remain decodable by `decode_track`.
 
 - [ ] **Step 4: Run the server tests**
 
 Run: `cargo test -p nexora-server`
-Expected: PASS — including the pre-existing `lavalink_loadtracks_returns_v4_track_shape` and `lavalink_info_matches_documented_v4_shape` tests, which must not need edits.
+Expected: PASS — including the pre-existing `lavalink_loadtracks_returns_nexora_track_shape` and `lavalink_info_matches_documented_nexora_shape` tests, which must not need edits.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add services/nexora-server/src/lib.rs services/nexora-server/tests/http.rs
-git commit -m "refactor(server): serve typed v4 info and track payloads"
+git commit -m "refactor(server): serve typed nexora info and track payloads"
 ```
 
 ---
@@ -407,7 +407,7 @@ git commit -m "refactor(server): serve typed v4 info and track payloads"
 - Modify: `docs/README.md` (link the plan and the harness)
 
 **Interfaces:**
-- Consumes: `nexora_protocol::v4::*` from Tasks 1-4; the server router from `services/nexora-server/src/lib.rs`.
+- Consumes: `nexora_protocol::nexora::*` from Tasks 1-4; the server router from `services/nexora-server/src/lib.rs`.
 - Produces: a compatibility test file whose names are the matrix row ids, so a matrix row and its test can be found from each other.
 
 - [ ] **Step 1: Write the compatibility tests**
@@ -417,21 +417,21 @@ Create `services/nexora-server/tests/compat/main.rs`:
 ```rust
 use axum::body::Body;
 use axum::http::Request;
-use nexora_protocol::v4::V4EventType;
-use nexora_protocol::v4::V4Op;
+use nexora_protocol::nexora::NexoraEventMessage;
+use nexora_protocol::nexora::NexoraOp;
 use tower::ServiceExt;
 
 // Row ids match docs/COMPATIBILITY.md.
 #[tokio::test]
-async fn compat_v4_info_shape() { /* GET /v4/info, assert version/git/filters/sourceManagers */ }
+async fn compat_nexora_info_shape() { /* GET /nexora/info, assert version/git/filters/sourceManagers */ }
 
 #[tokio::test]
-async fn compat_v4_loadtracks_track_shape() { /* GET /v4/loadtracks, assert encoded decodes and info matches */ }
+async fn compat_nexora_loadtracks_track_shape() { /* GET /nexora/loadtracks, assert encoded decodes and info matches */ }
 
 #[tokio::test]
 async fn compat_protocol_op_codes_are_the_reference_values() {
-    assert_eq!(V4Op::PlayerUpdate.as_str(), "playerUpdate");
-    assert_eq!(V4EventType::TrackStart.as_str(), "TrackStartEvent");
+    assert_eq!(NexoraOp::PlayerUpdate.as_str(), "playerUpdate");
+    assert_eq!(NexoraEventMessage::TrackStart.as_str(), "TrackStartEvent");
 }
 ```
 
@@ -444,7 +444,7 @@ Expected: PASS (3 tests).
 
 - [ ] **Step 3: Update the matrix rows**
 
-In `docs/COMPATIBILITY.md`: the `/v4/info` row stays `implemented`; add a note that its payload is now typed by `nexora-protocol::v4`; add the event-op rows for `playerUpdate` and `WebSocketClosedEvent` as `missing (M3)` — M0 provides the op codes and the envelope type, it does not yet emit them. Do not mark any event row implemented.
+In `docs/COMPATIBILITY.md`: the `/nexora/info` row stays `implemented`; add a note that its payload is now typed by `nexora-protocol::nexora`; add the event-op rows for `playerUpdate` and `WebSocketClosedEvent` as `missing (M3)` — M0 provides the op codes and the envelope type, it does not yet emit them. Do not mark any event row implemented.
 
 In the design doc, change the `tests/compat` row of the architecture table to `services/nexora-server/tests/compat/` with the reason (cargo has no root test target).
 
@@ -457,7 +457,7 @@ Expected: all three exit 0, and the test count is 83 + the new tests (state the 
 
 ```bash
 git add services/nexora-server/tests/compat/main.rs docs/COMPATIBILITY.md docs/superpowers/specs/2026-11-24-nexora-full-parity-design.md docs/README.md
-git commit -m "test(server): add v4 compatibility harness and update the matrix"
+git commit -m "test(server): add nexora compatibility harness and update the matrix"
 ```
 
 ---
@@ -468,7 +468,7 @@ git commit -m "test(server): add v4 compatibility harness and update the matrix"
 
 **Step scan.** Every step names a file, a signature or a test name, and a command with an expected result. No step says "add appropriate validation".
 
-**Type consistency.** `V4Op`, `V4EventType`, `V4EmittedEvent`, `V4Error`, `V4ErrorSeverity`, `V4ErrorEnvelope`, `V4Track`, `V4TrackInfo`, `encode_track`, `decode_track`, `V4Version`, `V4Info`, `V4Git`, `V4Plugin`, `check_protocol_version`, `LAVALINK_V4_PROTOCOL_VERSION` are each defined once and used with the same name and type in every task. `V4Ready` is introduced in Task 4 and referenced nowhere else yet — Task 5 does not need it, and no later task in this plan depends on it.
+**Type consistency.** `NexoraOp`, `NexoraEventMessage`, `NexoraEventMessage`, `NexoraError`, `NexoraErrorSeverity`, `NexoraErrorEnvelope`, `NexoraTrack`, `NexoraTrackInfo`, `encode_track`, `decode_track`, `NexoraVersion`, `NexoraInfo`, `NexoraGit`, `NexoraPlugin`, `check_protocol_version`, `NEXORA_PROTOCOL_VERSION` are each defined once and used with the same name and type in every task. `NexoraReady` is introduced in Task 4 and referenced nowhere else yet — Task 5 does not need it, and no later task in this plan depends on it.
 
 **Review Focus.** All five lines have an owning task: unknown op/event (Task 1 `from_wire` returning `None`, Task 6 asserts the reference values), malformed encoded track (Task 3), missing track fields (Task 3), truthful `filters` (Task 4 test, Task 5 keeps the value, Task 6 asserts it is an array), version negotiation (Task 4).
 
