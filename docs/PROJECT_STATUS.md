@@ -2,7 +2,7 @@
 
 ## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `e6ae4eb` (2026-11-27). The
+Status: **implemented and verified** at commit `b4346a2` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
 Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
@@ -10,9 +10,9 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **367 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **370 passing
   tests, 0 failures**.
-- CI run `45995404326` is green on Linux and Windows. The docs site and
+- CI run `46001329810` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
@@ -33,7 +33,10 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
   makes cluster failover explicit and testable (commit `3b60c24`), and opt-in
   credentialed provider checks are ignored by default with no stored tokens
   (commit `cb0de19`), and an in-process HTTP load harness publishes a measured
-  100-session batch (commit `e6ae4eb`). The full
+  100-session batch (commit `e6ae4eb`), and the final review's three Important
+  findings were fixed: restored sessions are never `playing`, `/metrics` has a
+  password-protected test, and `--session-snapshot` wires restart recovery
+  (commit `b4346a2`). The full
   backlog and execution plan live in
   `docs/superpowers/plans/2026-11-27-remaining-work.md`.
 
