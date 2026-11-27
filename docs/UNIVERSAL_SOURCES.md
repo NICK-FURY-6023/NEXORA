@@ -46,3 +46,11 @@ Apple Music and Tidal only play when the user supplies their own authorized
 token. Public YouTube stream resolution remains subject to the platform's
 terms, so the shipped code parses public metadata and refuses to bypass access
 controls. No credentialed live-provider test suite is claimed here.
+
+Opt-in live checks live in `crates/nexora-source-universal/tests/live_providers.rs`.
+They are ignored by default; set `NEXORA_LIVE_SPOTIFY_TOKEN`,
+`NEXORA_LIVE_DEEZER_TOKEN`, `NEXORA_LIVE_APPLE_TOKEN` or
+`NEXORA_LIVE_TIDAL_TOKEN` to the user's own token and run
+`cargo test -p nexora-source-universal --test live_providers -- --ignored`.
+No token value is stored in the repository, and a run without credentials
+reports four ignored tests and zero failures.
