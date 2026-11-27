@@ -132,6 +132,11 @@ impl WorkerRegistry {
         Ok(())
     }
 
+    /// Removes a worker from routing without deleting its registration.
+    pub fn mark_down(&self, id: &WorkerId) -> NexoraResult<()> {
+        self.set_healthy(id, false)
+    }
+
     /// The registration of one worker.
     pub fn worker(&self, id: &WorkerId) -> Option<WorkerRegistration> {
         self.workers
