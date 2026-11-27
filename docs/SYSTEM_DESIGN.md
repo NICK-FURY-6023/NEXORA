@@ -9,14 +9,14 @@ in [COMPATIBILITY.md](COMPATIBILITY.md).
 Evidence used: `README.md`, `docs/MASTER_AI_INSTRUCTIONS.md`,
 `docs/LAVALINK_ANALYSIS.md`, official Lavalink v4 REST/WebSocket docs, the
 current Rust sources cited below, and a fresh `cargo test --workspace` run
-(exit 0, 367 tests passed at commit `e79d272` on 2026-11-27).
+(exit 0, 367 tests passed at commit `e6ae4eb` on 2026-11-27)
 
 ## Current verification baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`: exit 0.
 - `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
 - `cargo test --workspace`: exit 0, 367 tests passed, 0 failed.
-- CI run `45989781639`: green on Linux and Windows, including the docs site
+- CI run `45995404326`: green on Linux and Windows, including the docs site
   and relative-link checks.
 
 ## 1. Product intent
