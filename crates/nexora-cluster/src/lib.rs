@@ -106,6 +106,40 @@ impl WorkerRegistry {
         Ok(())
     }
 
+    /// Records how many jobs a worker is running.
+    pub fn update_load(&self, id: &WorkerId, active_jobs: u32) -> NexoraResult<()> {
+        let mut workers = self
+            .workers
+            .write()
+            .map_err(|_| NexoraError::internal("registry lock poisoned"))?;
+        let worker = workers
+            .get_mut(id)
+            .ok_or_else(|| NexoraError::service("worker not found"))?;
+        worker.active_jobs = active_jobs;
+        Ok(())
+    }
+
+    /// Records whether a worker is taking work.
+    pub fn set_healthy(&self, id: &WorkerId, healthy: bool) -> NexoraResult<()> {
+        let mut workers = self
+            .workers
+            .write()
+            .map_err(|_| NexoraError::internal("registry lock poisoned"))?;
+        let worker = workers
+            .get_mut(id)
+            .ok_or_else(|| NexoraError::service("worker not found"))?;
+        worker.healthy = healthy;
+        Ok(())
+    }
+
+    /// The registration of one worker.
+    pub fn worker(&self, id: &WorkerId) -> Option<WorkerRegistration> {
+        self.workers
+            .read()
+            .ok()
+            .and_then(|workers| workers.get(id).cloned())
+    }
+
     pub fn workers(&self) -> Vec<WorkerRegistration> {
         self.workers
             .read()
@@ -141,15 +175,79 @@ impl WeightedScheduler {
         capability: Capability,
         preferred: Option<&str>,
     ) -> NexoraResult<WorkerRegistration> {
-        registry
+        // The workers come out of the registry in an arbitrary order, so the
+        // candidates are sorted by id: the same registry always picks the same
+        // worker for the same work.
+        let mut candidates: Vec<WorkerRegistration> = registry
             .with_capability(capability)
             .filter(|worker| worker.healthy)
-            .max_by_key(|worker| {
+            .collect();
+        candidates.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
+        candidates
+            .into_iter()
+            // `min_by_key` keeps the first of the equal candidates, and the
+            // score is negated so the worker with the most headroom wins.
+            .min_by_key(|worker| {
                 let affinity = preferred
                     .map(|value| u32::from(worker.id.as_str() == value))
                     .unwrap_or_default();
-                worker.headroom() + affinity
+                u32::MAX - worker.headroom().saturating_add(affinity)
             })
             .ok_or_else(|| NexoraError::service("no eligible worker"))
+    }
+}
+
+/// Routes sessions to the workers that run them.
+///
+/// A session stays on the worker it was routed to, so the work it has already
+/// done does not have to be repeated. When that worker goes away or stops
+/// taking work, the session is routed again.
+#[derive(Debug, Default)]
+pub struct ClusterRouter {
+    sessions: HashMap<String, WorkerId>,
+    scheduler: WeightedScheduler,
+}
+
+impl ClusterRouter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Routes a session to a worker that has the capability.
+    ///
+    /// The worker the session is already on is kept when it can still take
+    /// the work; otherwise the session is routed again.
+    pub fn route(
+        &mut self,
+        registry: &WorkerRegistry,
+        session: &str,
+        capability: Capability,
+    ) -> NexoraResult<WorkerId> {
+        if let Some(id) = self.sessions.get(session) {
+            let eligible = registry
+                .worker(id)
+                .filter(|worker| worker.healthy && worker.capabilities.contains(&capability));
+            if let Some(worker) = eligible {
+                return Ok(worker.id);
+            }
+        }
+        let worker = self.scheduler.select(registry, capability, None)?;
+        self.sessions.insert(session.to_owned(), worker.id.clone());
+        Ok(worker.id)
+    }
+
+    /// The worker a session is on.
+    pub fn worker_for(&self, session: &str) -> Option<&WorkerId> {
+        self.sessions.get(session)
+    }
+
+    /// Forgets a session, so the next call routes it again.
+    pub fn release(&mut self, session: &str) {
+        self.sessions.remove(session);
+    }
+
+    /// The sessions the router is holding.
+    pub fn sessions(&self) -> usize {
+        self.sessions.len()
     }
 }
