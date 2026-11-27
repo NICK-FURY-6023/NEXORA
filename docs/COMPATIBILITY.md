@@ -97,7 +97,7 @@ without opening the socket.
 | Endpoint | NEXORA | Status | Notes |
 |---|---|---|---|
 | `/nexora/websocket` | `websocket` | implemented | Lavalink's single event socket; the `ready` frame is flat and comes first — `compat_nexora_websocket_ready_frame`, `compat_nexora_websocket_handshake_refuses_a_bad_request`, `compat_nexora_websocket_handshake_refuses_a_wrong_password` |
-| `/ws/v1/sessions/{id}` | `websocket_events` | partial | NEXORA's own per-session socket; the v4 shape is not served here |
+| `/ws/v1/sessions/{id}` | `websocket_events` | implemented | NEXORA extension: a per-session socket serving NEXORA's own event envelope; the v4 shape is on `/nexora/websocket` |
 | `/nexora/websocket/voice` | — | not-targeted | NodeLink voice socket |
 | `/nexora/websocket/youtube/live` | — | not-targeted | NodeLink live-metadata socket |
 | voice transport | UDP socket per player + RTP framing + XSecret | implemented | One `UdpSocket` bound per **player** to `0.0.0.0:0`, kept across a track change and closed with the player, as the reference keeps one media connection per player; every datagram is an RTP packet (version 2, Opus payload type 120, timestamp +960 per 20 ms frame) whose payload is AES-128-CTR encrypted (key from the voice token, nonce = the RTP sequence number) — `compat_nexora_voice_datagram_is_an_rtp_packet`, `compat_nexora_voice_socket_belongs_to_the_player`, `compat_nexora_xsecret_voice_transport_round_trips` |
@@ -132,7 +132,9 @@ event's own fields are siblings, with no `data` wrapper (bytecode evidence on
 | `PlayerReconnectingEvent`, `PlayerConnectedEvent`, `ConnectionStatusEvent` | no | yes | — | not-targeted (NEXORA has no voice gateway; the client owns that connection) |
 | `MixStartedEvent`, `MixEndedEvent` | no | yes | — | not-targeted (mixing is not in scope) |
 | `SponsorBlockSegmentsLoadedEvent`, `SponsorBlockSegmentSkippedEvent` | no | yes | — | not-targeted (SponsorBlock is a plugin capability) |
-| `StreamMetadataEvent`, `SourceHealthSnapshotEvent`, `SourceHealthChangeEvent` | no | yes | — | missing (M8) |
+| `StreamMetadataEvent` | no | yes | `NexoraEventMessage::StreamMetadata` on `/nexora/websocket` | implemented (M8) — the metadata of the track that just started |
+| `SourceHealthSnapshotEvent` | no | yes | `NexoraEventMessage::SourceHealthSnapshot` on `/nexora/websocket` | implemented (M8) — the whole health snapshot on the first check |
+| `SourceHealthChangeEvent` | no | yes | `NexoraEventMessage::SourceHealthChange` on `/nexora/websocket` | implemented (M8) — only the sources whose health moved |
 | `EternalBoxInfoEvent`, `EternalBoxJumpEvent` | no | yes | — | not-targeted (EternalBox specific) |
 
 ### Event ordering
@@ -166,8 +168,8 @@ Reference: NodeLink `src/constants.ts` `EndReasons`.
 | `loadFailed` | yes | yes | `NexoraTrackEndReason::LoadFailed` | implemented |
 | `replaced` | yes | yes | `NexoraTrackEndReason::Replaced` | implemented |
 | `cleanup` | no | yes | `NexoraTrackEndReason::Cleanup` on `/nexora/websocket` | implemented — emitted when the player is destroyed |
-| `gapless` | no | yes | `NexoraTrackEndReason::Gapless` | partial | typed, never emitted — gapless is a separate capability |
-| `crossfading` | no | yes | `NexoraTrackEndReason::Crossfading` | partial | typed, never emitted — crossfade is not in scope |
+| `gapless` | no | yes | `NexoraTrackEndReason::Gapless` | implemented | emitted when the queue takes over, which is the gapless transition |
+| `crossfading` | no | yes | `NexoraTrackEndReason::Crossfading` | not-targeted (crossfade is not in scope) |
 
 ## Filters
 
@@ -185,7 +187,7 @@ the shipped `Lavalink.jar`); NodeLink ships 21 filter classes plus a mixer
 | `channelMix`, `lowPass` | yes | yes | applied to PCM before Opus encoding | implemented (M4) |
 | `highpass`, `compressor`, `echo`, `phaser` | no | yes | applied to PCM before Opus encoding | implemented (M4) |
 | `chorus`, `flanger`, `reverb`, `spatial`, `phonograph`, `tesseract` | no | yes | — | not-targeted |
-| JS script filters | yes (Rhino engine bundled) | no | — | missing (M4); needs a JS engine in Rust |
+| JS script filters | yes (Rhino engine bundled) | no | — | not-targeted (the reference runs JavaScript filters through a bundled Rhino engine; NEXORA's substitute is the WebAssembly plugin runtime, M10) |
 | Audio mixer (TTS/SFX layering) | no | yes | — | not-targeted |
 
 The filter chain is typed in `crates/nexora-protocol/src/nexora/filters.rs` with the
@@ -212,24 +214,6 @@ only the filters it actually applies.
 | SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
 | Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
 | The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
-| Deezer | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream` |
-| Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
-| Spotify | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream` |
-| Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
-| YouTube | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `youtube_search_maps_video_id_and_channel`, `youtube_resolve_returns_the_audio_stream` |
-| Bandcamp | — | implemented — `bandcamp_search_maps_collection_rows`, `bandcamp_resolve_returns_the_stream` |
-| SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
-| Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
-| The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
-| Deezer | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream` |
-| Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
-| Spotify | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream` |
-| Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
-| YouTube | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `youtube_search_maps_video_id_and_channel`, `youtube_resolve_returns_the_audio_stream` |
-| Bandcamp | — | implemented — `bandcamp_search_maps_collection_rows`, `bandcamp_resolve_returns_the_stream` |
-| SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
-| Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
-| The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
 | Lavalink's Java plugin ecosystem | — | not-targeted (a pure-Rust server cannot load a Java plugin; the WASM runtime is the substitute, M10) |
 | WASM plugin runtime | `nexora-plugin-api::PluginRuntime` | implemented (M10) | a WebAssembly module runs under a sandbox policy: the time limit is enforced as fuel so a module that never returns is stopped, the memory limit through the engine's own limiter, and a denied effect is reported to the host after the call, and `host.push` copies a UTF-8 string from module memory into `PluginCall.strings` — `a_module_runs_its_exported_function`, `a_module_hands_a_string_back_to_the_host`, `a_module_that_is_not_webassembly_is_refused`, `a_module_without_the_named_export_is_refused`, `a_module_that_never_returns_is_stopped_by_the_time_limit`, `a_module_that_asks_for_a_denied_host_is_refused`, `a_module_that_asks_for_an_allowed_host_is_allowed`, `the_manifest_capabilities_reach_the_host` |
 | Plugin sandbox host checks | `PluginSandbox::check_network` | implemented (M10) | a backslash in the authority is refused as malformed rather than deciding the host, and a private host is never granted or exposed — `a_backslash_cannot_decide_the_host`, `a_private_host_is_never_granted_or_exposed`, `the_exposed_capability_set_follows_the_effective_policy` |
@@ -243,12 +227,12 @@ covers 21 filters in 7 rows, and the Events table covers 28 events in 18 rows.
 |---|---|---|---|---|
 | NEXORA reference routes | 13 | 0 | 0 | 1 |
 | NEXORA-only routes | 1 | 0 | 0 | 0 |
-| NodeLink extra routes | 2 | 3 | 1 | 4 |
-| WebSocket endpoints | 2 | 2 | 0 | 4 |
-| Events | 12 | 1 | 1 | 4 |
-| Track end reasons | 5 | 2 | 0 | 0 |
-| Filters | 4 | 0 | 1 | 2 |
-| Sources | 5 | 0 | 0 | 2 |
+| NodeLink extra routes | 5 | 3 | 0 | 4 |
+| WebSocket endpoints | 3 | 1 | 0 | 4 |
+| Events | 15 | 1 | 0 | 4 |
+| Track end reasons | 6 | 0 | 0 | 1 |
+| Filters | 4 | 0 | 0 | 3 |
+| Sources | 13 | 0 | 0 | 2 |
 | Sources | 3 | 0 | 0 | 2 |
 
 No row may be called compatible on the strength of this table: a row is

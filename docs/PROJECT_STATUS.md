@@ -212,6 +212,17 @@ Workspace total is now 153 passing Rust tests.
   player endpoints report where the track actually is and a resumed session
   picks that position up.
 
+### The last missing events (M8)
+
+- `StreamMetadataEvent` describes the track that just started, and follows
+  the `TrackStartEvent` so the reference's player-created-then-track-start
+  order stays unbroken.
+- `SourceHealthSnapshotEvent` carries the whole health snapshot on the first
+  check; `SourceHealthChangeEvent` carries only the sources whose health
+  moved. A watcher in the server polls the sources and emits them.
+- `gapless` is now emitted: when the queue takes over a finished track, the
+  end reason is the gapless transition.
+
 ### Plugins are reachable from the server (M10)
 
 - `nexora-plugin-api` was implemented but no service consumed it, so the

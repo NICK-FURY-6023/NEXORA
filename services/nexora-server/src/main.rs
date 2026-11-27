@@ -111,6 +111,9 @@ async fn main() -> NexoraResult<()> {
         plugins: Arc::new(tokio::sync::RwLock::new(plugins)),
     };
 
+    // The sources' health is watched so a change reaches the clients.
+    let _health_watch = nexora_server::spawn_source_health_watch(state.clone());
+
     let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)
         .parse()
         .map_err(|_| nexora_error::NexoraError::invalid_input("invalid gRPC bind address"))?;

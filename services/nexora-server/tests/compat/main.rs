@@ -623,6 +623,48 @@ async fn compat_nexora_plugins_are_loaded_and_callable() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Row: the stream metadata event — it describes the track that just started.
+#[tokio::test]
+async fn compat_nexora_stream_metadata_describes_the_track() {
+    let root = media_root();
+    let app = app(&root);
+    let (app, session_id) = create_session_over_http(app).await;
+
+    let address = serve(app.clone()).await;
+    let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
+    let ready = next_frame(&mut stream).await;
+    assert_eq!(ready["op"], "ready");
+
+    let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
+    let encoded = loaded["data"]["tracks"][0]["encoded"]
+        .as_str()
+        .expect("encoded track")
+        .to_owned();
+    let (status, _) = request(
+        app.clone(),
+        "PATCH",
+        &format!("/nexora/sessions/{session_id}/players/1234"),
+        Some(&format!(r#"{{"track":{{"encoded":"{encoded}"}}}}"#)),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // The player is created, then the track starts, then its metadata.
+    let created = next_frame(&mut stream).await;
+    assert_eq!(created["type"], "PlayerCreatedEvent");
+    let start = next_frame(&mut stream).await;
+    assert_eq!(start["type"], "TrackStartEvent");
+    let metadata = next_frame(&mut stream).await;
+    assert_eq!(metadata["type"], "StreamMetadataEvent");
+    assert_eq!(metadata["guildId"], "1234");
+    assert_eq!(metadata["trackId"], "sample.wav");
+    assert_eq!(metadata["sourceName"], "local-media");
+    assert!(metadata["title"].is_string());
+    assert!(metadata["lengthMs"].is_u64());
+
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// Row: `/nexora/sources/health` — a health snapshot of every source.
 #[tokio::test]
 async fn compat_nexora_sources_health_reports_every_source() {
@@ -809,6 +851,23 @@ async fn next_frame(
     serde_json::from_str(&text).expect("the frame is JSON")
 }
 
+/// Reads the next frame that is not the stream metadata event.
+///
+/// The metadata event is an extra NEXORA sends after every track start, so a
+/// test that wants one particular event has to step over it.
+async fn next_frame_skipping_metadata(
+    stream: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> serde_json::Value {
+    loop {
+        let frame = next_frame(stream).await;
+        if frame["type"].as_str() != Some("StreamMetadataEvent") {
+            return frame;
+        }
+    }
+}
+
 /// Creates a nexora session over the REST surface and returns its id.
 async fn create_session_over_http(app: axum::Router) -> (axum::Router, String) {
     let (status, value) = request(app.clone(), "POST", "/nexora/sessions", None).await;
@@ -833,7 +892,7 @@ async fn compat_nexora_track_start_event_carries_the_track() {
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
     // The ready frame comes first.
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -851,11 +910,11 @@ async fn compat_nexora_track_start_event_carries_the_track() {
     .await;
     assert_eq!(status, 200);
 
-    let frame = next_frame(&mut stream).await;
+    let frame = next_frame_skipping_metadata(&mut stream).await;
     // Nexora emits `PlayerCreatedEvent` in the player's constructor, so it
     // comes before the track-start event.
     assert_eq!(frame["type"], "PlayerCreatedEvent");
-    let frame = next_frame(&mut stream).await;
+    let frame = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(frame["op"], "event");
     assert_eq!(frame["type"], "TrackStartEvent");
     assert_eq!(frame["guildId"], "1234");
@@ -879,7 +938,7 @@ async fn compat_nexora_player_update_state_shape() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -899,12 +958,12 @@ async fn compat_nexora_player_update_state_shape() {
     // The first frame after the track starts is the player-created event,
     // then the track-start event, and the update task's first frame follows
     // it immediately.
-    let created = next_frame(&mut stream).await;
+    let created = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(created["type"], "PlayerCreatedEvent");
-    let start = next_frame(&mut stream).await;
+    let start = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(start["type"], "TrackStartEvent");
 
-    let update = next_frame(&mut stream).await;
+    let update = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(update["op"], "playerUpdate");
     assert_eq!(update["guildId"], "1234");
     assert!(update["state"]["time"].is_u64());
@@ -931,7 +990,7 @@ async fn compat_nexora_event_order_track_start_update_end() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -950,11 +1009,11 @@ async fn compat_nexora_event_order_track_start_update_end() {
 
     // The order is the player-created event, then the start event, then the
     // immediate update.
-    let first = next_frame(&mut stream).await;
+    let first = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(first["type"], "PlayerCreatedEvent");
-    let second = next_frame(&mut stream).await;
+    let second = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(second["type"], "TrackStartEvent");
-    let third = next_frame(&mut stream).await;
+    let third = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(third["op"], "playerUpdate");
 
     let _ = fs::remove_dir_all(&root);
@@ -972,7 +1031,7 @@ async fn compat_nexora_track_end_event_carries_the_reason() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -991,11 +1050,11 @@ async fn compat_nexora_track_end_event_carries_the_reason() {
 
     // The player-created event, then the start event, then the immediate
     // update.
-    let created = next_frame(&mut stream).await;
+    let created = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(created["type"], "PlayerCreatedEvent");
-    let start = next_frame(&mut stream).await;
+    let start = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(start["type"], "TrackStartEvent");
-    let update = next_frame(&mut stream).await;
+    let update = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(update["op"], "playerUpdate");
 
     // Stopping the player ends the track.
@@ -1008,7 +1067,7 @@ async fn compat_nexora_track_end_event_carries_the_reason() {
     .await;
     assert_eq!(status, 200);
 
-    let end = next_frame(&mut stream).await;
+    let end = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(end["op"], "event");
     assert_eq!(end["type"], "TrackEndEvent");
     assert_eq!(end["guildId"], "1234");
@@ -1065,7 +1124,7 @@ async fn compat_nexora_paused_player_sends_no_player_update() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -1084,11 +1143,11 @@ async fn compat_nexora_paused_player_sends_no_player_update() {
 
     // The player-created event, then the track-start event, then the
     // immediate update.
-    let created = next_frame(&mut stream).await;
+    let created = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(created["type"], "PlayerCreatedEvent");
-    let start = next_frame(&mut stream).await;
+    let start = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(start["type"], "TrackStartEvent");
-    let update = next_frame(&mut stream).await;
+    let update = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(update["op"], "playerUpdate");
 
     // Pause the player.
@@ -1100,7 +1159,7 @@ async fn compat_nexora_paused_player_sends_no_player_update() {
     )
     .await;
     assert_eq!(status, 200);
-    let paused = next_frame(&mut stream).await;
+    let paused = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(paused["type"], "PauseEvent");
 
     // No further update arrives while the player is paused. The frame would
@@ -1108,7 +1167,7 @@ async fn compat_nexora_paused_player_sends_no_player_update() {
     // not.
     let quiet = tokio::time::timeout(
         std::time::Duration::from_millis(1_500),
-        next_frame(&mut stream),
+        next_frame_skipping_metadata(&mut stream),
     )
     .await;
     assert!(quiet.is_err(), "a paused player sends no playerUpdate");
@@ -1129,7 +1188,7 @@ async fn compat_nexora_voice_state_update_echoes_back() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -1147,11 +1206,11 @@ async fn compat_nexora_voice_state_update_echoes_back() {
     assert_eq!(status, 200);
 
     // Drain player-created + track-start + playerUpdate frames.
-    let created = next_frame(&mut stream).await;
+    let created = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(created["type"], "PlayerCreatedEvent");
-    let start = next_frame(&mut stream).await;
+    let start = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(start["type"], "TrackStartEvent");
-    let update = next_frame(&mut stream).await;
+    let update = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(update["op"], "playerUpdate");
 
     // Send a voice state update for guild 1234, channel 5678, self-deaf=true
@@ -1172,7 +1231,7 @@ async fn compat_nexora_voice_state_update_echoes_back() {
         .expect("the voice state update is sent");
 
     // The voice state update event is echoed back.
-    let vs = next_frame(&mut stream).await;
+    let vs = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(vs["type"], "VoiceStateUpdate");
     assert_eq!(vs["guildId"], "1234");
     assert_eq!(vs["userId"], "1234");
@@ -1564,7 +1623,7 @@ async fn compat_nexora_destroying_a_player_ends_the_track_with_cleanup() {
 
     let address = serve(app.clone()).await;
     let mut stream = handshake(&address, Some("1234"), None).await.unwrap();
-    let ready = next_frame(&mut stream).await;
+    let ready = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(ready["op"], "ready");
 
     let loaded = get_json(app.clone(), "/nexora/loadtracks?identifier=sample.wav").await;
@@ -1582,9 +1641,9 @@ async fn compat_nexora_destroying_a_player_ends_the_track_with_cleanup() {
     assert_eq!(status, 200);
 
     // Drain the created and started frames.
-    let created = next_frame(&mut stream).await;
+    let created = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(created["type"], "PlayerCreatedEvent");
-    let start = next_frame(&mut stream).await;
+    let start = next_frame_skipping_metadata(&mut stream).await;
     assert_eq!(start["type"], "TrackStartEvent");
 
     let (status, _) = request(
@@ -1600,7 +1659,7 @@ async fn compat_nexora_destroying_a_player_ends_the_track_with_cleanup() {
     let mut saw_cleanup = false;
     let mut saw_destroyed = false;
     for _ in 0..4 {
-        let frame = next_frame(&mut stream).await;
+        let frame = next_frame_skipping_metadata(&mut stream).await;
         match frame["type"].as_str() {
             Some("TrackEndEvent") => {
                 assert_eq!(frame["reason"], "cleanup");

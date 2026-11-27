@@ -14,7 +14,7 @@ pub use nexora::{
     NexoraPhaserFilter, NexoraPlayer, NexoraPlayerState, NexoraPlayerUpdate,
     NexoraPlayerUpdateFrame, NexoraPlayerUpdateTrack, NexoraPlayers, NexoraPlaylist,
     NexoraPlaylistInfo, NexoraPlugin, NexoraPlugins, NexoraReady, NexoraRotationFilter,
-    NexoraSearchResult, NexoraSession, NexoraSessionUpdate, NexoraStatsFrame,
+    NexoraSearchResult, NexoraSession, NexoraSessionUpdate, NexoraSourceHealth, NexoraStatsFrame,
     NexoraTimescaleFilter, NexoraTrack, NexoraTrackEndReason, NexoraTrackInfo, NexoraTremoloFilter,
     NexoraVersion, NexoraVibratoFilter, NexoraVoiceState, check_protocol_version,
     decode_binary_track, decode_track, encode_binary_track, encode_track,

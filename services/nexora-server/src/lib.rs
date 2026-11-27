@@ -885,6 +885,23 @@ async fn run_playback(
             guild_id: player.guild_id.clone(),
             track: Box::new(track),
         });
+        // The stream metadata event follows the start, so the reference's
+        // player-created-then-track-start order stays unbroken.
+        nexora_sessions.emit(NexoraEventMessage::StreamMetadata {
+            guild_id: player.guild_id.clone(),
+            track_id: track_id.as_str().to_owned(),
+            title: player
+                .track
+                .as_ref()
+                .map(|t| t.info.title.clone())
+                .unwrap_or_default(),
+            source_name: player
+                .track
+                .as_ref()
+                .map(|t| t.info.source_name.clone())
+                .unwrap_or_default(),
+            length_ms: player.track.as_ref().map(|t| t.info.length).unwrap_or(0),
+        });
     }
 
     emit_track_start(&nexora_sessions, &session_id, &track_id).await;
@@ -939,7 +956,15 @@ async fn run_playback(
                         break;
                     };
                     let _ = sessions.end_track(&session_id).await;
-                    emit_track_end(&nexora_sessions, &session_id, &track_id, NexoraTrackEndReason::Finished).await;
+                    // The queue takes over, which is the gapless transition:
+                    // the next track starts without a gap.
+                    emit_track_end(
+                        &nexora_sessions,
+                        &session_id,
+                        &track_id,
+                        NexoraTrackEndReason::Gapless,
+                    )
+                    .await;
                     let Ok(ResolvedSource::LocalFile { path: next_path }) = sources
                         .resolve(&TrackReference::new(next_track.as_str()), &internal_auth())
                         .await
@@ -1254,6 +1279,60 @@ async fn forward_audio(mut socket: WebSocket, mut receiver: broadcast::Receiver<
             Err(RecvError::Lagged(_)) => continue,
             Err(RecvError::Closed) => break,
         }
+    }
+}
+
+/// How often the source health is checked.
+pub const SOURCE_HEALTH_INTERVAL_SECONDS: u64 = 30;
+
+/// Watches the sources' health and reports what changed.
+///
+/// The first check sends the whole snapshot; after that only the sources
+/// whose health moved send a change event.
+pub fn spawn_source_health_watch(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut previous: Vec<nexora_source_api::SourceHealth> = Vec::new();
+        let mut ticker = tokio::time::interval(Duration::from_secs(SOURCE_HEALTH_INTERVAL_SECONDS));
+        loop {
+            ticker.tick().await;
+            let reports = state.sources.health_all(&internal_auth()).await;
+            if previous.is_empty() {
+                state
+                    .nexora_sessions
+                    .emit(NexoraEventMessage::SourceHealthSnapshot {
+                        sources: reports.iter().map(health_to_wire).collect(),
+                    });
+            } else {
+                for report in &reports {
+                    let before = previous
+                        .iter()
+                        .find(|old| old.source_id == report.source_id);
+                    let changed = before.is_none_or(|old| {
+                        old.healthy != report.healthy || old.detail != report.detail
+                    });
+                    if changed {
+                        state
+                            .nexora_sessions
+                            .emit(NexoraEventMessage::SourceHealthChange {
+                                source_id: report.source_id.clone(),
+                                healthy: report.healthy,
+                                detail: report.detail.clone(),
+                            });
+                    }
+                }
+            }
+            previous = reports;
+        }
+    })
+}
+
+/// Maps a source layer's health report onto the wire type.
+fn health_to_wire(report: &nexora_source_api::SourceHealth) -> nexora_protocol::NexoraSourceHealth {
+    nexora_protocol::NexoraSourceHealth {
+        source_id: report.source_id.clone(),
+        healthy: report.healthy,
+        detail: report.detail.clone(),
+        checked_at: report.checked_at.as_millis(),
     }
 }
 
