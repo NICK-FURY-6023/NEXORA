@@ -94,11 +94,78 @@ pub struct AppState {
     pub voice_sockets: VoiceSockets,
     /// Whether the raw PCM streaming endpoint is served.
     pub raw_streaming: bool,
+    /// The plugins the server loaded.
+    pub plugins: PluginRegistry,
 }
 
 /// The UDP voice sockets, keyed by session id and guild id.
 pub type VoiceSockets =
     Arc<tokio::sync::RwLock<HashMap<(String, String), Arc<tokio::net::UdpSocket>>>>;
+
+/// One plugin the server can run.
+#[derive(Clone)]
+pub struct LoadedPlugin {
+    /// The plugin's manifest, as it declared it.
+    pub manifest: nexora_plugin_api::PluginManifest,
+    /// The module's bytes.
+    pub wasm: Arc<Vec<u8>>,
+}
+
+/// The plugins the server loaded, keyed by name.
+pub type PluginRegistry = Arc<tokio::sync::RwLock<HashMap<String, LoadedPlugin>>>;
+
+/// Loads the plugins in a directory.
+///
+/// A plugin is a `<name>.wasm` module with a `<name>.json` manifest beside
+/// it. A module without a manifest, or with a manifest that does not
+/// validate, is skipped: one broken plugin must not stop the server.
+pub async fn load_plugins(directory: &std::path::Path) -> Vec<LoadedPlugin> {
+    let Ok(entries) = tokio::fs::read_dir(directory).await else {
+        return Vec::new();
+    };
+    let mut plugins = Vec::new();
+    let mut modules: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut entries = entries;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("wasm") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        modules.push((stem.to_owned(), path));
+    }
+    modules.sort();
+    for (stem, module_path) in modules {
+        let manifest_path = module_path.with_extension("json");
+        let Ok(manifest_bytes) = tokio::fs::read(&manifest_path).await else {
+            tracing::warn!(%stem, "the plugin has no manifest and is skipped");
+            continue;
+        };
+        let manifest: nexora_plugin_api::PluginManifest =
+            match serde_json::from_slice(&manifest_bytes) {
+                Ok(manifest) => manifest,
+                Err(error) => {
+                    tracing::warn!(%stem, %error, "the plugin manifest cannot be read");
+                    continue;
+                }
+            };
+        if let Err(error) = nexora_plugin_api::validate_manifest(&manifest) {
+            tracing::warn!(%stem, %error, "the plugin manifest is not valid");
+            continue;
+        }
+        let Ok(wasm) = tokio::fs::read(&module_path).await else {
+            tracing::warn!(%stem, "the plugin module cannot be read");
+            continue;
+        };
+        plugins.push(LoadedPlugin {
+            manifest,
+            wasm: Arc::new(wasm),
+        });
+    }
+    plugins
+}
 
 /// Returns the player's voice socket, binding one the first time.
 ///

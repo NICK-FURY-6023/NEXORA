@@ -7,4 +7,5 @@ license.workspace = true
 
 [dependencies]
 nexora-error = { path = "../nexora-error" }
-wasmi = "=2.0.3"
+wasmi = { workspace = true }
+serde = { workspace = true }

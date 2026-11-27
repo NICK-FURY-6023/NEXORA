@@ -184,6 +184,76 @@ pub fn router() -> Router<AppState> {
         .route("/nexora/loadchapters", get(load_chapters))
         .route("/nexora/trackstream/{encoded}", get(trackstream))
         .route("/nexora/loadstream", get(loadstream))
+        .route("/nexora/plugins", get(plugins_list))
+        .route("/nexora/plugins/{name}/call", post(plugin_call))
+}
+
+/// `GET /nexora/plugins` — the plugins the server loaded.
+async fn plugins_list(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, NexoraApiError> {
+    authorize(&headers, &state)?;
+    let plugins = state.plugins.read().await;
+    let listed: Vec<Value> = plugins
+        .values()
+        .map(|plugin| serde_json::to_value(&plugin.manifest).unwrap_or(Value::Null))
+        .collect();
+    Ok(Json(json!({ "plugins": listed })))
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginCall {
+    function: String,
+    #[serde(default)]
+    arguments: Vec<String>,
+}
+
+/// `POST /nexora/plugins/{name}/call` — run one exported function.
+///
+/// The module runs under the sandbox policy: the time limit is fuel, so a
+/// module that never returns is stopped, and the memory limit is the
+/// engine's own limiter.
+async fn plugin_call(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(request): Json<PluginCall>,
+) -> Result<Json<Value>, NexoraApiError> {
+    authorize(&headers, &state)?;
+    let plugin = {
+        let plugins = state.plugins.read().await;
+        plugins.get(&name).cloned()
+    };
+    let Some(plugin) = plugin else {
+        return Err(NexoraApiError::not_found(
+            "Plugin not found",
+            format!("/nexora/plugins/{name}/call"),
+        ));
+    };
+    let runtime = nexora_plugin_api::PluginRuntime::new().map_err(|error| {
+        NexoraApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+            format!("/nexora/plugins/{name}/call"),
+        )
+    })?;
+    let arguments: Vec<&str> = request.arguments.iter().map(String::as_str).collect();
+    let results = runtime
+        .call(
+            &plugin.manifest,
+            &plugin.wasm,
+            &request.function,
+            &arguments,
+        )
+        .map_err(|error| {
+            NexoraApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                error.to_string(),
+                format!("/nexora/plugins/{name}/call"),
+            )
+        })?;
+    Ok(Json(json!({ "results": results })))
 }
 
 /// `GET /nexora/loadstream` — the resolved track's audio as raw PCM.

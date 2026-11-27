@@ -104,6 +104,7 @@ fn app(root: &PathBuf) -> axum::Router {
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     })
 }
 
@@ -493,6 +494,7 @@ async fn compat_nexora_loadstream_is_gated_by_configuration() {
         .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
         .unwrap();
     let state = |raw_streaming: bool| AppState {
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         sessions: Arc::new(SessionManager::new()),
         nexora_sessions: Arc::new(NexoraSessionManager::new()),
         sources: Arc::clone(&sources),
@@ -538,6 +540,85 @@ async fn compat_nexora_loadstream_is_gated_by_configuration() {
         .unwrap();
     assert_eq!(&body[..4], b"RIFF", "the body is a PCM wave");
     assert_eq!(&body[8..12], b"WAVE");
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Row: the plugin runtime is reachable from the server — a plugin is loaded
+/// from a directory, listed, and its exported function can be called.
+#[tokio::test]
+async fn compat_nexora_plugins_are_loaded_and_callable() {
+    let root = media_root();
+    let plugins_root = root.join("plugins");
+    fs::create_dir_all(&plugins_root).unwrap();
+    // A module that exports `answer`, which returns the i32 constant 42.
+    let module: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, // type: () -> i32
+        0x03, 0x02, 0x01, 0x00, // function: one function of type 0
+        0x07, 0x0a, 0x01, 0x06, b'a', b'n', b's', b'w', b'e', b'r', 0x00, 0x00, // export
+        0x0a, 0x06, 0x01, 0x04, 0x00, 0x41, 0x2a, 0x0b, // code: i32.const 42, end
+    ];
+    fs::write(plugins_root.join("answer.wasm"), module).unwrap();
+    fs::write(
+        plugins_root.join("answer.json"),
+        r#"{"name":"answer","version":"0.1.0","entrypoint":"answer.wasm","capabilities":[]}"#,
+    )
+    .unwrap();
+
+    let loaded = nexora_server::load_plugins(&plugins_root).await;
+    assert_eq!(loaded.len(), 1, "the plugin is loaded");
+    assert_eq!(loaded[0].manifest.name, "answer");
+
+    let sources = SourceRegistry::new();
+    sources
+        .register(Box::new(LocalMediaAdapter::new(&root).unwrap()))
+        .unwrap();
+    let state = AppState {
+        sessions: Arc::new(SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
+        sources: Arc::new(sources),
+        password: None,
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(
+            loaded
+                .into_iter()
+                .map(|plugin| (plugin.manifest.name.clone(), plugin))
+                .collect(),
+        )),
+    };
+    let app = build_router(state);
+
+    // The plugin is listed with its manifest.
+    let listed = get_json(app.clone(), "/nexora/plugins").await;
+    let plugins = listed["plugins"].as_array().expect("a plugin list");
+    assert_eq!(plugins.len(), 1);
+    assert_eq!(plugins[0]["name"], "answer");
+    assert_eq!(plugins[0]["version"], "0.1.0");
+
+    // Its exported function runs under the sandbox.
+    let (status, value) = request(
+        app.clone(),
+        "POST",
+        "/nexora/plugins/answer/call",
+        Some(r#"{"function":"answer"}"#),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(value["results"], serde_json::json!([42]));
+
+    // A plugin that is not there is a 404.
+    let (status, _) = request(
+        app.clone(),
+        "POST",
+        "/nexora/plugins/missing/call",
+        Some(r#"{"function":"answer"}"#),
+    )
+    .await;
+    assert_eq!(status, 404);
 
     let _ = fs::remove_dir_all(&root);
 }
@@ -1247,6 +1328,7 @@ async fn compat_nexora_voice_socket_belongs_to_the_player() {
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     };
     let app = build_router(state.clone());
     let (app, session_id) = create_session_over_http(app).await;
@@ -1555,6 +1637,7 @@ async fn compat_nexora_websocket_handshake_refuses_a_wrong_password() {
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
     }))
     .await;
 

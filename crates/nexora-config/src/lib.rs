@@ -137,6 +137,11 @@ pub struct PluginsConfig {
     pub enabled: bool,
     /// Whether plugins run in a sandbox.
     pub sandbox: bool,
+    /// The directory the plugins are loaded from.
+    ///
+    /// A plugin is a `<name>.wasm` module with a `<name>.json` manifest
+    /// beside it. Without a directory the server runs no plugins.
+    pub directory: Option<String>,
 }
 
 impl Default for PluginsConfig {
@@ -144,6 +149,7 @@ impl Default for PluginsConfig {
         Self {
             enabled: true,
             sandbox: true,
+            directory: None,
         }
     }
 }

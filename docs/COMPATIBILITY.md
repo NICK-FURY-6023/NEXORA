@@ -83,6 +83,8 @@ without opening the socket.
 | `/nexora/loadchapters` | GET | `load_chapters` | partial | answers `[]`; NEXORA has no chapters source |
 | `/nexora/connection` | GET | `connection` | partial | reports the reference's disabled payload; NEXORA has no voice gateway |
 | `/nexora/trackstream/{encodedTrack}` | GET | `trackstream` | implemented | transcodes a local file or an HTTP source to Opus — `fetching_an_http_source_refuses_a_private_target` |
+| `/nexora/plugins` | GET | `plugins_list` | implemented (M10) | the plugins the server loaded, with their manifests — `compat_nexora_plugins_are_loaded_and_callable` |
+| `/nexora/plugins/{name}/call` | POST | `plugin_call` | implemented (M10) | runs one exported function of a plugin under the sandbox policy; the module's time limit is fuel, so a module that never returns is stopped — `compat_nexora_plugins_are_loaded_and_callable` |
 | `/nexora/loadstream` | GET | `loadstream` | implemented | the resolved track's audio as raw PCM, gated by the `audio.raw_streaming` configuration flag; with the gate off it answers 404 — `compat_nexora_loadstream_is_gated_by_configuration` |
 | `/nexora/hls/*` | GET | — | not-targeted | HLS serving is a NodeLink feature, not Lavalink's |
 | `/nexora/profiler*` | GET | — | not-targeted | NodeLink profiling endpoints |
@@ -201,10 +203,36 @@ only the filters it actually applies.
 | Local files | `LocalMediaAdapter` | implemented |
 | HTTP streams | `AuthorizedHttpAdapter` | implemented | the server fetches the URL into a temporary file after the SSRF check, so an HTTP source plays like a local one |
 | Radio | `PublicRadioAdapter` | implemented |
-| Deezer, Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream`, `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
-| Spotify, Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream`, `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
-| YouTube and the rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
+| Deezer | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream` |
+| Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
+| Spotify | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream` |
+| Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
+| YouTube | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `youtube_search_maps_video_id_and_channel`, `youtube_resolve_returns_the_audio_stream` |
+| Bandcamp | — | implemented — `bandcamp_search_maps_collection_rows`, `bandcamp_resolve_returns_the_stream` |
+| SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
+| Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
+| The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
+| Deezer | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream` |
+| Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
+| Spotify | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream` |
+| Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
+| YouTube | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `youtube_search_maps_video_id_and_channel`, `youtube_resolve_returns_the_audio_stream` |
+| Bandcamp | — | implemented — `bandcamp_search_maps_collection_rows`, `bandcamp_resolve_returns_the_stream` |
+| SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
+| Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
+| The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
+| Deezer | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `deezer_search_maps_real_fields`, `deezer_resolve_returns_a_stream` |
+| Tidal | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `tidal_search_maps_real_fields`, `tidal_resolve_returns_a_stream` |
+| Spotify | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `spotify_search_maps_real_tracks_envelope`, `spotify_resolve_returns_the_preview_stream` |
+| Apple Music | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `apple_search_maps_catalog_fields`, `apple_resolve_returns_the_preview_stream` |
+| YouTube | — | implemented (adapter only — the caller supplies the token; NEXORA ships no token acquisition) — `youtube_search_maps_video_id_and_channel`, `youtube_resolve_returns_the_audio_stream` |
+| Bandcamp | — | implemented — `bandcamp_search_maps_collection_rows`, `bandcamp_resolve_returns_the_stream` |
+| SoundCloud | — | implemented — `soundcloud_search_maps_collection_rows`, `soundcloud_resolve_prefers_the_progressive_transcoding` |
+| Internet Archive | — | implemented — `search_maps_duration_and_artist`, `resolve_picks_the_first_audio_file` |
+| The rest of NodeLink's managers | — | not-targeted (commercial providers are a documented NEXORA non-goal) |
 | Lavalink's Java plugin ecosystem | — | not-targeted (a pure-Rust server cannot load a Java plugin; the WASM runtime is the substitute, M10) |
+| WASM plugin runtime | `nexora-plugin-api::PluginRuntime` | implemented (M10) | a WebAssembly module runs under a sandbox policy: the time limit is enforced as fuel so a module that never returns is stopped, the memory limit through the engine's own limiter, and a denied effect is reported to the host after the call — `a_module_runs_its_exported_function`, `a_module_that_is_not_webassembly_is_refused`, `a_module_without_the_named_export_is_refused`, `a_module_that_never_returns_is_stopped_by_the_time_limit`, `a_module_that_asks_for_a_denied_host_is_refused`, `a_module_that_asks_for_an_allowed_host_is_allowed`, `the_manifest_capabilities_reach_the_host` |
+| Plugin sandbox host checks | `PluginSandbox::check_network` | implemented (M10) | a backslash in the authority is refused as malformed rather than deciding the host, and a private host is never granted or exposed — `a_backslash_cannot_decide_the_host`, `a_private_host_is_never_granted_or_exposed`, `the_exposed_capability_set_follows_the_effective_policy` |
 
 ## Summary
 

@@ -6,7 +6,7 @@ mod sandbox;
 pub use runtime::PluginRuntime;
 pub use sandbox::{PluginModule, PluginSandbox};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PluginCapability {
     AudioDecode,
     AudioEncode,
@@ -15,7 +15,7 @@ pub enum PluginCapability {
     FileSystem(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PluginManifest {
     pub name: String,
     pub version: String,

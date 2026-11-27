@@ -90,6 +90,15 @@ async fn main() -> NexoraResult<()> {
         .filter(|value| !value.is_empty());
 
     let sessions = Arc::new(SessionManager::new());
+    // The plugins live in a configured directory: a `<name>.wasm` module with
+    // a `<name>.json` manifest beside it.
+    let mut plugins: HashMap<String, nexora_server::LoadedPlugin> = HashMap::new();
+    if let Some(directory) = config.plugins.directory.as_ref().map(PathBuf::from) {
+        for plugin in nexora_server::load_plugins(&directory).await {
+            tracing::info!(name = %plugin.manifest.name, "plugin loaded");
+            plugins.insert(plugin.manifest.name.clone(), plugin);
+        }
+    }
     let state = AppState {
         sessions: sessions.clone(),
         nexora_sessions: Arc::new(NexoraSessionManager::new()),
@@ -99,6 +108,7 @@ async fn main() -> NexoraResult<()> {
         audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         raw_streaming: config.audio.raw_streaming,
+        plugins: Arc::new(tokio::sync::RwLock::new(plugins)),
     };
 
     let grpc_address: SocketAddr = format!("{}:{}", config.server.host, args.grpc_port)

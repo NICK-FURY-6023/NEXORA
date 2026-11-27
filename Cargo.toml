@@ -52,3 +52,4 @@ tonic = { version = "=0.14.9", features = ["transport"] }
 prost = "=0.14.6"
 tonic-prost = "=0.14.9"
 tokio-stream = "=0.1.19"
+wasmi = "=2.0.3"

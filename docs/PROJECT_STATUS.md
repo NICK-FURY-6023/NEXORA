@@ -195,6 +195,19 @@ Workspace total is now 153 passing Rust tests.
   player endpoints report where the track actually is and a resumed session
   picks that position up.
 
+### Plugins are reachable from the server (M10)
+
+- `nexora-plugin-api` was implemented but no service consumed it, so the
+  runtime had no entry point. The server now loads plugins from the
+  configured `plugins.directory` — a `<name>.wasm` module with a
+  `<name>.json` manifest beside it — and serves `GET /nexora/plugins` and
+  `POST /nexora/plugins/{name}/call`.
+- A plugin whose manifest is missing or invalid is skipped: one broken plugin
+  must not stop the server.
+- The plugin ABI returns integers, so a plugin cannot yet hand a track list
+  back to the server; plugin-provided source adapters are not expressible
+  yet.
+
 ### Raw PCM streaming (M8)
 
 - `GET /nexora/loadstream?identifier=…` resolves a track and streams its
