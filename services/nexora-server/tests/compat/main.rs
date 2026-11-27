@@ -25,6 +25,8 @@ use nexora_source_framework::{LocalMediaAdapter, SourceRegistry};
 use tokio_stream::StreamExt;
 use tower::ServiceExt;
 
+mod clients;
+
 /// A track used only to build the event frames the op-code test asserts on.
 fn track() -> NexoraTrack {
     NexoraTrack {
