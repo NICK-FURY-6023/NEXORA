@@ -2,7 +2,7 @@
 
 ## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `cb0de19` (2026-11-27). The
+Status: **implemented and verified** at commit `e79d272` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
 Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
@@ -12,7 +12,7 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
   -- -D warnings`, and `cargo test --workspace` all exit 0 with **366 passing
   tests, 0 failures**.
-- CI run `45989029381` is green on Linux and Windows. The docs site and
+- CI run `45989781639` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
@@ -30,7 +30,9 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
   conformance smoke tests pin the seek→playerUpdate and partial-surface shapes
   (commit `6eb9ac0`), and session state can be snapshotted and restored without
   auto-resuming playback (commit `0602409`), and `WorkerRegistry::mark_down`
-  makes cluster failover explicit and testable (commit `3b60c24`). The full
+  makes cluster failover explicit and testable (commit `3b60c24`), and opt-in
+  credentialed provider checks are ignored by default with no stored tokens
+  (commit `cb0de19`). The full
   backlog and execution plan live in
   `docs/superpowers/plans/2026-11-27-remaining-work.md`.
 
