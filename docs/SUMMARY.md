@@ -13,6 +13,7 @@
 - [API contracts](API.md)
 - [Wire protocol](PROTOCOL.md)
 - [Compatibility matrix](COMPATIBILITY.md)
+- [Lavalink / NodeLink / NEXORA comparison](COMPARISON.md)
 
 # Reference
 

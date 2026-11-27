@@ -98,6 +98,7 @@ and in the table below.
 | [PROTOCOL.md](PROTOCOL.md) | Implemented wire contract, auth, and error envelope |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | What is verified right now |
 | [LAVALINK_ANALYSIS.md](LAVALINK_ANALYSIS.md) | Lavalink protocol reference and boundaries |
+| [COMPARISON.md](COMPARISON.md) | Lavalink vs NodeLink vs NEXORA, with migration notes |
 | [ADRs](adr/README.md) | Why decisions were made |
 
 `docs/NEXORA_SYSTEM_DESIGN.md` is an early draft and is superseded by

@@ -25,7 +25,37 @@ NEXORA is intended for Discord and Telegram bots, web applications, desktop and 
 
 **Project status:** Milestones M0-M10 are implemented and verified: the Lavalink v4 REST/WebSocket surface and session lifecycle, event delivery, audio filters, Discord voice RTP framing, session resume, eight wired source adapters, deployment assets, and a real wasmi-based WASM plugin runtime with a sandboxed host interface. The honest compatibility statement is the [compatibility matrix](docs/COMPATIBILITY.md). Remaining work is production hardening, broader third-party client conformance, credentialed commercial sources, repeatable benchmark publication, and official SDKs (the `sdks/` tree was removed; `examples/bot_poc.py` calls `/api/v1` with the Python standard library only).
 
-**Start here:** the [documentation map](docs/README.md) routes users, operators, contributors, and agents to the authoritative doc for each question. The sections below remain the long-form product and architecture reference.
+**Start here:** the [documentation map](docs/README.md) routes users, operators, contributors, and agents to the authoritative doc for each question. For the shortest answer to "how is this different from Lavalink or NodeLink?", use the [full comparison](docs/COMPARISON.md). The sections below remain the long-form product and architecture reference.
+
+### NEXORA at a glance
+
+| Question | Answer |
+|---|---|
+| Is it a Lavalink wrapper? | No. It is an independent Rust server with a Lavalink-shaped compatibility surface under `/nexora/*`. |
+| What runs on the host? | One `nexora-server` binary. No JVM, no Node.js runtime, no platform-native audio JARs. |
+| What is the long-term API? | `/api/v1` REST, text event WebSocket, binary Opus WebSocket, plus internal gRPC. |
+| What can existing Lavalink clients reuse? | Bearer + `User-Id` handshake, `/v4`-shaped routes, `ready`/`stats`/`playerUpdate`/`event` ops, flat events, filters, and session resume — with the encoded-track voice-state boundaries documented in [COMPARISON.md](docs/COMPARISON.md). |
+| What is deliberately different? | No server-side voice gateway, no Java plugin loader, no Rhino JS filters, no Lavaplayer binary track format, and no credential bypass for commercial sources. |
+| Is it production-ready? | Not claimed. The workspace is green and compatibility is tested; production hardening remains open. |
+
+### Lavalink vs NodeLink vs NEXORA — short version
+
+| | Lavalink 4.2.2 | NodeLink | NEXORA |
+|---|---|---|---|
+| Core | Kotlin/Java, Spring Boot fat JAR, Java 17 | TypeScript/JavaScript on Node.js | Rust binary, Cargo workspace |
+| Native deps | Lavaplayer natives, `udpqueue-*`, platform JARs | Node native modules | Compiled into the Rust binary |
+| API | `/v4` REST + `/v4/websocket` | NodeLink routes + Lavalink-like surface | `/api/v1` native + `/nexora/*` compatibility |
+| Sources | Lavaplayer managers + Java plugins | Built-in TS managers, commercial providers | Eight in-house Rust adapters |
+| Plugins | Java plugin JARs | TypeScript managers/routes | Sandboxed `wasmi` WASM modules |
+| Voice | Koe gateway + UDP + DAVE | NodeLink voice socket | Client-owned gateway; RTP + AES-128-CTR |
+| Filters | 10 built-ins + Rhino JS filters | 21 filters + mixer | 14 Rust filters, no JS engine |
+| State | In-memory | In-memory | In-memory + opt-in snapshots |
+| Metrics | WebSocket `stats` | NodeLink metrics | JSON + Prometheus `/metrics` |
+| SDK here | Community ecosystem | Node.js-native | None shipped; stdlib Python example |
+
+The full evidence-backed comparison — including migration steps and every
+deliberate non-goal — is in [docs/COMPARISON.md](docs/COMPARISON.md), with the
+per-row test evidence in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ---
 
