@@ -13,6 +13,17 @@ All notable changes to NEXORA are documented here.
   packets per second, each a valid Opus TOC byte under 4000 bytes). The live
   server was also probed manually: 41 packets of 161–265 bytes in 1.4 s.
 
+### Added - end-to-end event WebSocket proof
+
+- `services/nexora-server/tests/event_ws.rs` serves the real router on a TCP
+  port, opens `/nexora/websocket` with a real WebSocket client and a `User-Id`
+  header, starts a one-second local track through the player route, and reads
+  the frames until the track ends on its own. It asserts the flat frame shape
+  (no `data` wrapper), the `ready` frame first, `PlayerCreatedEvent` →
+  `TrackStartEvent` → immediate `playerUpdate` → `TrackEndEvent`, and that the
+  end reason is `finished` rather than a stop the test triggered. A live server
+  probe produced the same order.
+
 ### Fixed - search across providers
 
 - `/api/v1/search` returned `400 INVALID_INPUT` for every query and

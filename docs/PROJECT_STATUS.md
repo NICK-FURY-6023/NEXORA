@@ -10,7 +10,7 @@ Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **366 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **367 passing
   tests, 0 failures**.
 - CI run `45989781639` is green on Linux and Windows. The docs site and
   relative-link check also pass.

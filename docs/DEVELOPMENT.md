@@ -14,7 +14,7 @@ cargo test --workspace
 ```
 
 Current baseline at commit `e79d272`: all four commands pass; `cargo test
---workspace` reports 366 tests, 0 failures. CI runs the same gates on Linux
+--workspace` reports 367 tests, 0 failures. CI runs the same gates on Linux
 and Windows (green run `45989781639`).
 
 ## Running the gateway skeleton
