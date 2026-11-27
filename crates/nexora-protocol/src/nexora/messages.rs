@@ -141,6 +141,17 @@ impl NexoraFrame {
     }
 }
 
+/// One source's health as it appears on the WebSocket event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceHealth {
+    #[serde(rename = "sourceId")]
+    pub source_id: String,
+    pub healthy: bool,
+    pub detail: String,
+    #[serde(rename = "checkedAt")]
+    pub checked_at: u64,
+}
+
 /// One emitted event, discriminated by its `type` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -238,7 +249,7 @@ pub enum NexoraEventMessage {
         length_ms: u64,
     },
     #[serde(rename = "SourceHealthSnapshotEvent")]
-    SourceHealthSnapshot { sources: Vec<SourceHealth> },
+    SourceHealthSnapshot { sources: Vec<NexoraSourceHealth> },
     #[serde(rename = "SourceHealthChangeEvent")]
     SourceHealthChange {
         #[serde(rename = "sourceId")]
@@ -290,6 +301,20 @@ impl NexoraEventMessage {
         insert_op(&mut frame, NexoraOp::Event);
         frame
     }
+}
+
+/// One source's health, as the health events report it.
+///
+/// The wire type is the protocol's own: the source layer's health struct
+/// belongs to that layer, not to the wire contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NexoraSourceHealth {
+    #[serde(rename = "sourceId")]
+    pub source_id: String,
+    pub healthy: bool,
+    pub detail: String,
+    #[serde(rename = "checkedAt")]
+    pub checked_at: u64,
 }
 
 /// Inserts the `op` field into an already-serialised frame.

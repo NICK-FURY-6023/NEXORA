@@ -24,8 +24,8 @@ pub use load_result::{
     NexoraLoadResult, NexoraLoadType, NexoraPlaylist, NexoraPlaylistInfo, NexoraSearchResult,
 };
 pub use messages::{
-    NexoraEventMessage, NexoraFrame, NexoraPlayerUpdateFrame, NexoraReady, NexoraStatsFrame,
-    NexoraTrackEndReason,
+    NexoraEventMessage, NexoraFrame, NexoraPlayerUpdateFrame, NexoraReady, NexoraSourceHealth,
+    NexoraStatsFrame, NexoraTrackEndReason,
 };
 pub use op::NexoraOp;
 pub use player::{
