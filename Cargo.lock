@@ -1474,6 +1474,7 @@ name = "nexora-plugin-api"
 version = "0.1.0"
 dependencies = [
  "nexora-error",
+ "serde",
  "wasmi",
 ]
 
@@ -1503,6 +1504,7 @@ dependencies = [
  "nexora-config",
  "nexora-error",
  "nexora-grpc",
+ "nexora-plugin-api",
  "nexora-protocol",
  "nexora-session",
  "nexora-source-api",
