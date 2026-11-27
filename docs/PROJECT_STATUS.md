@@ -1,25 +1,27 @@
 # NEXORA Project Status
 
-## Current milestone: M0-M10 implemented; M11 documentation sync
+## Current milestone: M0-M10 implemented; M11 benchmarks published
 
-Status: **implemented and verified** at commit `2f469f8` (2026-11-27). The
+Status: **implemented and verified** at commit `ed22756` (2026-11-27). The
 authoritative feature-by-feature statement is
 [COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
+Measured hot paths are in [BENCHMARKS.md](BENCHMARKS.md).
 
 ### Current verified baseline (2026-11-27)
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
-  -- -D warnings`, and `cargo test --workspace` all exit 0 with **333 passing
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **347 passing
   tests, 0 failures**.
-- CI run `45947809783` is green on Linux and Windows. The docs site and
+- CI run `45967064156` is green on Linux and Windows. The docs site and
   relative-link check also pass.
 - Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
   events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
-  PCM streaming, M10 WASM plugin runtime, plus the eight universal source
-  adapters and the SDK/deployment foundations.
+  gapless transitions and the remaining events, M9 source adapters, M10 WASM
+  plugin runtime, plus worker routing, the SDK/deployment foundations, and two
+  reproducible Criterion microbenchmarks.
 - Still not established: full third-party client conformance, credentialed
-  commercial-source login flows, production hardening, and repeatable
-  published benchmarks.
+  commercial-source login flows, production hardening, and server-level
+  capacity claims.
 
 ### Slice 1: real-time local playback (2026-11-22)
 

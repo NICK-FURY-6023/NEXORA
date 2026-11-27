@@ -4,6 +4,7 @@
 - [System design](SYSTEM_DESIGN.md)
 - [Implemented architecture](ARCHITECTURE.md)
 - [Project status](PROJECT_STATUS.md)
+- [Benchmarks](BENCHMARKS.md)
 - [Today's schedule](TODAY_SCHEDULE.md)
 - [Security review](SECURITY_REVIEW.md)
 

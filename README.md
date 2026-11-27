@@ -1294,7 +1294,7 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-At `2f469f8` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (333 tests, 0 failures); CI run `45947809783` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
+At `ed22756` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (347 tests, 0 failures); CI run `45967064156` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
 | Area | Current status |
 |---|---|
@@ -1309,7 +1309,7 @@ At `2f469f8` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --
 | SDKs | Python + Node verified; Java/Go/C#/PHP source-only (toolchains unavailable) |
 | Distributed cluster | Foundation implemented: registry + weighted scheduler |
 | Plugin runtime | Implemented (M10): wasmi execution, fuel/memory limits, `fetch`/`push` host effects, sandboxed manifest capabilities |
-| Performance benchmarks | Short Criterion run completed; see `docs/PROJECT_STATUS.md` |
+| Performance benchmarks | Two Criterion microbenchmarks with methodology and variance: `docs/BENCHMARKS.md` |
 | Production readiness | Not established |
 
 **Status policy:** Only mark a feature as implemented when the repository contains the implementation and relevant tests. Only publish performance numbers with benchmark methodology, hardware details, software versions, and reproducible results.
