@@ -1,14 +1,23 @@
 # NEXORA Complete System Design
 
-Status: design baseline plus implemented slice 1, 2026-11-22. This document
-records observed code behavior, the invariants to preserve, the complete system
-design, and the first working vertical slice. Later slices are explicitly
-planned, not claimed as implemented.
+Status: design baseline plus the implemented M0-M10 codebase, updated
+2026-11-27. This document records observed code behavior, the invariants to
+preserve, the complete system design, and the working slices. Deliberate
+non-goals are labelled as such; the feature-by-feature implementation state is
+in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 Evidence used: `README.md`, `docs/MASTER_AI_INSTRUCTIONS.md`,
 `docs/LAVALINK_ANALYSIS.md`, official Lavalink v4 REST/WebSocket docs, the
 current Rust sources cited below, and a fresh `cargo test --workspace` run
-(exit 0, 82 tests passed).
+(exit 0, 333 tests passed at commit `2f469f8`).
+
+## Current verification baseline (2026-11-27)
+
+- `cargo fmt --all -- --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo test --workspace`: exit 0, 333 tests passed, 0 failed.
+- CI run `45947809783`: green on Linux and Windows, including the docs site
+  and relative-link checks.
 
 ## 1. Product intent
 
@@ -70,7 +79,7 @@ proprietary source extraction are deliberate non-goals
 | Live playback | `play` resolves source, starts one paced task, emits raw Opus to `/ws/v1/sessions/{id}/audio`; controls use typed signals | `crates/nexora-session/src/lib.rs`, `services/nexora-server/src/lib.rs` |
 | `/v4` adapter | `info`, `stats`, `loadtracks`, `sessions`, `player`, WS events; real source IDs and honest `connected=false`, `ping=-1` | `services/nexora-server/src/lib.rs` |
 | Auth | Bearer token when password set, open when unset; REST and both WebSockets share it | `services/nexora-server/src/lib.rs` |
-| Tests | 82 passing in workspace; live audio WS proof recorded below | fresh `cargo test --workspace` + live smoke |
+| Tests | 333 passing in workspace; live audio WS proof recorded below | fresh `cargo test --workspace` + live smoke |
 
 Slice 1 closed the original playback gap: `play` now resolves before mutating
 session state, produces paced 20 ms Opus packets, advances position, and emits
@@ -276,10 +285,12 @@ timing. Those measurements belong to slice 2; queue auto-advance is done
 |---|---|---|
 | 0 (done) | Workspace, protocol, config, errors, audio crates, source framework, REST/WS/gRPC, SDKs, deployment, partial v4 | 75 tests; REA + docs recorded |
 | 1 (done) | Real-time local-file playback + dedicated binary Opus WS + working controls | fmt/clippy; tests green; live Opus packets |
-| 2 (in progress) | Queue auto-advance (done, ADR-023) + `TrackEnded` reason + `playerUpdate` event | Contract tests for end reasons and position updates |
-| 3 | Discord voice sender: voice update REST, voice gateway v8, UDP, encryption, DAVE boundary | Live test against a disposable voice server or documented harness |
-| 4 | `/nexora/decodetrack`, filters, resumable sessions, frame stats, real CPU/memory metrics | Lavalink client compatibility tests |
-| 5 | Durable sessions, clustering, WASM plugins, production hardening | Deployment and chaos/conformance tests |
+| 2 (done) | Queue auto-advance (ADR-023), `TrackEnded` reason, `playerUpdate` event | Contract tests for end reasons and position updates |
+| 3 (done) | Discord voice RTP transport and XSecret boundary; no voice gateway | `compat_nexora_voice_datagram_is_an_rtp_packet` and related tests |
+| 4 (done) | Filters, resumable sessions, raw PCM streaming, SSE-style metrics | Contract tests and the compatibility matrix |
+| 5 (done) | Universal source adapters wired in the server | Tier A/B tests; eight registered adapters |
+| 6 (done) | WASM plugin runtime with sandboxed host effects | `nexora-plugin-api` runtime tests and server compat tests |
+| open | Full third-party client conformance, credentialed sources, production hardening, published benchmarks | Compatibility suite and reproducible benchmark reports |
 
 Slice 2 depends on slice 1 because auto-advance needs a real end-of-track signal.
 Slice 3 depends on slice 1 because the voice sender consumes the same Opus frame

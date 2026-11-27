@@ -2,6 +2,12 @@
 
 Manager: Hermes Agent. Goal: finish the remaining high-value increments today with parallel CLI workers and verified pushes after each completed wave.
 
+Current state (2026-11-27): the waves below are historical. M0-M10 are
+implemented and verified at commit `2f469f8` with 333 passing tests and CI run
+`45947809783` green. The remaining work is tracked in
+[PROJECT_STATUS.md](PROJECT_STATUS.md) and
+[COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## Wave 0 — baseline (done)
 
 - Phase 1 foundation — `8313fa4`

@@ -1,6 +1,7 @@
-# NEXORA Security Review — 2026-11-22
+# NEXORA Security Review — 2026-11-22, updated 2026-11-27
 
-Scope: Phase 1-4 core, SDKs, deployment artifacts, cluster registry, plugin contract.
+Scope: Phase 1-4 core, SDKs, deployment artifacts, cluster registry, plugin
+contract, and the M10 WASM runtime.
 
 ## Checks passed
 
@@ -12,13 +13,25 @@ Scope: Phase 1-4 core, SDKs, deployment artifacts, cluster registry, plugin cont
 - SDKs use only documented endpoints and do not embed credentials.
 - Docker image does not copy `.env`, `config.json`, or local databases.
 
+## Checks added with the WASM runtime (M10)
+
+- `PluginRuntime` executes guest modules under `wasmi` with fuel as the time
+  bound and the engine limiter as the memory bound; an infinite loop is stopped
+  rather than hanging the server.
+- Only manifest-granted host effects are reachable. `host.fetch` rechecks the
+  sandbox host policy, and `host.push` copies a bounded UTF-8 string from guest
+  memory (up to 1 MiB).
+- A denied host call is returned to the host as a policy error; it is not
+  silently downgraded or granted.
+
 ## Remaining risks / deferred work
 
 - Lavalink client conformance is partial; more `/v4` endpoints should be tested against real clients.
-- Plugin WASM runtime is not implemented; the manifest contract is not yet enforced by a sandbox executor.
 - Session state is in-memory and lost on restart; durable state needs authentication and encryption review.
 - Monitoring configs are examples only; no Prometheus exposition is wired.
 - Java/Go/C#/PHP SDK sources were not compiled because toolchains are unavailable on this host.
+- Credentialed live-provider flows for Spotify, Deezer, Apple Music and Tidal
+  require the user's own authorized token and are not covered by this review.
 
 ## Decision
 

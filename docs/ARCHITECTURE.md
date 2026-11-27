@@ -121,7 +121,8 @@ The Rust workspace is defined in the root `Cargo.toml`. Current members:
 | `crates/nexora-session` | Session lifecycle, queue, playback control signals, event broadcast | Phase 4a |
 | `crates/nexora-grpc` | Tonic server/client over `SessionManager` | Phase 4b |
 | `crates/nexora-cluster` | Worker registry, capability filtering, weighted scheduler | Phase 5 |
-| `crates/nexora-plugin-api` | Plugin manifest validation and sandbox policy | Phase 6 |
+| `crates/nexora-plugin-api` | Plugin manifest validation, sandbox policy, and the wasmi runtime with `fetch`/`push` host effects | M10 |
+| `crates/nexora-source-universal` | Eight source adapters wired by the server (archive, Bandcamp, SoundCloud, Apple Music, Deezer, Tidal, Spotify, YouTube) | M9 |
 | `services/nexora-gateway` | Phase 1 skeleton binary | Phase 1 |
 | `services/nexora-server` | Axum REST + WebSocket, `/api/v1` and `/v4` surfaces, gRPC listener | Phase 4a/4b |
 | `services/nexora-audio-engine` | Standalone CLI: decode → resample → encode | Phase 2 |
@@ -216,7 +217,7 @@ These are logical components, not a requirement to create all of them as separat
 | `nexora-delivery` | Audio output transport | P0 |
 | `nexora-registry` | Worker discovery in distributed mode | P1 |
 | `nexora-cluster` | Scheduling and cluster coordination | P1 |
-| `nexora-plugin-host` | Sandboxed extension execution | P1 |
+| `nexora-plugin-host` | Sandboxed extension execution — delivered as `nexora-plugin-api::PluginRuntime`, not a separate crate | M10 |
 | `nexora-observability` | Metrics, logs, and traces | P1 |
 | `nexora-admin` | Administrative interface | P2 |
 
@@ -237,7 +238,10 @@ P0 means required for the first useful implementation. P1 and P2 are later capab
 
 ## 8. Deferred to later phases
 
-Full Lavalink client conformance and runtime metrics (Phase 4 remainder), SDKs (Phase 5), clustering (Phase 6), WASM plugin runtime (Phase 7), durable sessions, and production hardening (Phase 8).
+Remaining beyond M10: full Lavalink client conformance, credentialed
+commercial-source login flows, durable sessions, clustering, production
+hardening, and repeatable published benchmarks. The implemented features and
+the deliberate non-goals are listed in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## 9. Related documents
 

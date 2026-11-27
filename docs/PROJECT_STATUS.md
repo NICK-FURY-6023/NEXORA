@@ -1,8 +1,25 @@
 # NEXORA Project Status
 
-## Current milestone: Phase 5-7 foundations + deployment
+## Current milestone: M0-M10 implemented; M11 documentation sync
 
-Status: **implemented and verified** on 2026-11-23.
+Status: **implemented and verified** at commit `2f469f8` (2026-11-27). The
+authoritative feature-by-feature statement is
+[COMPATIBILITY.md](COMPATIBILITY.md); this file keeps the chronological record.
+
+### Current verified baseline (2026-11-27)
+
+- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
+  -- -D warnings`, and `cargo test --workspace` all exit 0 with **333 passing
+  tests, 0 failures**.
+- CI run `45947809783` is green on Linux and Windows. The docs site and
+  relative-link check also pass.
+- Implemented milestones: M0-M2 v4 protocol/WebSocket/session lifecycle, M3
+  events, M4 filters, M5 Discord voice RTP transport, M6 session resume, M8
+  PCM streaming, M10 WASM plugin runtime, plus the eight universal source
+  adapters and the SDK/deployment foundations.
+- Still not established: full third-party client conformance, credentialed
+  commercial-source login flows, production hardening, and repeatable
+  published benchmarks.
 
 ### Slice 1: real-time local playback (2026-11-22)
 
@@ -204,9 +221,16 @@ Workspace total is now 153 passing Rust tests.
   `POST /nexora/plugins/{name}/call`.
 - A plugin whose manifest is missing or invalid is skipped: one broken plugin
   must not stop the server.
-- The plugin ABI returns integers, so a plugin cannot yet hand a track list
-  back to the server; plugin-provided source adapters are not expressible
-  yet.
+- `PluginRuntime` now runs the module under `wasmi`: fuel bounds execution
+  time, the engine's limiter bounds memory, and only the manifest's effective
+  capabilities are exposed to the guest.
+- Plugins can hand data back: `host.push` copies a string from the module's
+  memory into the host, and `PluginRuntime::call` returns
+  `PluginCall { strings, results }`. The server returns both fields in the
+  `/nexora/plugins/{name}/call` JSON response.
+- A plugin still cannot register a source adapter or return a track list:
+  the ABI has integers and strings, not source objects. That remains a
+  deliberate boundary, not a partially implemented promise.
 
 ### Raw PCM streaming (M8)
 

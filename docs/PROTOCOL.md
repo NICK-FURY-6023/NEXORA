@@ -11,7 +11,7 @@ This document describes the implemented wire contracts. It is the authoritative 
 | `/api/v1` | Native NEXORA REST contract |
 | `/ws/v1/sessions/{id}` | Session event WebSocket (text JSON `EventEnvelope`) |
 | `/ws/v1/sessions/{id}/audio` | Native audio delivery WebSocket (binary Opus packets) |
-| `/v4` | Lavalink-compatible adapter for client migration |
+| `/nexora` | Lavalink-compatible adapter for client migration (`/nexora/info`, `/nexora/loadtracks`, `/nexora/sessions`, `/nexora/websocket`, plugin and streaming routes) |
 
 All JSON request/response bodies use `application/json`. Error responses use a stable envelope:
 

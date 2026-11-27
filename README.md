@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Language-Rust-orange?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Architecture-Modular%20Core%20%2B%20Distributed%20Services-2F855A" alt="Architecture">
   <img src="https://img.shields.io/badge/API-REST%20%7C%20WebSocket%20%7C%20gRPC-276749" alt="API">
-  <img src="https://img.shields.io/badge/Status-Phase%205-7%20Foundations-green" alt="Project status">
+  <img src="https://img.shields.io/badge/Status-M0--M10%20implemented-green" alt="Project status">
 </p>
 
 > **One audio foundation. Multiple services. Any application ecosystem.**
@@ -23,7 +23,7 @@ NEXORA is built from scratch as an independent Rust alternative to hosted audio 
 
 NEXORA is intended for Discord and Telegram bots, web applications, desktop and mobile applications, games, and custom backend services. It is not designed to be limited to one chat platform or one programming language.
 
-**Project status:** Phases 1-4 are implemented; Phase 5-7 foundations (SDKs, deployment, cluster registry, plugin contract) are in place. Full Lavalink client conformance, a WASM plugin runtime, durable sessions, and commercial source adapters remain planned.
+**Project status:** Milestones M0-M10 are implemented and verified: the Lavalink v4 REST/WebSocket surface and session lifecycle, event delivery, audio filters, Discord voice RTP framing, session resume, eight wired source adapters, SDKs, deployment assets, and a real wasmi-based WASM plugin runtime with a sandboxed host interface. The honest compatibility statement is the [compatibility matrix](docs/COMPATIBILITY.md). Remaining work is production hardening, broader third-party client conformance, credentialed commercial sources, and repeatable benchmark publication.
 
 **Start here:** the [documentation map](docs/README.md) routes users, operators, contributors, and agents to the authoritative doc for each question. The sections below remain the long-form product and architecture reference.
 
@@ -1294,20 +1294,21 @@ Build a universal, high-performance audio foundation that lets developers integr
 
 ## Project Status
 
-Phases 1 and 2 are implemented and verified. Later phases remain planned until their code, tests, and documentation exist. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
+At `2f469f8` the workspace passes `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (333 tests, 0 failures); CI run `45947809783` is green. See `docs/PROJECT_STATUS.md` for the current milestone and `docs/ARCHITECTURE.md` for the implemented structure.
 
-| Area | Current status in this specification |
+| Area | Current status |
 |---|---|
 | Product vision | Defined: from-scratch Rust alternative with a Lavalink-like hosted server experience |
-| Target architecture | Defined; Phase 1/2/3 structure implemented |
-| Rust technology stack | Foundation and audio deps pinned; API deps planned for Phase 4 |
-| Audio engine | Implemented (Phase 2): decode, resample, PCM/Opus output, CLI |
-| Source adapters | Implemented (Phase 3): registry, ranking, local/radio/HTTP adapters, SSRF validation |
-| REST / WebSocket API | Implemented: `/api/v1` + Lavalink-compatible `/v4` |
+| Target architecture | Implemented: protocol, session, source, pipeline, server and plugin crates |
+| Rust technology stack | Pinned in `Cargo.toml` and compiled in CI on Linux and Windows |
+| Audio engine | Implemented: decode, resample, filters, PCM/Opus output, 20 ms packets |
+| Source adapters | Implemented: registry, ranking, SSRF validation, and eight wired adapters (archive, Bandcamp, SoundCloud, Apple Music, Deezer, Tidal, Spotify, YouTube) |
+| REST / WebSocket API | Implemented: `/api/v1` + Lavalink-compatible `/v4` + session resume + native audio WebSocket |
 | Internal gRPC | Implemented (Phase 4b): `nexora.v1.SessionService` |
+| Voice transport | Implemented: one UDP socket per player, RTP framing and AES-128-CTR payloads; no voice gateway (client owns it) |
 | SDKs | Python + Node verified; Java/Go/C#/PHP source-only (toolchains unavailable) |
 | Distributed cluster | Foundation implemented: registry + weighted scheduler |
-| Plugin runtime | Contract implemented; WASM execution deferred |
+| Plugin runtime | Implemented (M10): wasmi execution, fuel/memory limits, `fetch`/`push` host effects, sandboxed manifest capabilities |
 | Performance benchmarks | Short Criterion run completed; see `docs/PROJECT_STATUS.md` |
 | Production readiness | Not established |
 

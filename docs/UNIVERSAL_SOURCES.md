@@ -32,10 +32,17 @@ controls.
 - Provider status codes map to `SourceError` (`401 -> Unauthorized`,
   `429 -> RateLimited`, `5xx -> Unavailable`).
 
-## What is still required for live playback
+## Live playback status
 
-An HTTP transport is not wired yet: the workspace has no generic HTTP client
-dependency, and root `Cargo.toml` is owned by the other agent in this shared
-tree. Adding one exact-pinned client crate and wiring `search`/`resolve` to
-the parsers above is the next milestone. Until then these adapters are
-parsers and validators, not live network sources.
+All eight adapters are registered by `register_builtin_sources` in
+`services/nexora-server/src/lib.rs`, and the crate has a bounded `reqwest`
+transport (`src/transport.rs` with the shared `src/http.rs` reader). Recorded
+fixtures cover metadata mapping, missing fields, host validation and SSRF
+rejection for private, loopback and link-local hosts; `search`/`resolve` call
+the parsers through that transport.
+
+What still needs a real user account is provider credentials: Spotify, Deezer,
+Apple Music and Tidal only play when the user supplies their own authorized
+token. Public YouTube stream resolution remains subject to the platform's
+terms, so the shipped code parses public metadata and refuses to bypass access
+controls. No credentialed live-provider test suite is claimed here.

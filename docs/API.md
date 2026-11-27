@@ -1,8 +1,9 @@
 # NEXORA API Contracts
 
-## Phase 1 status
+## Implemented status
 
-Phase 4a implements REST and WebSocket endpoints in `nexora-server`. Phase 4b adds internal gRPC via `nexora.v1.SessionService`.
+The REST and WebSocket endpoints are implemented in `nexora-server`; internal
+gRPC is `nexora.v1.SessionService`.
 
 NEXORA API: `/health`, `/api/v1/info`, `/api/v1/sources`, `/api/v1/search`, session create/read/play/pause/resume/stop/seek/volume/queue/stream, `/api/v1/metrics`, and `/ws/v1/sessions/{id}`.
 
@@ -30,15 +31,22 @@ packet; message order is packet order. The nominal rate is 50 packets/second.
 Consumers that lag skip missed broadcasts rather than blocking the producer.
 The event WebSocket at `/ws/v1/sessions/{id}` stays text-only.
 
-## Planned endpoint groups
+## Implemented endpoint groups
 
-See `README.md` section 7 for the complete planned list: health/info, sources, search, resolve, sessions, playback controls, filters, queue, stream, and metrics. Base path: `/api/v1/`.
+The native contract is live under `/api/v1/`: health/info, sources, search,
+resolve, sessions, playback controls, filters, queue, raw PCM stream and
+metrics. The compatibility surface adds `/nexora/*` v4 routes, session resume,
+the plugin endpoints, and the voice RTP transport. See
+[COMPATIBILITY.md](COMPATIBILITY.md) for the exact per-route status.
 
-## Planned event types
+## Implemented event types
 
-`session.created`, `session.ready`, `track.started`, `track.ended`, `track.failed`, `track.position`, `playback.paused`, `playback.resumed`, `playback.stopped`, `queue.updated`, `source.unavailable`, `engine.warning`.
-
-Every event envelope carries an event ID, version, timestamp, session ID, event type, payload, and correlation ID.
+The event WebSocket emits NEXORA's typed envelope (`event`, `sessionId`,
+`type`, `payload`, `timestamp`, `eventId`, `version`, `correlationId`). The
+Lavalink-compatible `playerUpdate` frames carry position, time, connected and
+ping. Source-health changes use the `SourceHealth` DTO (`sourceId`, `healthy`,
+`detail`, `checkedAt`). The full event list and the deliberate omissions are
+in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Versioning policy
 
