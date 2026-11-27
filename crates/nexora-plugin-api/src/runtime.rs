@@ -46,23 +46,10 @@ impl PluginRuntime {
     }
 
     /// Creates a runtime with a host-owned policy.
+    ///
+    /// The policy is the ceiling: a manifest may ask for less, never more.
     pub fn with_policy(policy: SandboxPolicy) -> NexoraResult<Self> {
         Ok(Self { policy })
-    }
-
-    /// Narrows the runtime's policy to what the host approves.
-    pub fn with_policy_narrowed(mut self, approved: &SandboxPolicy) -> Self {
-        self.policy.network &= approved.network;
-        self.policy.filesystem &= approved.filesystem;
-        self.policy
-            .allowed_hosts
-            .retain(|host| approved.allowed_hosts.iter().any(|allowed| allowed == host));
-        self.policy
-            .allowed_paths
-            .retain(|path| approved.allowed_paths.iter().any(|allowed| allowed == path));
-        self.policy.time_limit_ms = self.policy.time_limit_ms.min(approved.time_limit_ms);
-        self.policy.memory_limit_mb = self.policy.memory_limit_mb.min(approved.memory_limit_mb);
-        self
     }
 
     /// The policy the runtime enforces.
@@ -87,6 +74,10 @@ impl PluginRuntime {
         args: &[&str],
     ) -> NexoraResult<PluginCall> {
         crate::validate_manifest(manifest)?;
+        // The manifest states what the plugin asks for and the host states
+        // what it grants, so the policy the module runs under is the one both
+        // sides agree on.
+        let policy = crate::sandbox::effective_policy(manifest, &self.policy)?;
         let mut config = Config::default();
         config.consume_fuel(true);
         let engine = Engine::new(&config);
@@ -94,12 +85,12 @@ impl PluginRuntime {
             .map_err(|_| NexoraError::invalid_input("plugin module is not valid webassembly"))?;
 
         let limits = StoreLimitsBuilder::new()
-            .memory_size(memory_limit_bytes(self.policy.memory_limit_mb))
+            .memory_size(memory_limit_bytes(policy.memory_limit_mb))
             .build();
         let mut store = Store::new(
             &engine,
             HostState {
-                policy: self.policy.clone(),
+                policy: policy.clone(),
                 limits: limits.clone(),
                 arguments: args.iter().map(|arg| (*arg).to_owned()).collect(),
                 strings: Vec::new(),
@@ -108,7 +99,7 @@ impl PluginRuntime {
         );
         store.limiter(|state| &mut state.limits);
         store
-            .set_fuel(self.policy.time_limit_ms.saturating_mul(FUEL_PER_MS))
+            .set_fuel(policy.time_limit_ms.saturating_mul(FUEL_PER_MS))
             .map_err(|_| NexoraError::service("plugin sandbox denied the operation"))?;
 
         let mut linker = <Linker<HostState>>::new(&engine);
@@ -254,6 +245,36 @@ fn install_host_functions(linker: &mut Linker<HostState>) -> NexoraResult<()> {
             },
         )
         .map_err(|_| NexoraError::service("plugin sandbox denied the operation"))?;
+
+    let filesystem_type = FuncType::new([ValType::I32], [ValType::I32]);
+    linker
+        .func_new(
+            HOST_MODULE,
+            "read",
+            filesystem_type,
+            |mut caller, args, results| {
+                let index = match args.first() {
+                    Some(Val::I32(index)) => *index,
+                    _ => {
+                        return Err(wasmi::Error::new("plugin host call needs an i32 argument"));
+                    }
+                };
+                let state = caller.data_mut();
+                let path = state
+                    .arguments
+                    .get(index.max(0) as usize)
+                    .map(String::as_str)
+                    .unwrap_or("");
+                if let Err(error) = check_path(&state.policy, path) {
+                    state.denied = Some(error.to_string());
+                    results[0] = Val::I32(-1);
+                    return Ok(());
+                }
+                results[0] = Val::I32(0);
+                Ok(())
+            },
+        )
+        .map_err(|_| NexoraError::service("plugin sandbox denied the operation"))?;
     Ok(())
 }
 
@@ -282,6 +303,38 @@ fn check_network(policy: &SandboxPolicy, url: &str) -> NexoraResult<()> {
 /// The byte limit the memory limiter enforces.
 fn memory_limit_bytes(limit_mb: u64) -> usize {
     usize::try_from(limit_mb.saturating_mul(1024 * 1024)).unwrap_or(usize::MAX)
+}
+
+/// Refuses a path the policy does not allow.
+///
+/// The rules are the sandbox's own: the path is relative, it has no `..`
+/// component and it sits below a directory the policy allows.
+fn check_path(policy: &SandboxPolicy, path: &str) -> NexoraResult<()> {
+    if !policy.filesystem {
+        return Err(NexoraError::service(
+            "plugin sandbox denied the filesystem access",
+        ));
+    }
+    let candidate = std::path::Path::new(path);
+    if candidate.is_absolute() || candidate.has_root() {
+        return Err(NexoraError::invalid_input(
+            "plugin path must be relative to an allowed root",
+        ));
+    }
+    if !candidate
+        .components()
+        .all(|component| matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(NexoraError::service("plugin sandbox denied the path"));
+    }
+    if !policy
+        .allowed_paths
+        .iter()
+        .any(|allowed| crate::sandbox::path_matches(allowed, path))
+    {
+        return Err(NexoraError::service("plugin sandbox denied the path"));
+    }
+    Ok(())
 }
 
 /// Turns an interpreter error into the error the caller sees.

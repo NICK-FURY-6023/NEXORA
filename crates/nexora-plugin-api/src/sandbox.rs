@@ -84,23 +84,7 @@ impl PluginSandbox {
         manifest: &PluginManifest,
         approved: &SandboxPolicy,
     ) -> NexoraResult<Self> {
-        let mut policy = SandboxPolicy::from_manifest(manifest)?;
-        policy.network &= approved.network;
-        policy.filesystem &= approved.filesystem;
-        policy.allowed_hosts.retain(|host| {
-            approved
-                .allowed_hosts
-                .iter()
-                .any(|allowed| host_matches(allowed, host))
-        });
-        policy.allowed_paths.retain(|path| {
-            approved
-                .allowed_paths
-                .iter()
-                .any(|allowed| path_matches(allowed, path))
-        });
-        policy.time_limit_ms = policy.time_limit_ms.min(approved.time_limit_ms);
-        policy.memory_limit_mb = policy.memory_limit_mb.min(approved.memory_limit_mb);
+        let policy = effective_policy(manifest, approved)?;
         Ok(Self::new(policy, manifest.capabilities.clone()))
     }
 
@@ -276,6 +260,35 @@ fn is_webassembly(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && bytes.starts_with(b"\0asm\x01\x00\x00\x00")
 }
 
+/// The policy a manifest and a host policy agree on.
+///
+/// A manifest states what the plugin asks for; the host states what it
+/// grants. A capability survives only when both sides allow it, so a plugin
+/// that asked for nothing reaches nothing even under a generous host policy.
+pub(crate) fn effective_policy(
+    manifest: &PluginManifest,
+    approved: &SandboxPolicy,
+) -> NexoraResult<SandboxPolicy> {
+    let mut policy = SandboxPolicy::from_manifest(manifest)?;
+    policy.network &= approved.network;
+    policy.filesystem &= approved.filesystem;
+    policy.allowed_hosts.retain(|host| {
+        approved
+            .allowed_hosts
+            .iter()
+            .any(|allowed| host_matches(allowed, host))
+    });
+    policy.allowed_paths.retain(|path| {
+        approved
+            .allowed_paths
+            .iter()
+            .any(|allowed| path_matches(allowed, path))
+    });
+    policy.time_limit_ms = policy.time_limit_ms.min(approved.time_limit_ms);
+    policy.memory_limit_mb = policy.memory_limit_mb.min(approved.memory_limit_mb);
+    Ok(policy)
+}
+
 /// Reports whether the effective policy grants a capability.
 ///
 /// The network and filesystem rules are the ones the checks apply, so a
@@ -347,7 +360,7 @@ pub(crate) fn host_matches(allowed: &str, host: &str) -> bool {
 ///
 /// The comparison is component-wise, so it agrees with the component check in
 /// `check_path` on every platform.
-fn path_matches(allowed: &str, path: &str) -> bool {
+pub(crate) fn path_matches(allowed: &str, path: &str) -> bool {
     let root: Vec<Component<'_>> = Path::new(allowed).components().collect();
     let candidate: Vec<Component<'_>> = Path::new(path).components().collect();
     if root.is_empty() || candidate.len() < root.len() {

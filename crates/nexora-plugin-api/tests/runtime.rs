@@ -139,6 +139,8 @@ fn a_module_that_asks_for_a_denied_host_is_refused() {
 
 #[test]
 fn a_module_that_asks_for_an_allowed_host_is_allowed() {
+    let manifest = PluginManifest::new("test-plugin", "0.1.0", "plugin.wasm")
+        .with_capability(PluginCapability::Network("api.example.com".to_owned()));
     let mut policy = SandboxPolicy::deny_all();
     policy.network = true;
     policy.allowed_hosts = vec!["api.example.com".to_owned()];
@@ -146,7 +148,7 @@ fn a_module_that_asks_for_an_allowed_host_is_allowed() {
     let runtime = PluginRuntime::with_policy(policy).expect("runtime should start");
     runtime
         .call(
-            &manifest(),
+            &manifest,
             FETCH_MODULE,
             "fetch",
             &["https://api.example.com/track"],
