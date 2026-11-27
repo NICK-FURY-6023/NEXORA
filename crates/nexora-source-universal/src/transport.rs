@@ -13,7 +13,7 @@ pub struct InternetArchiveSource {
 impl InternetArchiveSource {
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::http::client(),
         }
     }
 
@@ -56,7 +56,7 @@ impl InternetArchiveSource {
                 SourceError::Unavailable
             });
         }
-        response.text().await.map_err(|_| SourceError::Unavailable)
+        crate::http::read_text(response).await
     }
 }
 

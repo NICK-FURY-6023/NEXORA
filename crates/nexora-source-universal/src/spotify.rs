@@ -131,7 +131,7 @@ pub struct SpotifySource {
 impl SpotifySource {
     pub fn new(tokens: Arc<TokenStore>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::http::client(),
             tokens,
         }
     }
@@ -164,7 +164,7 @@ impl SpotifySource {
             .await
             .map_err(|_| SourceError::Unavailable)?;
         match response.status().as_u16() {
-            200 => response.text().await.map_err(|_| SourceError::Unavailable),
+            200 => crate::http::read_text(response).await,
             401 | 403 => Err(SourceError::Unauthorized),
             429 => Err(SourceError::RateLimited),
             _ => Err(SourceError::Unavailable),

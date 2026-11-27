@@ -179,7 +179,7 @@ pub struct YouTubeSource {
 impl YouTubeSource {
     pub fn new(api_key: Option<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::http::client(),
             api_key,
         }
     }
@@ -195,7 +195,7 @@ impl YouTubeSource {
         if status != 200 {
             return Err(map_status(status));
         }
-        response.text().await.map_err(|_| SourceError::Unavailable)
+        crate::http::read_text(response).await
     }
 
     async fn post_json(&self, url: reqwest::Url, body: String) -> Result<String, SourceError> {
@@ -211,7 +211,7 @@ impl YouTubeSource {
         if status != 200 {
             return Err(map_status(status));
         }
-        response.text().await.map_err(|_| SourceError::Unavailable)
+        crate::http::read_text(response).await
     }
 }
 
