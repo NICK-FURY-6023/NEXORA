@@ -1943,3 +1943,28 @@ async fn compat_metrics_requires_bearer_when_password_is_set() {
         .unwrap();
     assert_eq!(authenticated.status(), 200);
 }
+
+#[tokio::test]
+async fn compat_version_requires_auth_when_password_is_set() {
+    let router = build_router(AppState {
+        sessions: Arc::new(SessionManager::new()),
+        nexora_sessions: Arc::new(NexoraSessionManager::new()),
+        sources: Arc::new(SourceRegistry::new()),
+        password: Some("secret".to_owned()),
+        metrics: Arc::new(RuntimeMetrics::default()),
+        audio: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        voice_sockets: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        raw_streaming: false,
+        plugins: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+    });
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/version")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+}

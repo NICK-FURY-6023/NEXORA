@@ -18,6 +18,7 @@ use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
+use nexora_http::{DownloadedMedia, HttpClientConfig, NexoraHttpClient};
 use nexora_protocol::{
     CreateSessionRequest, HealthStatus, NexoraErrorSeverity, NexoraEventMessage, NexoraException,
     NexoraFilters, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrackEndReason, PlayRequest,
@@ -206,30 +207,31 @@ pub type AudioChannels = Arc<tokio::sync::RwLock<HashMap<SessionId, broadcast::S
 
 /// Downloads an HTTP source into a temporary file the decoder can read.
 ///
-/// The URL goes through the source framework's SSRF validation first, so a
-/// private-network target is refused before anything is fetched.
-pub async fn download_source_to_temp(url: &str) -> NexoraResult<PathBuf> {
-    nexora_source_framework::validate_public_http_url(url)
-        .map_err(|_| NexoraError::invalid_input("source url is not a public http target"))?;
-    let response = reqwest::get(url)
+/// The request goes through the shared HTTP client, which refuses
+/// private-network targets, caps the response size, and streams the body into
+/// a temporary file. The returned owner keeps that file alive and removes it
+/// when it is dropped, so a failed download, a cancelled task and a finished
+/// playback all clean up after themselves.
+pub async fn download_source_to_temp(url: &str) -> NexoraResult<DownloadedMedia> {
+    shared_http_client()
+        .download_to_temp(url)
         .await
-        .map_err(|error| NexoraError::io_with_source("cannot fetch the source", error))?;
-    if !response.status().is_success() {
-        return Err(NexoraError::service("the source refused the request"));
-    }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| NexoraError::io_with_source("cannot read the source", error))?;
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!("nexora-source-{unique}"));
-    tokio::fs::write(&path, &bytes)
-        .await
-        .map_err(|error| NexoraError::io_with_source("cannot store the source", error))?;
-    Ok(path)
+        .map_err(|error| {
+            tracing::warn!(%url, %error, "the source could not be downloaded");
+            error
+        })
+}
+
+/// The process-wide HTTP client.
+///
+/// One client means one connection pool and one egress policy for the whole
+/// process.
+pub fn shared_http_client() -> &'static NexoraHttpClient {
+    static CLIENT: OnceLock<NexoraHttpClient> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        NexoraHttpClient::new(HttpClientConfig::default())
+            .expect("the default http configuration is valid")
+    })
 }
 
 #[derive(Debug)]
@@ -346,22 +348,51 @@ pub struct SearchQuery {
     pub identifier: String,
 }
 
-fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), ApiError> {
-    state.metrics.request();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AuthFailure {
+    Missing,
+    Invalid,
+}
+
+/// Constant-time equality over byte slices of possibly different lengths.
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let mut difference = 0u8;
+    for index in 0..left.len().max(right.len()) {
+        difference |=
+            left.get(index).copied().unwrap_or(0) ^ right.get(index).copied().unwrap_or(0);
+    }
+    difference == 0
+}
+
+/// The single credential check used by every REST and WebSocket route.
+pub(crate) fn check_credential(
+    headers: &HeaderMap,
+    state: &AppState,
+    count_request: bool,
+) -> Result<(), AuthFailure> {
+    if count_request {
+        state.metrics.request();
+    }
     let Some(expected) = state.password.as_deref() else {
         return Ok(());
     };
-    let supplied = headers
+    let supplied = match headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .unwrap_or_default();
-    if supplied == expected {
+    {
+        Some(value) => value.strip_prefix("Bearer ").unwrap_or(value),
+        None => return Err(AuthFailure::Missing),
+    };
+    if constant_time_eq(supplied.as_bytes(), expected.as_bytes()) {
         Ok(())
     } else {
         state.metrics.error();
-        Err(ApiError::unauthorized())
+        Err(AuthFailure::Invalid)
     }
+}
+
+fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), ApiError> {
+    check_credential(headers, state, true).map_err(|_| ApiError::unauthorized())
 }
 
 fn parse_session_id(value: &str) -> Result<SessionId, ApiError> {
@@ -555,19 +586,22 @@ pub(crate) async fn start_playback(
         .resolve(&TrackReference::new(track_id.as_str()), &internal_auth())
         .await?;
     // A local file plays from disk; an HTTP source is fetched into a
-    // temporary file first, so the decoder reads it the same way.
-    let (path, downloaded) = match resolved {
-        ResolvedSource::LocalFile { path } => (path, false),
-        ResolvedSource::Stream { url } => (
-            download_source_to_temp(&url).await.map_err(|error| {
+    // temporary file first, so the decoder reads it the same way. The
+    // downloaded file is owned by the playback task, so it is removed when the
+    // task ends, is replaced or is cancelled.
+    let (path, media) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, None),
+        ResolvedSource::Stream { url } => {
+            let media = download_source_to_temp(&url).await.map_err(|error| {
                 ApiError::new(
                     StatusCode::SERVICE_UNAVAILABLE,
                     error.to_string(),
                     "/api/v1/sessions/play",
                 )
-            })?,
-            true,
-        ),
+            })?;
+            let path = media.path().to_path_buf();
+            (path, Some(media))
+        }
     };
     let format = state.sessions.output_format(session_id).await?;
 
@@ -623,7 +657,7 @@ pub(crate) async fn start_playback(
         session_id.clone(),
         track_id.clone(),
         path,
-        downloaded,
+        media,
         format,
         control_rx,
         PlaybackContext {
@@ -836,7 +870,7 @@ async fn run_playback(
     session_id: SessionId,
     track_id: TrackId,
     mut path: PathBuf,
-    downloaded: bool,
+    mut media: Option<DownloadedMedia>,
     format: AudioFormat,
     mut control: watch::Receiver<PlaybackSignal>,
     context: PlaybackContext,
@@ -1008,6 +1042,8 @@ async fn run_playback(
                                 )
                                 .await;
                             path = next_path;
+                            // The previous temporary file is no longer needed.
+                            media = None;
                             packets = next_packets;
                             index = 0;
                             position_ms = 0;
@@ -1054,15 +1090,10 @@ async fn run_playback(
     update_task.abort();
     sessions.detach_playback(&session_id).await;
     sessions.audio_registry().deregister(&session_id).await;
-    if downloaded {
-        let _ = tokio::fs::remove_file(&path).await;
-    }
     // Dropping `voice_socket` closes the port when playback ends.
     drop(voice_socket);
-    // A source that was fetched into a temporary file is removed with it.
-    if downloaded {
-        let _ = tokio::fs::remove_file(&path).await;
-    }
+    // Dropping the downloaded media removes the temporary file it owns.
+    drop(media);
 }
 
 async fn pause(

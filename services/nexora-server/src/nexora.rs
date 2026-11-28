@@ -95,60 +95,30 @@ impl IntoResponse for NexoraApiError {
 
 /// Authorises a nexora request.
 ///
-/// The reference compares the `Authorization` header with the configured
-/// password by string equality: a missing header is a 401 and a wrong one is
-/// a 403. NEXORA also accepts the `Bearer ` prefix its own API uses.
+/// The reference answers 401 for a missing credential and 403 for a wrong one.
+/// The credential comparison itself is centralized in `crate::check_credential`.
 fn authorize(headers: &HeaderMap, state: &AppState) -> Result<(), NexoraApiError> {
-    let Some(expected) = state.password.as_deref() else {
-        return Ok(());
-    };
-    let supplied = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    match supplied {
-        None => Err(NexoraApiError::new(
+    crate::check_credential(headers, state, true).map_err(|failure| match failure {
+        crate::AuthFailure::Missing => NexoraApiError::new(
             StatusCode::UNAUTHORIZED,
             "authorization required",
             "/nexora",
-        )),
-        Some(value) if value == expected || value.strip_prefix("Bearer ") == Some(expected) => {
-            Ok(())
+        ),
+        crate::AuthFailure::Invalid => {
+            NexoraApiError::new(StatusCode::FORBIDDEN, "authorization failed", "/nexora")
         }
-        Some(_) => Err(NexoraApiError::new(
-            StatusCode::FORBIDDEN,
-            "authorization failed",
-            "/nexora",
-        )),
-    }
+    })
 }
 
-/// Authorises the nexora WebSocket handshake.
-///
-/// The reference's handshake interceptor has a single failure status — 401 —
-/// for both a missing and a wrong `Authorization` header, unlike its REST
-/// filter, which answers 401 for a missing header and 403 for a wrong one.
+/// The handshake interceptor uses 401 for both missing and wrong credentials.
 fn authorize_handshake(headers: &HeaderMap, state: &AppState) -> Result<(), NexoraApiError> {
-    let Some(expected) = state.password.as_deref() else {
-        return Ok(());
-    };
-    let supplied = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    match supplied {
-        None => Err(NexoraApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "authorization required",
-            "/nexora/websocket",
-        )),
-        Some(value) if value == expected || value.strip_prefix("Bearer ") == Some(expected) => {
-            Ok(())
-        }
-        Some(_) => Err(NexoraApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "authorization failed",
-            "/nexora/websocket",
-        )),
-    }
+    crate::check_credential(headers, state, true).map_err(|failure| {
+        let message = match failure {
+            crate::AuthFailure::Missing => "authorization required",
+            crate::AuthFailure::Invalid => "authorization failed",
+        };
+        NexoraApiError::new(StatusCode::UNAUTHORIZED, message, "/nexora/websocket")
+    })
 }
 
 /// The Nexora nexora routes.
@@ -302,11 +272,13 @@ async fn loadstream(
             )
         })?;
     // A local file plays from disk; an HTTP source is fetched into a
-    // temporary file first, so the decoder reads it the same way.
-    let (path, downloaded) = match resolved {
-        ResolvedSource::LocalFile { path } => (path, false),
-        ResolvedSource::Stream { url } => (
-            crate::download_source_to_temp(&url)
+    // temporary file first, so the decoder reads it the same way. The
+    // downloaded file is owned here, so it is removed when this handler
+    // returns or fails.
+    let (path, media) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, None),
+        ResolvedSource::Stream { url } => {
+            let media = crate::download_source_to_temp(&url)
                 .await
                 .map_err(|error| {
                     NexoraApiError::new(
@@ -314,9 +286,10 @@ async fn loadstream(
                         error.to_string(),
                         "/nexora/loadstream",
                     )
-                })?,
-            true,
-        ),
+                })?;
+            let path = media.path().to_path_buf();
+            (path, Some(media))
+        }
     };
 
     let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Pcm);
@@ -358,9 +331,8 @@ async fn loadstream(
         )
     })?;
     let _ = tokio::fs::remove_file(&output).await;
-    if downloaded {
-        let _ = tokio::fs::remove_file(&path).await;
-    }
+    // Dropping the downloaded media removes the temporary file it owns.
+    drop(media);
     Ok((
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "audio/wav")],
@@ -370,8 +342,12 @@ async fn loadstream(
 }
 
 /// `GET /version` — the bare version string as plain text.
-async fn version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+async fn version(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<&'static str, NexoraApiError> {
+    authorize(&headers, &state)?;
+    Ok(env!("CARGO_PKG_VERSION"))
 }
 
 /// `GET /nexora/info` — the node's identity and compatibility surface.
@@ -1453,11 +1429,13 @@ async fn trackstream(
             )
         })?;
     // A local file plays from disk; an HTTP source is fetched into a
-    // temporary file first, so the decoder reads it the same way.
-    let (path, downloaded) = match resolved {
-        ResolvedSource::LocalFile { path } => (path, false),
-        ResolvedSource::Stream { url } => (
-            crate::download_source_to_temp(&url)
+    // temporary file first, so the decoder reads it the same way. The
+    // downloaded file is owned here, so it is removed when this handler
+    // returns or fails.
+    let (path, media) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, None),
+        ResolvedSource::Stream { url } => {
+            let media = crate::download_source_to_temp(&url)
                 .await
                 .map_err(|error| {
                     NexoraApiError::new(
@@ -1465,9 +1443,10 @@ async fn trackstream(
                         error.to_string(),
                         "/nexora/trackstream",
                     )
-                })?,
-            true,
-        ),
+                })?;
+            let path = media.path().to_path_buf();
+            (path, Some(media))
+        }
     };
     let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus);
     let output = std::env::temp_dir().join(format!(
@@ -1508,9 +1487,8 @@ async fn trackstream(
         )
     })?;
     let _ = tokio::fs::remove_file(&output).await;
-    if downloaded {
-        let _ = tokio::fs::remove_file(&path).await;
-    }
+    // Dropping the downloaded media removes the temporary file it owns.
+    drop(media);
     Ok((
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "audio/ogg")],
