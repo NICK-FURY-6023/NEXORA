@@ -1,11 +1,94 @@
 use std::env;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use figment::Figment;
 use figment::providers::{Format, Serialized, Toml};
 use nexora_error::{NexoraError, NexoraResult};
 use serde::{Deserialize, Serialize};
+
+/// OS-appropriate private config directory for generated credentials.
+fn private_config_dir() -> Option<PathBuf> {
+    if cfg!(windows) {
+        env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .map(|path| path.join("nexora"))
+    } else {
+        env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| {
+                env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|p| p.join(".config"))
+            })
+            .map(|path| path.join("nexora"))
+    }
+}
+
+/// Generates, stores and returns a first-run API credential.
+///
+/// The value is generated with the OS CSPRNG and stored base64url-encoded in
+/// a private config directory. On unix the directory is mode 0700 and the
+/// file mode 0600. An existing credential file is read instead of overwritten.
+pub fn generate_first_run_credential<F>(dir_getter: F) -> NexoraResult<(String, PathBuf)>
+where
+    F: FnOnce() -> Option<PathBuf>,
+{
+    let dir = dir_getter()
+        .or_else(private_config_dir)
+        .ok_or_else(|| NexoraError::config("no private config directory is available"))?;
+    fs::create_dir_all(&dir)
+        .map_err(|_| NexoraError::service("cannot create the private config directory"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+    }
+    let path = dir.join("credential");
+    if path.exists() {
+        let password = fs::read_to_string(&path)
+            .map_err(|_| NexoraError::service("cannot read the stored credential"))?;
+        if password.trim().len() >= 32 {
+            return Ok((password.trim().to_owned(), path));
+        }
+    }
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes)
+        .map_err(|_| NexoraError::service("cannot generate a secure credential"))?;
+    let password = URL_SAFE_NO_PAD.encode(bytes);
+    fs::write(&path, &password)
+        .map_err(|_| NexoraError::service("cannot store the generated credential"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok((password, path))
+}
+
+/// Resolves the API password from CLI, environment, or a generated first-run
+/// credential. The server never runs without authentication.
+pub fn resolve_password<F, G>(
+    cli: Option<String>,
+    env_getter: F,
+    dir_getter: G,
+) -> NexoraResult<Option<String>>
+where
+    F: Fn(&str) -> Option<String>,
+    G: FnOnce() -> Option<PathBuf>,
+{
+    let supplied = cli
+        .or_else(|| env_getter("NEXORA_SERVER_PASSWORD"))
+        .filter(|value| !value.is_empty());
+    if supplied.is_some() {
+        return Ok(supplied);
+    }
+    let (password, _) = generate_first_run_credential(dir_getter)?;
+    Ok(Some(password))
+}
 
 /// Complete NEXORA service configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,7 +121,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_owned(),
+            host: "127.0.0.1".to_owned(),
             port: 8080,
         }
     }
@@ -351,6 +434,44 @@ mod tests {
             "nexora-config-test-{}-{timestamp}-{file_id}.toml",
             std::process::id()
         ))
+    }
+
+    #[test]
+    fn resolve_password_generates_a_credential_when_unset() {
+        let dir = std::env::temp_dir().join(format!(
+            "nexora-resolve-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let password = super::resolve_password(None, |_: &str| None, || Some(dir.clone())).unwrap();
+        assert!(password.is_some());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn default_server_binds_loopback() {
+        assert_eq!(super::ServerConfig::default().host, "127.0.0.1");
+    }
+
+    #[test]
+    fn first_run_generates_a_private_credential() {
+        let dir = std::env::temp_dir().join(format!(
+            "nexora-first-run-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let (password, path) = super::generate_first_run_credential(|| Some(dir.clone())).unwrap();
+        assert!(password.len() >= 32);
+        assert!(path.exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

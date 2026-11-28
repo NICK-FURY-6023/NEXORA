@@ -1426,7 +1426,9 @@ dependencies = [
 name = "nexora-config"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "figment",
+ "getrandom 0.4.3",
  "nexora-error",
  "serde",
 ]

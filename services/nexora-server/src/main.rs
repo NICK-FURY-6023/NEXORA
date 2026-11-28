@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use nexora_audio_types::AudioCodec;
-use nexora_config::NexoraConfig;
+use nexora_config::{NexoraConfig, resolve_password};
 use nexora_error::NexoraResult;
 use nexora_grpc::NexoraGrpcService;
 use nexora_grpc::nexora::session_service_server::SessionServiceServer;
@@ -89,10 +89,7 @@ async fn main() -> NexoraResult<()> {
     }
     register_builtin_sources(&sources, Arc::new(tokens));
 
-    let password = args
-        .password
-        .or_else(|| env::var("NEXORA_SERVER_PASSWORD").ok())
-        .filter(|value| !value.is_empty());
+    let password = resolve_password(args.password, |name| env::var(name).ok(), || None)?;
 
     let sessions = match args.session_snapshot.as_deref() {
         Some(path) => load_sessions(path).await?,

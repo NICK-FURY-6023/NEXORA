@@ -9,6 +9,7 @@ members = [
     "crates/nexora-source-api",
     "crates/nexora-source-framework",
     "crates/nexora-source-universal",
+    "crates/nexora-http",
     "crates/nexora-session",
     "crates/nexora-grpc",
     "crates/nexora-cluster",
@@ -46,6 +47,7 @@ ogg = "=0.9.2"
 audioadapter-buffers = "=5.2.0"
 audioadapter = "=5.0.0"
 criterion = "=0.8.2"
+getrandom = "=0.4.3"
 async-trait = "=0.1.92"
 axum = { version = "=0.8.9", features = ["ws"] }
 tonic = { version = "=0.14.9", features = ["transport"] }
