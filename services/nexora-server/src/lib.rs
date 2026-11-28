@@ -18,7 +18,6 @@ use nexora_audio_pipeline::{OpusFrame, OutputCodec, encode_file_packets, process
 use nexora_audio_types::AudioFormat;
 use nexora_common::{SessionId, TrackId};
 use nexora_error::{NexoraError, NexoraResult};
-use nexora_http::{DownloadedMedia, HttpClientConfig, NexoraHttpClient};
 use nexora_protocol::{
     CreateSessionRequest, HealthStatus, NexoraErrorSeverity, NexoraEventMessage, NexoraException,
     NexoraFilters, NexoraPlayerState, NexoraPlayerUpdateFrame, NexoraTrackEndReason, PlayRequest,
