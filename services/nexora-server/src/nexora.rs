@@ -272,13 +272,11 @@ async fn loadstream(
             )
         })?;
     // A local file plays from disk; an HTTP source is fetched into a
-    // temporary file first, so the decoder reads it the same way. The
-    // downloaded file is owned here, so it is removed when this handler
-    // returns or fails.
-    let (path, media) = match resolved {
-        ResolvedSource::LocalFile { path } => (path, None),
-        ResolvedSource::Stream { url } => {
-            let media = crate::download_source_to_temp(&url)
+    // temporary file first, so the decoder reads it the same way.
+    let (path, downloaded) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, false),
+        ResolvedSource::Stream { url } => (
+            crate::download_source_to_temp(&url)
                 .await
                 .map_err(|error| {
                     NexoraApiError::new(
@@ -286,10 +284,9 @@ async fn loadstream(
                         error.to_string(),
                         "/nexora/loadstream",
                     )
-                })?;
-            let path = media.path().to_path_buf();
-            (path, Some(media))
-        }
+                })?,
+            true,
+        ),
     };
 
     let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Pcm);
@@ -331,8 +328,9 @@ async fn loadstream(
         )
     })?;
     let _ = tokio::fs::remove_file(&output).await;
-    // Dropping the downloaded media removes the temporary file it owns.
-    drop(media);
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
     Ok((
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "audio/wav")],
@@ -1429,13 +1427,11 @@ async fn trackstream(
             )
         })?;
     // A local file plays from disk; an HTTP source is fetched into a
-    // temporary file first, so the decoder reads it the same way. The
-    // downloaded file is owned here, so it is removed when this handler
-    // returns or fails.
-    let (path, media) = match resolved {
-        ResolvedSource::LocalFile { path } => (path, None),
-        ResolvedSource::Stream { url } => {
-            let media = crate::download_source_to_temp(&url)
+    // temporary file first, so the decoder reads it the same way.
+    let (path, downloaded) = match resolved {
+        ResolvedSource::LocalFile { path } => (path, false),
+        ResolvedSource::Stream { url } => (
+            crate::download_source_to_temp(&url)
                 .await
                 .map_err(|error| {
                     NexoraApiError::new(
@@ -1443,10 +1439,9 @@ async fn trackstream(
                         error.to_string(),
                         "/nexora/trackstream",
                     )
-                })?;
-            let path = media.path().to_path_buf();
-            (path, Some(media))
-        }
+                })?,
+            true,
+        ),
     };
     let format = AudioFormat::new(48_000, 2, nexora_audio_types::AudioCodec::Opus);
     let output = std::env::temp_dir().join(format!(
@@ -1487,8 +1482,9 @@ async fn trackstream(
         )
     })?;
     let _ = tokio::fs::remove_file(&output).await;
-    // Dropping the downloaded media removes the temporary file it owns.
-    drop(media);
+    if downloaded {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
     Ok((
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "audio/ogg")],
