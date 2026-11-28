@@ -356,7 +356,8 @@ pub(crate) enum AuthFailure {
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     let mut difference = 0u8;
     for index in 0..left.len().max(right.len()) {
-        difference |= left.get(index).copied().unwrap_or(0) ^ right.get(index).copied().unwrap_or(0);
+        difference |=
+            left.get(index).copied().unwrap_or(0) ^ right.get(index).copied().unwrap_or(0);
     }
     difference == 0
 }
